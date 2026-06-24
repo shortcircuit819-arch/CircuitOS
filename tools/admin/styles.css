@@ -205,12 +205,12 @@ input.invalid { border-color: var(--danger); }
 .parts-header { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; margin-bottom: 9px; }
 .parts-list { display: grid; gap: 8px; }
 .parts-list-scroll { max-height: min(520px, 58vh); padding: 8px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: 4px; background: rgba(0, 10, 20, 0.2); scrollbar-width: thin; }
-.part-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 9px; align-items: center; }
+.part-row { display: grid; grid-template-columns: 1fr auto; gap: 9px; align-items: center; }
 .variant-list { display: grid; gap: 8px; margin-top: 4px; }
 .variant-row { display: grid; grid-template-columns: 130px 1fr 110px auto; gap: 9px; align-items: center; }
 .variant-help { margin: 2px 0 8px; color: var(--muted); font-size: 12px; }
 .tier-row { display: grid; grid-template-columns: 130px 1fr 90px auto auto; gap: 9px; align-items: center; }
-.part-row-tiered { grid-template-columns: 1fr 1fr 130px auto; }
+.part-row-tiered { grid-template-columns: 1fr 130px auto; }
 .bulk-assign-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 8px 10px; background: rgba(0, 10, 20, 0.3); border: 1px solid var(--line); border-radius: 4px; }
 .bulk-assign-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; white-space: nowrap; }
 .bulk-assign-select { flex: 0 0 auto; width: auto; padding: 5px 8px; font-size: 12px; }

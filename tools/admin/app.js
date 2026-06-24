@@ -2552,7 +2552,6 @@ function buildCollectionCard(collection, query = "") {
   toggleCopy.append(titleRow);
   const summary = element("div", "collection-summary-meta");
   summary.append(
-    element("span", "", collection.key),
     element("span", "", `${value.parts?.length || 0} ${systemProfile.itemPlural}`),
     element("span", "", `weight ${value.weight}`)
   );
@@ -2568,18 +2567,21 @@ function buildCollectionCard(collection, query = "") {
     renderCollectionList(value.type);
   });
   heading.append(toggle);
-  if (value.type === "event") {
-    const remove = element("button", "button danger small", "Delete Event");
-    remove.addEventListener("click", () => {
-      if (!window.confirm(`Delete event '${value.displayName}' from the catalog? Inventory items are not deleted.`)) return;
-      collections = collections.filter(item => item !== collection);
-      expandedCollectionKeys.delete(collection.key);
-      delete boost.collectionMultipliers[collection.key];
-      markDirty();
-      renderAll();
-    });
-    heading.append(remove);
-  }
+  const remove = element("button", "button danger small", value.type === "event" ? "Delete Event" : "Delete");
+  remove.addEventListener("click", () => {
+    if (value.type !== "event" && collections.filter(item => item.value.type !== "event").length <= 1) {
+      window.alert(`You need at least one ${systemProfile.collectionSingular}. Add another before deleting this one.`);
+      return;
+    }
+    const label = value.type === "event" ? "event" : systemProfile.collectionSingular;
+    if (!window.confirm(`Delete ${label} '${value.displayName || collection.key}' from the catalog? Viewer inventory is not deleted.`)) return;
+    collections = collections.filter(item => item !== collection);
+    expandedCollectionKeys.delete(collection.key);
+    delete boost.collectionMultipliers[collection.key];
+    markDirty();
+    renderAll();
+  });
+  heading.append(remove);
   card.append(heading);
   if (!expanded) return card;
 
@@ -2587,19 +2589,6 @@ function buildCollectionCard(collection, query = "") {
   const grid = element("div", "field-grid");
   grid.append(
     makeField("Display name", "text", value.displayName, next => { value.displayName = next; }),
-    makeField(`${titleCase(systemProfile.collectionSingular)} key`, "text", collection.key, (next, input) => {
-      const oldKey = collection.key;
-      collection.key = next.toLowerCase().replace(/[^a-z0-9_]/g, "");
-      input.value = collection.key;
-      if (oldKey !== collection.key && expandedCollectionKeys.has(oldKey)) {
-        expandedCollectionKeys.delete(oldKey);
-        expandedCollectionKeys.add(collection.key);
-      }
-      if (oldKey !== collection.key && boost.collectionMultipliers[oldKey] !== undefined) {
-        boost.collectionMultipliers[collection.key] = boost.collectionMultipliers[oldKey];
-        delete boost.collectionMultipliers[oldKey];
-      }
-    }),
     makeField("Pull weight", "number", value.weight, next => { value.weight = Number(next); }, { min: 0, step: 0.1 }),
     makeField(`${systemProfile.currencyName} value`, "number", value.salvageValue, next => { value.salvageValue = Number(next); }, { min: 1, step: 1 }),
     makeField("Rare label (optional)", "text", value.rareLabel || "", next => { value.rareLabel = next; })
@@ -2634,7 +2623,12 @@ function buildCollectionCard(collection, query = "") {
   partsHeader.append(element("div", "subsection-title", `${titleCase(systemProfile.itemPlural)} (${itemCount})`));
   const addPart = element("button", "button secondary small", `Add ${titleCase(systemProfile.itemSingular)}`);
   addPart.addEventListener("click", () => {
-    value.parts.push({ id: `${collection.key}_new_part`, name: `New ${titleCase(systemProfile.itemSingular)}` });
+    // The id is hidden/auto-generated, so make it unique up front (it's the stable inventory key).
+    const existing = new Set(value.parts.map(p => p.id));
+    let n = value.parts.length + 1;
+    let id = `${collection.key}_item_${n}`;
+    while (existing.has(id)) { n++; id = `${collection.key}_item_${n}`; }
+    value.parts.push({ id, name: `New ${titleCase(systemProfile.itemSingular)}` });
     markDirty();
     renderAll();
   });
@@ -2680,10 +2674,6 @@ function buildCollectionCard(collection, query = "") {
   visibleParts.forEach(({ part, index }) => {
     const row = element("div", hasTiers ? "part-row part-row-tiered" : "part-row");
     row.append(
-      makeField(`${titleCase(systemProfile.itemSingular)} ID`, "text", part.id, (next, input) => {
-        part.id = next.toLowerCase().replace(/[^a-z0-9_]/g, "");
-        input.value = part.id;
-      }),
       makeField("Display name", "text", part.name, next => { part.name = next; })
     );
     if (hasTiers) {
