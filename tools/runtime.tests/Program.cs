@@ -97,11 +97,14 @@ try
         }
     }
 
+    TestActiveProfilesAndCollisions(service, store, defaultProfile);
     TestPullEngine();
+    TestRedemptionEngine();
+    TestCommandEngine();
     TestAppwriteOptions();
     TestTwitchOptions();
 
-    Console.WriteLine("Smoke tests passed: first run is safe, generated Streamer.bot C# is structurally valid, the pull engine distributes correctly, and the Appwrite + Twitch config loaders behave.");
+    Console.WriteLine("Smoke tests passed: first run is safe, generated Streamer.bot C# is structurally valid, the pull + redemption + command engines behave, and the Appwrite + Twitch config loaders behave.");
     return 0;
 }
 finally
@@ -112,6 +115,40 @@ finally
 static void Require(bool condition, string message)
 {
     if (!condition) throw new InvalidOperationException(message);
+}
+
+// Verifies the active-set model (A) and command-collision guard (B): the default profile is live
+// after first-run, new profiles start inactive, activate/deactivate flips the live flag, and a
+// profile whose commands collide with a live profile is blocked from activating until renamed.
+static void TestActiveProfilesAndCollisions(CircuitService service, IDataStore store, JsonObject defaultProfile)
+{
+    Require(store.ListProfiles().Any(p => p.Id == "default" && p.IsLive), "Default profile should be live after first-run.");
+
+    store.CreateProfile("second", "Second Game");
+    Require(store.ListProfiles().Any(p => p.Id == "second" && !p.IsLive), "New profiles should start inactive.");
+    store.SetProfileActive("second", true);
+    Require(store.ListProfiles().Any(p => p.Id == "second" && p.IsLive), "SetProfileActive(true) should make a profile live.");
+    store.SetProfileActive("second", false);
+    Require(store.ListProfiles().Any(p => p.Id == "second" && !p.IsLive), "SetProfileActive(false) should clear the live flag.");
+
+    // Collision: give 'second' the SAME commands as the live default profile, then try to activate it.
+    var colliding = JsonUtil.Clone(defaultProfile) as JsonObject ?? throw new InvalidOperationException("Profile clone failed.");
+    store.ImportProfileData("second", new Dictionary<string, JsonNode> { ["profile"] = colliding });
+    var blocked = service.InvokeProfileOperation(new JsonObject { ["operation"] = "activate", ["id"] = "second" });
+    Require(blocked.Status != 200, "Activating a profile whose commands collide with a live profile should be blocked.");
+    Require(store.ListProfiles().Any(p => p.Id == "second" && !p.IsLive), "A blocked activation must leave the profile inactive.");
+
+    // Unique commands → activation succeeds.
+    var unique = JsonUtil.Clone(defaultProfile) as JsonObject ?? throw new InvalidOperationException("Profile clone failed.");
+    var commands = (JsonObject)unique["commands"]!;
+    foreach (var key in commands.Select(kv => kv.Key).ToList()) commands[key] = "z" + commands[key]!;
+    store.ImportProfileData("second", new Dictionary<string, JsonNode> { ["profile"] = unique });
+    var allowed = service.InvokeProfileOperation(new JsonObject { ["operation"] = "activate", ["id"] = "second" });
+    Require(allowed.Status == 200, "Activating a profile with unique commands should succeed.");
+    Require(store.ListProfiles().Any(p => p.Id == "second" && p.IsLive), "Successful activation should make the profile live.");
+
+    store.SetProfileActive("second", false);
+    Console.WriteLine("Active profiles + collisions: live flags, activate/deactivate, and the cross-profile command guard all passed.");
 }
 
 // Verifies the shared PullEngine: tier-weighted distribution, variant rate + prefix,
@@ -192,6 +229,197 @@ static void TestPullEngine()
     Require(Math.Abs(flatOutcome.Probability - 0.25) < 1e-9, "Flat per-item probability should be collectionProb / count.");
 
     Console.WriteLine($"PullEngine: tiers {pc:F1}/{pr:F1}/{pu:F1}% (target 70/25/5), SHINY {ps:F1}% (target 25); dup-protection + flat-odds checks passed.");
+}
+
+// Verifies the shared RedemptionEngine: weighted collection selection, event-window gating,
+// and inventory application (new item, duplicate, completion detection, identical-pull streak).
+// Deterministic via seeded RNGs.
+static void TestRedemptionEngine()
+{
+    // Weighted collection selection — 90/10 split over two permanent collections.
+    var twoCollections = new JsonObject
+    {
+        ["big"] = MakeCollection("Big", 90, "b1", "b2"),
+        ["small"] = MakeCollection("Small", 10, "s1", "s2")
+    };
+    const int n = 100000;
+    var rng = new Random(4242);
+    var big = 0;
+    for (var i = 0; i < n; i++)
+        if (RedemptionEngine.SelectCollection(twoCollections, null, DateTimeOffset.UtcNow, rng).Key == "big") big++;
+    var pBig = big * 100.0 / n;
+    Require(Math.Abs(pBig - 90) < 1.5, $"Weighted collection selection should be ~90% big (got {pBig:F1}%).");
+
+    // Event-window gating — a festival collection is selectable inside its window, excluded outside.
+    var withEvent = new JsonObject
+    {
+        ["always"] = MakeCollection("Always", 50, "a1"),
+        ["festival"] = MakeEvent("Festival", 50, true, "2026-06-01T00:00:00Z", "2026-06-30T00:00:00Z", "f1")
+    };
+    var inside = DateTimeOffset.Parse("2026-06-24T12:00:00Z");
+    var outside = DateTimeOffset.Parse("2026-05-01T00:00:00Z");
+    var rngEvent = new Random(7);
+    var sawFestival = false;
+    for (var i = 0; i < 2000 && !sawFestival; i++)
+        if (RedemptionEngine.SelectCollection(withEvent, null, inside, rngEvent).Key == "festival") sawFestival = true;
+    Require(sawFestival, "Active event collection should be selectable inside its window.");
+    for (var i = 0; i < 5000; i++)
+        Require(RedemptionEngine.SelectCollection(withEvent, null, outside, rngEvent).Key == "always",
+            "Event collection must be excluded outside its window.");
+
+    // Inventory application — first pull of a part: quantity 1, not a duplicate, streak starts at 1.
+    var solo = new JsonObject { ["collections"] = new JsonObject { ["solo"] = MakeCollection("Solo", 100, "x1", "x2") } };
+    var inv1 = new JsonObject();
+    var first = RedemptionEngine.ApplyRedemption(solo, null, inv1, "viewer1", "Viewer One", DateTimeOffset.UtcNow, new Random(1));
+    Require(first.Quantity == 1 && !first.IsDuplicate, "First pull of a part should be quantity 1, not a duplicate.");
+    Require(first.ConsecutivePullCount == 1, "First pull should start a streak at 1.");
+    Require(((JsonObject)inv1["viewer1"]!)["components"] is JsonObject parts1 && parts1.Count == 1,
+        "Inventory should record exactly one component after the first pull.");
+
+    // Completion detection — viewer owns p1 of a 2-part set; dup protection forces the missing p2,
+    // which completes the collection and flags newlyCompleted.
+    var pair = new JsonObject { ["collections"] = new JsonObject { ["pair"] = MakeCollection("Pair", 100, "p1", "p2") } };
+    var inv2 = new JsonObject
+    {
+        ["v2"] = new JsonObject
+        {
+            ["displayName"] = "V2",
+            ["components"] = new JsonObject { ["p1"] = 1 },
+            ["pullsSinceLastDup"] = 0
+        }
+    };
+    var completion = RedemptionEngine.ApplyRedemption(pair, null, inv2, "v2", "V2", DateTimeOffset.UtcNow, new Random(3), dupProtectionTurns: 2);
+    Require(completion.Pull.PartId == "p2", "Dup protection should force the only missing part (p2).");
+    Require(completion.NewlyCompleted && completion.OwnedAfter == 2 && completion.TotalParts == 2,
+        "Completing the set should flag newlyCompleted with ownedAfter == total.");
+
+    // Duplicate + triple streak — pulling the only part three times reports quantity 3 and a streak of 3.
+    var single = new JsonObject { ["collections"] = new JsonObject { ["one"] = MakeCollection("One", 100, "only") } };
+    var inv3 = new JsonObject();
+    var rngStreak = new Random(11);
+    RedemptionResult third = null!;
+    for (var i = 0; i < 3; i++)
+        third = RedemptionEngine.ApplyRedemption(single, null, inv3, "v3", "V3", DateTimeOffset.UtcNow, rngStreak);
+    Require(third.Quantity == 3 && third.IsDuplicate, "Third pull of the only part should be quantity 3 (a duplicate).");
+    Require(third.ConsecutivePullCount == 3, "Three identical pulls should report a streak of 3.");
+
+    Console.WriteLine($"RedemptionEngine: collection weighting {pBig:F1}% (target 90), event gating in/out, new/dup/completion/streak application all passed.");
+}
+
+// Verifies the shared CommandEngine: inventory/missing/duplicates/balance/collection/leaderboard
+// output and the salvage write (consumes extras, credits the wallet, mutates inventory).
+static void TestCommandEngine()
+{
+    var ctx = new CommandContext(
+        GameName: "Circuit",
+        ItemSingular: "component", ItemPlural: "components",
+        CollectionSingular: "collection", RedemptionName: "Circuit Component", CurrencyName: "Scrap",
+        CollectionCommand: "collection", SalvageCommand: "salvage",
+        NoInventoryTemplate: "@{viewer} you don't have any {itemPlural} yet. Redeem {redemption} to start your {collectionSingular}.",
+        BalanceTemplate: "@{viewer} {currency} balance: {balance}.",
+        NoDuplicatesTemplate: "@{viewer} you don't have any duplicate {itemPlural} yet.",
+        CollectionUsageTemplate: "@{viewer} usage: !{collectionCommand} <{collectionSingular}>",
+        CollectionSummaryTemplate: "@{viewer} {collection}: {owned}/{total} | {status}{availability}",
+        SalvageUsageTemplate: "@{viewer} usage: !{salvageCommand} <{collectionSingular}> or !{salvageCommand} all",
+        NothingToSalvageTemplate: "@{viewer} you have no extra copies to salvage in {selection}.",
+        SalvageSuccessTemplate: "@{viewer} salvaged {count} extra {itemWord} for {earned} {currency}. Balance: {balance}.");
+
+    var catalog = new JsonObject
+    {
+        ["collections"] = new JsonObject
+        {
+            ["basic"] = CommandCollection("Basic Collection", 1, ("basic_a", "Alpha"), ("basic_b", "Beta"), ("basic_c", "Gamma")),
+            ["power"] = CommandCollection("Power Collection", 2, ("power_a", "Cell"), ("power_b", "Fuse"))
+        }
+    };
+    // v1: owns Alpha x2 (dup), Beta x1, Cell x1; wallet 5. v2: owns Alpha x1 only.
+    JsonObject Inventory() => new()
+    {
+        ["v1"] = new JsonObject
+        {
+            ["displayName"] = "ViewerOne",
+            ["components"] = new JsonObject { ["basic_a"] = 2, ["basic_b"] = 1, ["power_a"] = 1 },
+            ["wallet"] = new JsonObject { ["scrap"] = 5 }
+        },
+        ["v2"] = new JsonObject
+        {
+            ["displayName"] = "ViewerTwo",
+            ["components"] = new JsonObject { ["basic_a"] = 1 }
+        }
+    };
+    var now = DateTimeOffset.UtcNow;
+
+    bool AnyContains(IReadOnlyList<string> lines, string text) => lines.Any(l => l.Contains(text, StringComparison.Ordinal));
+
+    var inventoryLines = CommandEngine.Inventory(catalog, Inventory(), ctx, "v1", "ViewerOne", now);
+    Require(AnyContains(inventoryLines, "Basic 2/3") && AnyContains(inventoryLines, "Power 1/2"),
+        "Inventory should report owned/total per collection.");
+
+    var missingLines = CommandEngine.Missing(catalog, Inventory(), ctx, "v1", "ViewerOne", now);
+    Require(AnyContains(missingLines, "Basic: Gamma") && AnyContains(missingLines, "Power: Fuse"),
+        "Missing should list the unowned part names.");
+
+    var dupLines = CommandEngine.Duplicates(catalog, Inventory(), ctx, "v1", "ViewerOne", now);
+    Require(AnyContains(dupLines, "Basic Alpha x2"), "Duplicates should list the duplicated part with its count.");
+    var noDupLines = CommandEngine.Duplicates(catalog, Inventory(), ctx, "v2", "ViewerTwo", now);
+    Require(AnyContains(noDupLines, "don't have any duplicate"), "A viewer with no extras should get the no-duplicates message.");
+
+    Require(CommandEngine.Balance(Inventory(), ctx, "v1", "ViewerOne") == "@ViewerOne Scrap balance: 5.",
+        "Balance should read the wallet currency.");
+    Require(CommandEngine.Balance(Inventory(), ctx, "ghost", "Ghost").Contains("don't have any components"),
+        "Balance for an unknown viewer should return the no-inventory message.");
+
+    var detail = CommandEngine.CollectionDetail(catalog, Inventory(), ctx, "v1", "ViewerOne", "basic", now);
+    Require(AnyContains(detail, "Basic Collection: 2/3") && AnyContains(detail, "Owned: Alpha, Beta") && AnyContains(detail, "Missing: Gamma"),
+        "Collection detail should summarize owned/missing/duplicates.");
+    Require(CommandEngine.CollectionDetail(catalog, Inventory(), ctx, "v1", "ViewerOne", "", now)[0].Contains("usage:"),
+        "Empty collection arg should return usage.");
+    Require(CommandEngine.CollectionDetail(catalog, Inventory(), ctx, "v1", "ViewerOne", "nope", now)[0].Contains("unknown collection"),
+        "Unknown collection should report availability.");
+
+    var board = CommandEngine.Leaderboard(catalog, Inventory(), ctx, "v1", "ViewerOne", null, now);
+    Require(AnyContains(board, "#1 ViewerOne 3/5"), "Leaderboard should rank the leading viewer by unique count.");
+
+    // Salvage write — Alpha x2 → 1 extra at salvageValue 1 → +1 Scrap, balance 5→6, Alpha reduced to 1.
+    var salvageInventory = Inventory();
+    var salvage = CommandEngine.Salvage(catalog, salvageInventory, ctx, "v1", "ViewerOne", "basic");
+    Require(salvage.Mutated && salvage.ConsumedComponents == 1 && salvage.EarnedCurrency == 1 && salvage.NewBalance == 6,
+        "Salvage should consume one extra, earn currency, and credit the wallet.");
+    Require(salvage.Message.Contains("salvaged 1 extra component for 1 Scrap. Balance: 6."), "Salvage success message should be formatted.");
+    var v1Components = (JsonObject)((JsonObject)salvageInventory["v1"]!)["components"]!;
+    Require(v1Components["basic_a"]!.GetValue<long>() == 1, "Salvaged part should be reduced to a single copy.");
+    Require(((JsonObject)((JsonObject)salvageInventory["v1"]!)["wallet"]!)["scrap"]!.GetValue<long>() == 6, "Wallet should be credited.");
+
+    Require(!CommandEngine.Salvage(catalog, Inventory(), ctx, "v1", "ViewerOne", "").Mutated, "Empty salvage arg should not mutate.");
+    Require(CommandEngine.Salvage(catalog, Inventory(), ctx, "v1", "ViewerOne", "nope").Message.Contains("unknown collection"), "Unknown salvage target should be reported.");
+    Require(CommandEngine.Salvage(catalog, Inventory(), ctx, "v2", "ViewerTwo", "power").Message.Contains("no extra copies to salvage"),
+        "Salvaging a collection with no extras should report nothing to salvage.");
+
+    Console.WriteLine("CommandEngine: inventory, missing, duplicates, balance, collection detail, leaderboard, and salvage (write) all passed.");
+}
+
+static JsonObject CommandCollection(string displayName, long salvageValue, params (string Id, string Name)[] parts)
+{
+    var partArray = new JsonArray();
+    foreach (var (id, name) in parts) partArray.Add(new JsonObject { ["id"] = id, ["name"] = name });
+    return new JsonObject { ["displayName"] = displayName, ["type"] = "permanent", ["salvageValue"] = salvageValue, ["parts"] = partArray };
+}
+
+static JsonObject MakeCollection(string name, double weight, params string[] partIds)
+{
+    var parts = new JsonArray();
+    foreach (var id in partIds) parts.Add(new JsonObject { ["id"] = id, ["name"] = id.ToUpperInvariant() });
+    return new JsonObject { ["displayName"] = name, ["type"] = "permanent", ["weight"] = weight, ["parts"] = parts };
+}
+
+static JsonObject MakeEvent(string name, double weight, bool enabled, string fromUtc, string untilUtc, params string[] partIds)
+{
+    var collection = MakeCollection(name, weight, partIds);
+    collection["type"] = "event";
+    collection["enabled"] = enabled;
+    collection["activeFromUtc"] = fromUtc;
+    collection["activeUntilUtc"] = untilUtc;
+    return collection;
 }
 
 // Verifies AppwriteOptions.TryLoad: file parsing, env override, defaults, null when

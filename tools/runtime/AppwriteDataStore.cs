@@ -188,22 +188,23 @@ internal sealed class AppwriteDataStore : IDataStore
     public IReadOnlyList<ProfileInfo> ListProfiles()
     {
         var rows = AllRowsForTenant();
-        var byProfile = new Dictionary<string, (string Name, DateTimeOffset Created)>(StringComparer.Ordinal);
+        var byProfile = new Dictionary<string, (string Name, DateTimeOffset Created, bool Live)>(StringComparer.Ordinal);
         foreach (var row in rows)
         {
             var pid = RowProfileId(row);
             if (string.IsNullOrEmpty(pid) || pid.Contains('#')) continue;   // skip the #bak namespace
-            if (!byProfile.ContainsKey(pid)) byProfile[pid] = (pid, DateTimeOffset.MinValue);
+            if (!byProfile.ContainsKey(pid)) byProfile[pid] = (pid, DateTimeOffset.MinValue, pid == _profileId);
             if (RowDataKey(row) == ProfileMetaKey)
             {
                 var meta = ParseJsonColumnOrNull(row);
                 var name = meta?["name"]?.ToString();
                 var created = DateTimeOffset.TryParse(meta?["createdAt"]?.ToString(), out var dt) ? dt : DateTimeOffset.MinValue;
-                byProfile[pid] = (string.IsNullOrWhiteSpace(name) ? pid : name!, created);
+                var live = meta?["active"] is JsonValue v && v.TryGetValue<bool>(out var on) ? on : pid == _profileId;
+                byProfile[pid] = (string.IsNullOrWhiteSpace(name) ? pid : name!, created, live);
             }
         }
         return byProfile
-            .Select(kv => new ProfileInfo(kv.Key, kv.Value.Name, kv.Value.Created, kv.Key == _profileId))
+            .Select(kv => new ProfileInfo(kv.Key, kv.Value.Name, kv.Value.Created, kv.Key == _profileId, kv.Value.Live))
             .OrderBy(p => p.CreatedAt)
             .ToList();
     }
@@ -238,9 +239,29 @@ internal sealed class AppwriteDataStore : IDataStore
             UpsertJson(profileId, key, value.ToJsonString(JsonUtil.IndentedOptions));
     }
 
+    public void SetProfileActive(string id, bool active)
+    {
+        var existing = TryGetRow(id, ProfileMetaKey);
+        var meta = existing is not null
+            ? ParseJsonColumn(existing, ProfileMetaKey)
+            : new JsonObject { ["name"] = id, ["createdAt"] = DateTime.UtcNow.ToString("O") };
+        meta["active"] = active;
+        UpsertJson(id, ProfileMetaKey, meta.ToJsonString(JsonUtil.IndentedOptions));
+    }
+
+    public JsonObject? ReadProfileData(string profileId, string key)
+    {
+        var row = TryGetRow(profileId, key);
+        return row is null ? null : ParseJsonColumn(row, key);
+    }
+
     private void WriteProfileMeta(string profileId, string name)
     {
-        var meta = new JsonObject { ["name"] = name, ["createdAt"] = DateTime.UtcNow.ToString("O") };
+        // Preserve createdAt + active across rename/create.
+        var existing = TryGetRow(profileId, ProfileMetaKey);
+        var meta = existing is not null ? ParseJsonColumn(existing, ProfileMetaKey) : new JsonObject();
+        meta["name"] = name;
+        if (meta["createdAt"] is null) meta["createdAt"] = DateTime.UtcNow.ToString("O");
         UpsertJson(profileId, ProfileMetaKey, meta.ToJsonString(JsonUtil.IndentedOptions));
     }
 

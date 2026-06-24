@@ -457,6 +457,153 @@ before the fix, they're harmless; delete them in the console for tidiness. Local
 
 ---
 
+### 2026-06-24 — Claude (claude-opus-4-8) — Admin UI cleanup pass 1 (per UI.md)
+
+**Goal:** Start the cross-app UI polish backlog the user added in `UI.md` (simpler wording, less
+jargon, better Overview/Configure layout). All verified live in-browser.
+
+**Live verify loop (reusable):** run the app **headless** (HTTP server, no WinForms window) against a
+throwaway copy of `data/`, then drive it with the preview browser:
+`dotnet tools/runtime/bin/Release/net9.0-windows/CircuitOS.dll --headless --data <tmp> --ui tools/admin
+--actions streamerbot-actions --overlay overlays/lower-quarter` → serves `127.0.0.1:8787`. The preview
+tool needs `.claude/launch.json` at the **harness root** (the OneDrive path), config name `circuitos-admin`,
+port 8787. `.claude/launch.json` is gitignored (machine-specific abs paths).
+
+**Changes (all in `tools/admin/` — index.html, app.js, styles.css):**
+- **Wording:** topbar `Import Catalog/Export Catalog/Refresh Live Data/Save Catalog` → `Import/Export/Refresh/Save`
+  (the Save + Refresh labels are set dynamically in app.js — changed there too); `Save System Profile` → `Save Profile`;
+  import-modal footers de-jargoned.
+- **Bug fix:** the spurious red **"Message cannot be empty."** on every load — `validateMessageTemplate` ignored the
+  `optional` flag, so the intentionally-blank `variantPull` message tripped it. Now respects `optional` (matches the
+  server's `OptionalMessages`).
+- **Overview reorg:** Action Center moved to the **top** (full-width "Needs Attention"); **Pull Rates + Collection
+  Health** now side-by-side; **System Check** demoted to the lower dashboard row (`#systemCheckPanel` id added for a
+  future hide-setting). All panel ids preserved so app.js wiring is intact.
+- **"Main Collections":** the permanent-collections nav item + view title now read "Main Collections" (was the
+  terminology-driven "Collections"/"Permanent Collections" — changed at app.js:293 and the getViewTitle special-case),
+  removing the old "Collections › Collections" redundancy.
+- **Configure → new "Appearance" page:** theme colors moved off Game Profile into `#appearanceView`
+  (nav under Configure). The color grid (`#profileColors`) was relocated by id — its existing render/dirty/save wiring
+  (saveSystemProfile) is unchanged; added `saveAppearanceButton` + dirty indicator. Game Profile live-preview lost the
+  "Profile location" path (per UI.md) and "Admin name" → "Control panel nickname" (full Twitch-username wiring deferred
+  to the Twitch phase).
+- **Overlay editor:** was a single tall column (preview stacked above all settings → endless scroll). Now a balanced
+  **2-column layout** (`.overlay-editor-col` flex columns, `min-width:0` so the 1920px iframe can't stretch a column):
+  left = cropped preview + Browser Source + Position & Size + Colors; right = Timing + Content + Text — most of the
+  editor fits without scrolling. The **preview is cropped to the bottom ~420px band** of the 1080 canvas
+  (`scaleOverlayPreview`, `visibleBand` constant) so the lower-third fills the frame and is readable instead of a thin
+  strip in a full 16:9 box. Collapses to 1-col under 980px. (Note: assumes a bottom-anchored overlay.)
+
+**Decisions taken with the user:** theme colors → dedicated Appearance page; identity field relabel now / wire Twitch
+later; one overlay source per profile (overlay UI still ahead).
+
+**Still in UI.md (next):** Messages view scrolling; Overview clickable cards + inline-tunable rates + hide-System-Check
+setting; Main Collections hide-ID + delete-collection. Then the **active-profiles UI (item C)** to surface the A+B backend.
+Unreleased; no version bump.
+
+---
+
+### 2026-06-24 — Claude (claude-opus-4-8) — 0.7 multiple-active-profiles: foundation (A + B)
+
+**Goal:** Start the user-requested shift from one-active-profile to **multiple simultaneously-active
+profiles** (run two games at once; switch profiles only to *edit*). Decisions taken with the user:
+explicit **active set** (separate from the editing selection); **hard-block** on command collisions;
+**one overlay source per profile** (overlay UI deferred). This session built A (data model) + B (guard);
+C (UI) and D (native live routing) are still ahead.
+
+**A — active-set data model:** `active` flag added to each profile's meta = the live set; the existing
+`active-profile` pointer keeps meaning the *editing* selection (`ActiveProfileId`). `ProfileInfo` now carries
+`IsLive` alongside `IsActive`. New `IDataStore` members: `SetProfileActive(id, bool)` and `ReadProfileData(profileId, key)`
+(cross-profile read, the counterpart of `ImportProfileData`). Implemented in both stores:
+- `LocalFileDataStore`: meta `active` flag; new-profile default inactive; default/migrated/fresh profiles
+  start live; **one-time `BackfillActiveFlags()`** stamps every profile explicitly on first run after upgrade
+  (pre-feature installs → editing-current becomes the live one, matching old single-active behavior).
+- `AppwriteDataStore`: same via the `__profile_meta__` row; `WriteProfileMeta` now preserves `active`/`createdAt`
+  across rename; per-row fallback (live ⇐ `active` or `== editing profile`) for the dev bridge.
+
+**B — command-collision guard:** new API ops `activate`/`deactivate` (via the existing `POST /api/profiles`).
+Activation is **blocked** if the profile's command words collide with another *live* profile, and
+`SaveSystemProfile` enforces the same when the edited profile is itself live (drafts save freely). Error reads
+`"Command '!inventory' is already used by the active profile '<name>'. Rename it before saving."`
+Lives in `CircuitService.Profiles.cs` (`CommandCollisions`, `IsProfileLive`), reading other live profiles'
+commands via `ReadProfileData`.
+
+**Verified:** runtime builds clean (Release, 0 warnings); smoke harness extended with
+`TestActiveProfilesAndCollisions` — default live after first-run, new profiles inactive, activate/deactivate
+flips `IsLive`, colliding-command activation blocked (profile stays inactive), unique-command activation
+succeeds. New compile in `runtime.tests` csproj: added `CircuitService.Profiles.cs`. Backward-compatible,
+**unreleased**, default-local untouched.
+
+**Still ahead:** **C (UI)** — active toggle per profile, editing-vs-live distinction, inline collision errors,
+per-profile overlay URLs, a "what's live" banner. **D (native)** — EventSub routes redemptions by reward-ID
+and commands by word across the active set into the shared engines (Phase 4/5).
+
+---
+
+### 2026-06-24 — Claude (claude-opus-4-8) — 0.7 Phase 4 (step 1b): shared CommandEngine
+
+**Goal:** Extend the shared-logic work to the chat commands (user asked: "shouldn't the commands be
+shared too, not just the pull?"). They were right — only redemption was shared. Verified the generator
+(`CircuitService.Core.cs:361,439-442`) emits exactly **4** actions, so the live command logic lives in
+`StreamerbotCatalogCommands.txt` (inventory/missing/duplicates/balance/leaderboard), `StreamerbotCollection.txt`,
+and `StreamerbotSalvage.txt`. `StreamerbotCheck/Missing/Dupes.txt` are **dead legacy** (hardcoded paths +
+component IDs, not generated) — flagged for deletion via a background task, not ported.
+
+**Built: `tools/runtime/CommandEngine.cs`** — ports those three actions to `System.Text.Json.Nodes` (the
+actions hand-parse JSON to avoid Newtonsoft; the engine uses real parsing). Read commands return the chat
+line(s) to send with the same ~440-char segmentation; salvage mutates inventory in place and reports
+consumed/earned/balance + message. Methods: `Inventory`, `Missing`, `Duplicates`, `Balance`, `CollectionDetail`,
+`Leaderboard`, `Salvage`. Configurable wording comes via a `CommandContext` (terminology + message templates)
+the caller builds from the profile, so the engine is game-agnostic. Wallet currency stays under the fixed
+`"scrap"` key (matches saved inventory); `CurrencyName` is display only. Legacy salvageValue fallbacks kept
+for parity. One intentional improvement over the template: the leaderboard title uses `GameName` instead of
+the hardcoded "Circuit Leaderboard".
+
+**Verified:** runtime builds clean (Release, 0 warnings); smoke harness extended with `TestCommandEngine` —
+inventory/missing/duplicates output, balance, collection detail (summary + owned/missing/dupes), leaderboard
+ranking, and the salvage write (consumes one extra → +1 currency, balance 5→6, part reduced to 1) all pass.
+New file `CommandEngine.cs`; test wired into `runtime.tests`.
+
+**Shared-logic status:** the *whole* pull→apply→commands surface is now shared and tested
+(`PullEngine` + `RedemptionEngine` + `CommandEngine`). The native EventSub path no longer has to
+re-implement anything game-logic; it wires intake + chat-send to these. **Unreleased**, default-local untouched.
+**Next (needs user/infra):** Helix reward create/update on login; Appwrite Function for EventSub redemptions
+**and** a chat-message intake for commands; chat-send via Helix. Still pending: row-fix live verify.
+
+---
+
+### 2026-06-24 — Claude (claude-opus-4-8) — 0.7 Phase 4 (step 1): shared RedemptionEngine
+
+**Goal:** Begin Phase 4 (native zero-config Twitch). Audit-first finding: the handoff framed
+`PullEngine` as "built, just wire it in," but reading `StreamerbotReedeem.txt` end-to-end showed
+`PullEngine.Roll` is only the **inner** roll (dup-protection → tier → variant) over an *already-chosen*
+collection. Two pieces still lived ONLY in the Streamer.bot `.txt`: (1) collection selection (weighted
+pick + featured-boost multipliers + event-window gating) and (2) the inventory read-modify-write
+(owned counts, completion detection + seeding, pull-streak/triple, dup-protection counter). The native
+EventSub path re-implementing those = the exact drift the shared engine was meant to prevent.
+
+**Built (offline, no cloud/Twitch needed): `tools/runtime/RedemptionEngine.cs`** — ports those two
+pieces from the `.txt` (Newtonsoft `JObject` → `System.Text.Json.Nodes`), wrapping `PullEngine.Roll`:
+- `SelectCollection(collections, boost, now, rng)` → `CollectionSelection` (key, collection, displayName,
+  probability, applied-boost name). Honors boost multipliers + event windows; boost label only applies if
+  the *selected* collection had a multiplier. Throws `InvalidDataException` on bad config (mirrors the action).
+- `ApplyRedemption(catalog, boost, inventory, viewerId, viewerName, now, rng, dupProtectionTurns=0)`
+  → `RedemptionResult` (pull outcome, ownedAfter/total, quantity, isDuplicate, newlyCompleted,
+  streak count + sequence probability, rareLabel). Mutates `inventory` in place.
+- Output formatting (chat templates, overlay state) and cooldown intentionally stay caller-side — they
+  differ per integration. Legacy Circuit-Components weight/rareLabel fallbacks kept byte-for-byte for parity.
+
+**Verified:** runtime builds clean (Release, 0 warnings); smoke harness extended with `TestRedemptionEngine`
+— collection weighting 89.9% vs 90 target, event gating in/out, and new/duplicate/completion/triple-streak
+application all pass. New files: `RedemptionEngine.cs`; test wired into `runtime.tests` csproj + `Program.cs`.
+
+**Unreleased**; default-local untouched. **Next (needs user/infra):** Phase 4 step 2 — Helix channel-point
+reward create/update on login (cached token); step 3 — Appwrite Function behind the EventSub redemption
+webhook calling `RedemptionEngine` + `AppwriteDataStore` (requires a publicly reachable endpoint, which is
+really the Phase 5 hosting question). Still pending: the row-fix live verify (`--push-to-appwrite` → `--cloud`).
+
+---
+
 ### 2026-06-24 — Claude (claude-opus-4-8) — 0.7: fix Appwrite row-addressing desync
 
 **Goal:** Clear the flagged P0 — the re-push "verified 0" / "Catalog not found" desync — after auditing

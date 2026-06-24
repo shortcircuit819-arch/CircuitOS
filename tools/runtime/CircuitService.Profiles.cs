@@ -67,6 +67,28 @@ internal sealed partial class CircuitService
                 return Ok(new JsonObject { ["ok"] = true, ["deletedId"] = id });
             }
 
+            case "activate":
+            {
+                var id = JsonUtil.String(request, "id");
+                if (string.IsNullOrWhiteSpace(id)) return Error(["Profile id is required."]);
+                // A profile can only go live if its commands don't collide with another live profile.
+                var target = _store.ReadProfileData(id, DataKeys.Profile);
+                List<string> collisions = target is null ? [] : CommandCollisions(target, id);
+                if (collisions.Count > 0) return Error(collisions);
+                try { _store.SetProfileActive(id, true); }
+                catch (Exception ex) { return Error([ex.Message]); }
+                return Ok(new JsonObject { ["ok"] = true, ["id"] = id, ["isLive"] = true });
+            }
+
+            case "deactivate":
+            {
+                var id = JsonUtil.String(request, "id");
+                if (string.IsNullOrWhiteSpace(id)) return Error(["Profile id is required."]);
+                try { _store.SetProfileActive(id, false); }
+                catch (Exception ex) { return Error([ex.Message]); }
+                return Ok(new JsonObject { ["ok"] = true, ["id"] = id, ["isLive"] = false });
+            }
+
             default:
                 return Error(["Unknown profile operation."]);
         }
@@ -84,11 +106,46 @@ internal sealed partial class CircuitService
         return id;
     }
 
+    private bool IsProfileLive(string id) => _store.ListProfiles().Any(p => p.Id == id && p.IsLive);
+
+    // Returns one error per incoming command word that another LIVE profile already uses, so
+    // two simultaneously-active games can't both own (e.g.) !inventory. Excludes selfProfileId.
+    private List<string> CommandCollisions(JsonObject profile, string selfProfileId)
+    {
+        var errors = new List<string>();
+        var commands = JsonUtil.Object(profile, "commands");
+        if (commands is null) return errors;
+
+        var taken = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);   // word → owning profile name
+        foreach (var other in _store.ListProfiles())
+        {
+            if (!other.IsLive || other.Id == selfProfileId) continue;
+            var otherCommands = _store.ReadProfileData(other.Id, DataKeys.Profile) is { } op ? JsonUtil.Object(op, "commands") : null;
+            if (otherCommands is null) continue;
+            foreach (var field in CommandFields)
+            {
+                var word = JsonUtil.String(otherCommands, field);
+                if (!string.IsNullOrWhiteSpace(word)) taken[word] = other.Name;
+            }
+        }
+        if (taken.Count == 0) return errors;
+
+        var reported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var field in CommandFields)
+        {
+            var word = JsonUtil.String(commands, field);
+            if (!string.IsNullOrWhiteSpace(word) && taken.TryGetValue(word, out var owner) && reported.Add(word))
+                errors.Add($"Command '!{word}' is already used by the active profile '{owner}'. Rename it before saving.");
+        }
+        return errors;
+    }
+
     private static JsonObject ProfileObject(ProfileInfo p) => new()
     {
         ["id"] = p.Id,
         ["name"] = p.Name,
         ["createdAt"] = p.CreatedAt.ToString("O"),
-        ["isActive"] = p.IsActive
+        ["isActive"] = p.IsActive,
+        ["isLive"] = p.IsLive
     };
 }

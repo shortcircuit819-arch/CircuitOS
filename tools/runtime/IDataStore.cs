@@ -28,6 +28,13 @@ internal interface IDataStore
     void DeleteProfile(string id);
     void RenameProfile(string id, string name);
     void ImportProfileData(string profileId, IDictionary<string, JsonNode> data);
+
+    // The active SET (which profiles are live), independent of the editing selection
+    // (ActiveProfileId). SwitchProfile changes what you edit; SetProfileActive changes
+    // what runs. ReadProfileData reads one data key from ANY profile (the read counterpart
+    // of ImportProfileData) — used for cross-profile command-collision checks.
+    void SetProfileActive(string id, bool active);
+    JsonObject? ReadProfileData(string profileId, string key);
 }
 
 // Local-filesystem extension of IDataStore. The .NET host (WinForms/HttpListener)
@@ -54,4 +61,5 @@ internal static class DataKeys
 
 internal sealed record DataFileInfo(long Size, DateTimeOffset ModifiedAt);
 internal sealed record BackupFileEntry(string FileName, string Key, string Label, long Size, DateTimeOffset CreatedAt);
-internal sealed record ProfileInfo(string Id, string Name, DateTimeOffset CreatedAt, bool IsActive);
+// IsActive = the editing selection (== ActiveProfileId). IsLive = in the active set (runs).
+internal sealed record ProfileInfo(string Id, string Name, DateTimeOffset CreatedAt, bool IsActive, bool IsLive);

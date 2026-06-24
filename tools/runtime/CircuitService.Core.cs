@@ -198,6 +198,8 @@ internal sealed partial class CircuitService
     {
         var profile = NormalizeProfile(requested);
         var errors = ValidateProfile(profile);
+        // Guard chat-command collisions only when the edited profile is itself live; drafts save freely.
+        if (IsProfileLive(_store.ActiveProfileId)) errors.AddRange(CommandCollisions(profile, _store.ActiveProfileId));
         if (errors.Count > 0) return Error(errors);
         var backup = _store.WriteAtomic(DataKeys.Profile, profile, "system-profile", Timestamp());
         return Ok(new JsonObject

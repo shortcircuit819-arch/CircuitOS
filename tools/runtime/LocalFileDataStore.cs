@@ -34,6 +34,7 @@ internal sealed class LocalFileDataStore : ILocalDataStore
         _activeProfileId = ReadActiveProfileId();
         _profileDataPath = GetProfilePath(_activeProfileId);
         EnsureProfileFolderExists(_profileDataPath, _activeProfileId);
+        BackfillActiveFlags();
     }
 
     public string DataPath => _profileDataPath;
@@ -178,7 +179,8 @@ internal sealed class LocalFileDataStore : ILocalDataStore
                 var id = meta["id"]?.ToString() ?? Path.GetFileName(dir);
                 var name = meta["name"]?.ToString() ?? id;
                 var createdAt = DateTimeOffset.TryParse(meta["createdAt"]?.ToString(), out var dt) ? dt : DateTimeOffset.MinValue;
-                profiles.Add(new ProfileInfo(id, name, createdAt, id == _activeProfileId));
+                var isLive = meta["active"] is JsonValue v && v.TryGetValue<bool>(out var on) && on;
+                profiles.Add(new ProfileInfo(id, name, createdAt, id == _activeProfileId, isLive));
             }
             catch { }
         }
@@ -233,6 +235,50 @@ internal sealed class LocalFileDataStore : ILocalDataStore
         }
     }
 
+    public void SetProfileActive(string id, bool active)
+    {
+        var metaPath = Path.Combine(GetProfilePath(id), "profile-meta.json");
+        if (!File.Exists(metaPath)) throw new InvalidDataException($"Profile '{id}' does not exist.");
+        var meta = ParseFile(metaPath);
+        meta["active"] = active;
+        File.WriteAllText(metaPath, meta.ToJsonString(JsonUtil.IndentedOptions), new UTF8Encoding(false));
+    }
+
+    public JsonObject? ReadProfileData(string profileId, string key)
+    {
+        var path = KeyToProfilePath(GetProfilePath(profileId), key);
+        if (path is null || !File.Exists(path)) return null;
+        try { return ParseFile(path); }
+        catch { return null; }
+    }
+
+    // One-time backfill so every profile has an explicit `active` flag: pre-feature installs
+    // (no flag anywhere) treat the editing-current profile as the live one, matching the old
+    // single-active behavior. Idempotent — profiles that already carry a flag are left alone.
+    private void BackfillActiveFlags()
+    {
+        var profilesDir = Path.Combine(_rootDataPath, "profiles");
+        if (!Directory.Exists(profilesDir)) return;
+        var metas = new List<(string Path, JsonObject Meta, string Id)>();
+        foreach (var dir in Directory.GetDirectories(profilesDir))
+        {
+            var metaPath = Path.Combine(dir, "profile-meta.json");
+            if (!File.Exists(metaPath)) continue;
+            try
+            {
+                var meta = ParseFile(metaPath);
+                metas.Add((metaPath, meta, meta["id"]?.ToString() ?? Path.GetFileName(dir)));
+            }
+            catch { }
+        }
+        if (metas.Count == 0 || metas.Any(m => m.Meta["active"] is not null)) return;
+        foreach (var (path, meta, id) in metas)
+        {
+            meta["active"] = id == _activeProfileId;
+            File.WriteAllText(path, meta.ToJsonString(JsonUtil.IndentedOptions), new UTF8Encoding(false));
+        }
+    }
+
     // ── Private helpers ──────────────────────────────────────────────────────
 
     private string GetProfilePath(string id) =>
@@ -249,13 +295,14 @@ internal sealed class LocalFileDataStore : ILocalDataStore
     private void WriteActiveProfileId(string id) =>
         File.WriteAllText(Path.Combine(_rootDataPath, "active-profile"), id, new UTF8Encoding(false));
 
-    private static void WriteProfileMeta(string dir, string id, string name)
+    private static void WriteProfileMeta(string dir, string id, string name, bool active = false)
     {
         var meta = new JsonObject
         {
             ["id"] = id,
             ["name"] = name,
-            ["createdAt"] = DateTime.UtcNow.ToString("O")
+            ["createdAt"] = DateTime.UtcNow.ToString("O"),
+            ["active"] = active
         };
         File.WriteAllText(Path.Combine(dir, "profile-meta.json"), meta.ToJsonString(JsonUtil.IndentedOptions), new UTF8Encoding(false));
     }
@@ -266,7 +313,7 @@ internal sealed class LocalFileDataStore : ILocalDataStore
     {
         if (Directory.Exists(profilePath)) return;
         Directory.CreateDirectory(profilePath);
-        WriteProfileMeta(profilePath, id, "Default");
+        WriteProfileMeta(profilePath, id, "Default", active: true);
     }
 
     // Moves all existing root-level user data into profiles/default/ on first run with 0.5+.
@@ -292,7 +339,7 @@ internal sealed class LocalFileDataStore : ILocalDataStore
                 }
                 catch { }
             }
-            WriteProfileMeta(defaultDir, "default", profileName);
+            WriteProfileMeta(defaultDir, "default", profileName, active: true);
 
             // Move user data files
             foreach (var fileName in new[] {
@@ -314,7 +361,7 @@ internal sealed class LocalFileDataStore : ILocalDataStore
         else
         {
             // Fresh install — create an empty default profile
-            WriteProfileMeta(defaultDir, "default", "Default");
+            WriteProfileMeta(defaultDir, "default", "Default", active: true);
         }
 
         WriteActiveProfileId("default");
