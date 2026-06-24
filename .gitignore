@@ -20,3 +20,8 @@ twitch-tokens.local.json
 
 # Local dev-preview config (machine-specific absolute paths)
 .claude/launch.json
+
+# Runtime-generated profile data (the repo keeps only the flat starter template in data/).
+# Running the app against data/ migrates it into profiles/ + writes overlay statics — never commit those.
+data/profiles/
+data/active-profile

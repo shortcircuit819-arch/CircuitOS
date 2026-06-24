@@ -457,6 +457,47 @@ before the fix, they're harmless; delete them in the console for tidiness. Local
 
 ---
 
+### 2026-06-24 — User (Codex, outside this session) — 0.7 cloud: tenant migration, client-side filtering, auto port
+
+Backend changes the user developed outside this Claude session (recorded here for continuity; committed
+cleanly while untangling a mixed commit):
+
+- **`AppwriteDataStore.MigrateRowsToTenant`** — moves `local-dev` rows to the real Twitch-id tenant; run on
+  `--cloud` startup (`Program.cs`). This is the deferred `local-dev → Twitch-id` migration.
+- **Row lookups now filter client-side.** `FindRow`/`TryGetRow`/`AllRowsForTenant` do `ListRows(Query.Limit(1000))`
+  then `.Where(...)` in memory instead of server-side `Query.Equal(...)`. Reason (per their code comment): the
+  user's Appwrite Cloud Tables endpoint **rejects the query-string filter form** in this environment. ⚠️ This
+  supersedes the server-side-query approach described in the earlier "fix Appwrite row-addressing desync" entry —
+  the unique-index lookup is the same idea, just done client-side. (Scales to ≤1000 rows; revisit if it grows.)
+- **`Program.cs ResolvePort`** — picks the first free loopback port from the preferred one (fixes the
+  port-in-use issue); headless mode logs the bound URL.
+
+---
+
+### 2026-06-24 — Claude (claude-opus-4-8) — Admin UI cleanup pass 2 (per UI.md)
+
+Continued the `UI.md` backlog; all verified live in-browser via the headless + preview loop. Finishes
+the **Collections** and **Configure** sections and adds Overview clickable cards.
+
+- **Main Collections — delete + hidden IDs** (`buildCollectionCard` in app.js): permanent collections now
+  have a **Delete** button (was event-only), guarded so you can't delete the last main collection; the
+  collection **key chip + key edit field are hidden** (auto/stable, not user-facing); per-item **Component ID**
+  field hidden too, widening Display name and leaving room for Tier. "Add Component" now generates a **unique**
+  id (the id stays the inventory key; hiding it required this so adds can't collide). `.part-row`/`.part-row-tiered`
+  columns updated.
+- **Messages — less scrolling:** the template grid is now `auto-fit minmax(320px)` (3 columns on a normal
+  window, was fixed 2), with tighter cards (padding + textarea min-height trimmed).
+- **Overview — clickable cards:** the five dashboard panels (Pull Rates→Rate Lab, Collection Health→Main
+  Collections, Event Timeline→Events, Economy Pulse→Economy, Viewer Activity→Inventory) are now whole-card
+  clickable (`clickable-card` + `data-jump-view`, picked up by the existing startup jump handler) with a
+  hover affordance. Inner jump buttons kept as explicit affordance.
+
+**UI.md remaining (Overview only):** pull-rate weights tunable inline on the Overview (embed the Rate Lab
+weight editor); a setting to hide the System Check card. Then the **active-profiles UI (item C)**.
+Unreleased; no version bump.
+
+---
+
 ### 2026-06-24 — Claude (claude-opus-4-8) — Admin UI cleanup pass 1 (per UI.md)
 
 **Goal:** Start the cross-app UI polish backlog the user added in `UI.md` (simpler wording, less
