@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -114,7 +115,14 @@ internal static class Program
         {
             var opts = AppwriteOptions.TryLoad(options.DataPath)
                 ?? throw new InvalidOperationException($"--cloud requires {AppwriteOptions.FileName} in the data folder. See docs/0.7-appwrite-dev-setup.md.");
-            store = new AppwriteDataStore(opts, ResolveTenant(options.DataPath), localStore.ActiveProfileId);
+            var tenant = ResolveTenant(options.DataPath);
+            if (!string.Equals(tenant, "local-dev", StringComparison.Ordinal))
+            {
+                var fromTenant = "local-dev";
+                try { AppwriteDataStore.MigrateRowsToTenant(opts, fromTenant, tenant); }
+                catch (Exception ex) { Console.Error.WriteLine($"Tenant migration warning: {ex.Message}"); }
+            }
+            store = new AppwriteDataStore(opts, tenant, localStore.ActiveProfileId);
         }
         var service = new CircuitService(store, options.ActionPath);
         var overlayDataPath = localStore.DataPath;
@@ -137,8 +145,11 @@ internal static class Program
 
         try
         {
+            var port = ResolvePort(options.Port);
+            if (options.Headless)
+                Console.WriteLine($"Listening on http://127.0.0.1:{port}/");
             using var listener = new HttpListener();
-            var url = $"http://127.0.0.1:{options.Port}/";
+            var url = $"http://127.0.0.1:{port}/";
             listener.Prefixes.Add(url);
             listener.Start();
 
@@ -170,6 +181,27 @@ internal static class Program
                 MessageBox.Show(exception.Message, "CircuitOS could not start", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
         }
+    }
+
+    private static int ResolvePort(int preferredPort)
+    {
+        var candidatePort = preferredPort > 0 ? preferredPort : 8787;
+        for (var port = candidatePort; port <= 65535; port++)
+        {
+            var listener = new TcpListener(IPAddress.Loopback, port);
+            try
+            {
+                listener.Start();
+                listener.Stop();
+                return port;
+            }
+            catch (SocketException) when (port < 65535)
+            {
+                // Try the next port if the preferred one is already in use.
+            }
+        }
+
+        throw new InvalidOperationException($"Unable to find a free loopback port from {candidatePort} to 65535.");
     }
 
     private static async Task RunServerAsync(

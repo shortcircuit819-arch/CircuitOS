@@ -149,6 +149,48 @@ internal sealed class AppwriteDataStore : IDataStore
         return ParseJsonColumn(row, key);
     }
 
+    public static void MigrateRowsToTenant(AppwriteOptions options, string fromUserId, string toUserId)
+    {
+        if (string.IsNullOrWhiteSpace(fromUserId) || string.IsNullOrWhiteSpace(toUserId))
+            throw new ArgumentException("Both fromUserId and toUserId are required.");
+        if (string.Equals(fromUserId, toUserId, StringComparison.Ordinal)) return;
+
+        var client = new Client()
+            .SetEndpoint(options.Endpoint)
+            .SetProject(options.ProjectId)
+            .SetKey(options.ApiKey);
+        var tables = new TablesDB(client);
+        var rows = Run(tables.ListRows(options.DatabaseId, options.CollectionId, new List<string> { Query.Limit(1000) })).Rows
+            .Where(row => string.Equals(RowUserId(row), fromUserId, StringComparison.Ordinal))
+            .ToList();
+
+        foreach (var row in rows)
+        {
+            var profileId = RowProfileId(row);
+            var dataKey = RowDataKey(row);
+            var json = JsonColumn(row);
+            if (string.IsNullOrWhiteSpace(profileId) || string.IsNullOrWhiteSpace(dataKey) || string.IsNullOrWhiteSpace(json))
+                continue;
+
+            var existingTarget = FindRow(tables, options, toUserId, profileId, dataKey);
+            if (existingTarget is not null)
+            {
+                Run(tables.DeleteRow(options.DatabaseId, options.CollectionId, row.Id));
+                continue;
+            }
+
+            var data = new Dictionary<string, object>
+            {
+                ["userId"] = toUserId,
+                ["profileId"] = profileId,
+                ["dataKey"] = dataKey,
+                ["json"] = json
+            };
+            Run(tables.CreateRow(options.DatabaseId, options.CollectionId, ID.Unique(), data));
+            Run(tables.DeleteRow(options.DatabaseId, options.CollectionId, row.Id));
+        }
+    }
+
     // Maps a backup file name ("{prefix}_{timestamp}.json") back to its managed entry.
     private static (string Key, string Label, string Prefix) ResolveBackupFile(string fileName)
     {
@@ -298,14 +340,14 @@ internal sealed class AppwriteDataStore : IDataStore
     // the existing row and update ITS id, so the follow-up GetRow(derivedId) 404'd.
     private Row? TryGetRow(string profileId, string key)
     {
-        var queries = new List<string>
-        {
-            Query.Equal("userId", _userId),
-            Query.Equal("profileId", profileId),
-            Query.Equal("dataKey", key),
-            Query.Limit(1)
-        };
-        return Run(_tables.ListRows(_options.DatabaseId, _options.CollectionId, queries)).Rows.FirstOrDefault();
+        // The Appwrite cloud Tables API is rejecting the query-string form in this environment,
+        // so list rows once and filter client-side. This preserves the same semantics without
+        // depending on the server's query parser.
+        return AllRowsForTenant()
+            .FirstOrDefault(row =>
+                string.Equals(RowUserId(row), _userId, StringComparison.Ordinal) &&
+                string.Equals(RowProfileId(row), profileId, StringComparison.Ordinal) &&
+                string.Equals(RowDataKey(row), key, StringComparison.Ordinal));
     }
 
     private void TryDelete(string profileId, string key)
@@ -317,10 +359,25 @@ internal sealed class AppwriteDataStore : IDataStore
 
     private List<Row> AllRowsForTenant()
     {
-        var queries = new List<string> { Query.Equal("userId", _userId), Query.Limit(1000) };
-        return Run(_tables.ListRows(_options.DatabaseId, _options.CollectionId, queries)).Rows;
+        // Avoid server-side query filters here; the cloud tables endpoint is rejecting them
+        // with an invalid-query error in this environment. We fetch the tenant's rows once and
+        // apply the necessary filters in memory instead.
+        return Run(_tables.ListRows(_options.DatabaseId, _options.CollectionId, new List<string> { Query.Limit(1000) })).Rows
+            .Where(row => string.Equals(RowUserId(row), _userId, StringComparison.Ordinal))
+            .ToList();
     }
 
+    private static Row? FindRow(TablesDB tables, AppwriteOptions options, string userId, string profileId, string dataKey)
+    {
+        var rows = Run(tables.ListRows(options.DatabaseId, options.CollectionId, new List<string> { Query.Limit(1000) })).Rows
+            .Where(row => string.Equals(RowUserId(row), userId, StringComparison.Ordinal) &&
+                          string.Equals(RowProfileId(row), profileId, StringComparison.Ordinal) &&
+                          string.Equals(RowDataKey(row), dataKey, StringComparison.Ordinal))
+            .ToList();
+        return rows.FirstOrDefault();
+    }
+
+    private static string? RowUserId(Row row) => row.Data.TryGetValue("userId", out var v) ? v?.ToString() : null;
     private static string? RowProfileId(Row row) => row.Data.TryGetValue("profileId", out var v) ? v?.ToString() : null;
     private static string? RowDataKey(Row row) => row.Data.TryGetValue("dataKey", out var v) ? v?.ToString() : null;
     private static string? JsonColumn(Row row) => row.Data.TryGetValue("json", out var value) ? value?.ToString() : null;
