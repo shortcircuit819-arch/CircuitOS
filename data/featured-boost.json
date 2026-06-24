@@ -1,0 +1,7 @@
+{
+  "enabled": false,
+  "displayName": "Quantum Boost",
+  "collectionMultipliers": {
+    "quantum": 3.0
+  }
+}

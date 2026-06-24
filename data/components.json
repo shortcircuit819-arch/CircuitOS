@@ -1,0 +1,71 @@
+{
+  "collections": {
+    "basic": {
+      "displayName": "Basic Collection",
+      "type": "permanent",
+      "weight": 45,
+      "salvageValue": 1,
+      "parts": [
+        { "id": "basic_resistor", "name": "Resistor" },
+        { "id": "basic_capacitor", "name": "Capacitor" },
+        { "id": "basic_wire", "name": "Wire" },
+        { "id": "basic_led", "name": "LED" },
+        { "id": "basic_switch", "name": "Switch" }
+      ]
+    },
+    "power": {
+      "displayName": "Power Collection",
+      "type": "permanent",
+      "weight": 25,
+      "salvageValue": 2,
+      "parts": [
+        { "id": "power_battery", "name": "Battery" },
+        { "id": "power_capacitor", "name": "Capacitor" },
+        { "id": "power_fuse", "name": "Fuse" },
+        { "id": "power_switch", "name": "Switch" },
+        { "id": "power_surge_protector", "name": "Surge Protector" }
+      ]
+    },
+    "advanced": {
+      "displayName": "Advanced Collection",
+      "type": "permanent",
+      "weight": 15,
+      "salvageValue": 3,
+      "parts": [
+        { "id": "advanced_microprocessor", "name": "Microprocessor" },
+        { "id": "advanced_voltage_regulator", "name": "Voltage Regulator" },
+        { "id": "advanced_diode", "name": "Diode" },
+        { "id": "advanced_inductor", "name": "Inductor" },
+        { "id": "advanced_op_amp", "name": "Op-Amp" }
+      ]
+    },
+    "broken": {
+      "displayName": "Broken Collection",
+      "type": "permanent",
+      "weight": 10,
+      "salvageValue": 5,
+      "rareLabel": "RARE CIRCUIT PULL",
+      "parts": [
+        { "id": "broken_glitchy_wire", "name": "Glitchy Wire" },
+        { "id": "broken_resistor", "name": "Broken Resistor" },
+        { "id": "broken_overloaded_capacitor", "name": "Overloaded Capacitor" },
+        { "id": "broken_debugging_code", "name": "Debugging Code" }
+      ]
+    },
+    "quantum": {
+      "displayName": "Quantum Collection",
+      "type": "permanent",
+      "weight": 5,
+      "salvageValue": 10,
+      "rareLabel": "QUANTUM PULL",
+      "parts": [
+        { "id": "quantum_resistor", "name": "Quantum Resistor" },
+        { "id": "quantum_overclocked_chip", "name": "Overclocked Chip" },
+        { "id": "quantum_crystal_oscillator", "name": "Crystal Oscillator" },
+        { "id": "quantum_rf_antenna", "name": "RF Antenna" },
+        { "id": "quantum_memory_chip", "name": "Memory Chip" },
+        { "id": "quantum_shielded_wire", "name": "Shielded Wire" }
+      ]
+    }
+  }
+}

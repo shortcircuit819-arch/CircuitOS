@@ -1,0 +1,930 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CircuitOS</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="firstRunWizard" class="wizard-overlay" role="dialog" aria-modal="true" aria-labelledby="wizardTitle" hidden>
+    <div class="wizard-shell">
+      <header class="wizard-header">
+        <img src="circuitos-icon.png" alt="" class="wizard-logo">
+        <div>
+          <div class="brand-kicker">CIRCUITOS FIRST RUN</div>
+          <h1 id="wizardTitle">Build Your Collection Game</h1>
+          <p>Start blank or use Circuit Components Starter, then generate the matching Streamer.bot actions.</p>
+        </div>
+      </header>
+
+      <div class="wizard-progress" aria-label="Setup progress">
+        <div class="wizard-progress-step active" data-wizard-progress="1"><span>1</span>Starting point</div>
+        <div class="wizard-progress-step" data-wizard-progress="2"><span>2</span>Game identity</div>
+        <div class="wizard-progress-step" data-wizard-progress="3"><span>3</span>First collection</div>
+        <div class="wizard-progress-step" data-wizard-progress="4"><span>4</span>Review</div>
+      </div>
+
+      <div id="wizardError" class="notice error" hidden></div>
+
+      <section class="wizard-step" data-wizard-step="1">
+        <div class="wizard-step-heading">
+          <div class="panel-kicker">STARTING POINT</div>
+          <h2>How do you want to begin?</h2>
+          <p>You can add, remove, import, and rename collections later.</p>
+        </div>
+        <div class="wizard-choice-grid">
+          <button type="button" class="wizard-choice active" data-wizard-preset="blank">
+            <strong>Blank Collection</strong>
+            <span>One generic collection with your own starter items.</span>
+            <small>Recommended for cards, creatures, games, and original ideas.</small>
+          </button>
+          <button type="button" class="wizard-choice" data-wizard-preset="circuit">
+            <strong>Circuit Components Starter</strong>
+            <span>Use the included five-collection electronics catalog.</span>
+            <small>A complete example you can customize immediately.</small>
+          </button>
+        </div>
+      </section>
+
+      <section class="wizard-step" data-wizard-step="2" hidden>
+        <div class="wizard-step-heading">
+          <div class="panel-kicker">GAME IDENTITY</div>
+          <h2>Name the experience</h2>
+          <p>These terms drive the editor, chat messages, and generated Streamer.bot code.</p>
+        </div>
+        <div class="wizard-field-grid">
+          <label class="field"><span>Game name</span><input id="wizardGameName" maxlength="80"></label>
+          <label class="field"><span>Control panel name</span><input id="wizardAdminName" maxlength="80"></label>
+          <label class="field"><span>Eyebrow label</span><input id="wizardBrandKicker" maxlength="80" title="Short uppercase phrase shown above panel titles, e.g. CIRCUITOS"></label>
+          <label class="field"><span>Redemption name</span><input id="wizardRedemptionName" maxlength="80"></label>
+          <label class="field"><span>Item singular</span><input id="wizardItemSingular" maxlength="80"></label>
+          <label class="field"><span>Item plural</span><input id="wizardItemPlural" maxlength="80"></label>
+          <label class="field"><span>Collection singular</span><input id="wizardCollectionSingular" maxlength="80"></label>
+          <label class="field"><span>Collection plural</span><input id="wizardCollectionPlural" maxlength="80"></label>
+          <label class="field"><span>Currency name</span><input id="wizardCurrencyName" maxlength="80"></label>
+          <label class="field wizard-color-field"><span>Accent color</span><input id="wizardAccent" type="color" value="#ff1a24"></label>
+        </div>
+      </section>
+
+      <section class="wizard-step" data-wizard-step="3" hidden>
+        <div class="wizard-step-heading">
+          <div class="panel-kicker">FIRST COLLECTION</div>
+          <h2 id="wizardCollectionHeading">Create the first collection</h2>
+          <p id="wizardCollectionHelp">Enter one starter item per line. Stable IDs are generated automatically.</p>
+        </div>
+        <div id="wizardBlankCollection" class="wizard-collection-fields">
+          <label class="field"><span>Collection name</span><input id="wizardCollectionName" maxlength="80" value="Starter Collection"></label>
+          <label class="field"><span>Starter items</span><textarea id="wizardItems" rows="9">Item One
+Item Two
+Item Three</textarea></label>
+        </div>
+        <div id="wizardStarterSummary" class="wizard-preset-summary" hidden></div>
+      </section>
+
+      <section class="wizard-step" data-wizard-step="4" hidden>
+        <div class="wizard-step-heading">
+          <div class="panel-kicker">REVIEW</div>
+          <h2>Ready to initialize CircuitOS</h2>
+          <p>This creates the profile and catalog with validation and timestamped backups.</p>
+        </div>
+        <div id="wizardReview" class="wizard-review"></div>
+      </section>
+
+      <footer class="wizard-footer">
+        <button id="wizardBackButton" type="button" class="button secondary" hidden>Back</button>
+        <div class="wizard-footer-spacer"></div>
+        <button id="wizardNextButton" type="button" class="button primary">Next</button>
+        <button id="wizardCompleteButton" type="button" class="button primary" hidden>Create Game</button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="eventImportModal" class="import-overlay" role="dialog" aria-modal="true" aria-labelledby="eventImportTitle" hidden>
+    <div class="import-shell">
+      <div class="import-header">
+        <div>
+          <div class="panel-kicker">CATALOG BUILDER</div>
+          <h1 id="eventImportTitle">Import Event Items</h1>
+          <p>Paste a list or load a CSV, inspect the generated IDs, then apply it to the editor.</p>
+        </div>
+        <button id="closeEventImportButton" class="button secondary small" type="button">Close</button>
+      </div>
+      <div class="import-body">
+        <div class="import-controls">
+          <label class="field">
+            <span>Destination</span>
+            <select id="eventImportMode">
+              <option value="new">Create a new event</option>
+              <option value="existing">Add to an existing event</option>
+            </select>
+          </label>
+          <label id="eventImportNameField" class="field">
+            <span>New event name</span>
+            <input id="eventImportName" type="text" value="Imported Event" maxlength="80">
+          </label>
+          <label id="eventImportTargetField" class="field" hidden>
+            <span>Existing event</span>
+            <select id="eventImportTarget"></select>
+          </label>
+          <label class="field">
+            <span>Input format</span>
+            <select id="eventImportFormat">
+              <option value="auto">Auto detect</option>
+              <option value="names">Names only</option>
+              <option value="id-name">ID and name CSV</option>
+            </select>
+          </label>
+          <label id="eventImportWeightField" class="field">
+            <span>Pull weight</span>
+            <input id="eventImportWeight" type="number" min="0" step="0.1" value="10">
+          </label>
+          <label id="eventImportValueField" class="field">
+            <span id="eventImportValueLabel">Salvage value</span>
+            <input id="eventImportValue" type="number" min="1" step="1" value="2">
+          </label>
+          <label id="eventImportStartField" class="field">
+            <span>Starts (local time)</span>
+            <input id="eventImportStart" type="datetime-local">
+          </label>
+          <label id="eventImportEndField" class="field">
+            <span>Ends (local time)</span>
+            <input id="eventImportEnd" type="datetime-local">
+          </label>
+        </div>
+        <div class="import-source-row">
+          <label class="field import-source-field">
+            <span>Items</span>
+            <textarea id="eventImportSource" rows="9" placeholder="Pikachu&#10;Raichu&#10;Pichu"></textarea>
+          </label>
+          <div class="import-source-help">
+            <button id="loadEventCsvButton" class="button secondary" type="button">Load CSV</button>
+            <input id="eventCsvFile" type="file" accept=".csv,.txt,text/csv,text/plain" hidden>
+            <p>Names-only lists use one item per line. CSV accepts <code>id,name</code> with an optional header and quoted values.</p>
+          </div>
+        </div>
+        <div class="import-preview-header">
+          <div>
+            <div class="subsection-title">Preview</div>
+            <p id="eventImportSummary">Enter items to build a preview.</p>
+          </div>
+          <span id="eventImportStatus" class="metric-chip">WAITING</span>
+        </div>
+        <div id="eventImportIssues" class="import-issues"></div>
+        <div class="import-table-wrap">
+          <div class="import-table import-table-header">
+            <span>#</span><span>Generated ID</span><span>Display name</span><span>Status</span>
+          </div>
+          <div id="eventImportPreview" class="import-preview"></div>
+        </div>
+      </div>
+      <div class="import-footer">
+        <span>Applying changes updates the editor only. Save Catalog still requires confirmation and creates backups.</span>
+        <div class="import-footer-actions">
+          <button id="cancelEventImportButton" class="button secondary" type="button">Cancel</button>
+          <button id="skipEventImportButton" class="button secondary" type="button" hidden>Skip Errors</button>
+          <button id="applyEventImportButton" class="button primary" type="button" disabled>Apply to Editor</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="collectionImportModal" class="import-overlay" role="dialog" aria-modal="true" aria-labelledby="collectionImportTitle" hidden>
+    <div class="import-shell">
+      <div class="import-header">
+        <div>
+          <div class="panel-kicker">CATALOG BUILDER</div>
+          <h1 id="collectionImportTitle">Import Collection Items</h1>
+          <p>Paste a list or load a CSV, inspect the generated IDs, then apply it to the editor.</p>
+        </div>
+        <button id="closeCollectionImportButton" class="button secondary small" type="button">Close</button>
+      </div>
+      <div class="import-body">
+        <div class="import-controls">
+          <label class="field">
+            <span>Destination</span>
+            <select id="collectionImportMode">
+              <option value="new">Create a new collection</option>
+              <option value="existing">Add to an existing collection</option>
+            </select>
+          </label>
+          <label id="collectionImportNameField" class="field">
+            <span>New collection name</span>
+            <input id="collectionImportName" type="text" value="Imported Collection" maxlength="80">
+          </label>
+          <label id="collectionImportTargetField" class="field" hidden>
+            <span>Existing collection</span>
+            <select id="collectionImportTarget"></select>
+          </label>
+          <label class="field">
+            <span>Input format</span>
+            <select id="collectionImportFormat">
+              <option value="auto">Auto detect</option>
+              <option value="names">Names only</option>
+              <option value="id-name">ID and name CSV</option>
+            </select>
+          </label>
+          <label id="collectionImportWeightField" class="field">
+            <span>Pull weight</span>
+            <input id="collectionImportWeight" type="number" min="0" step="0.1" value="10">
+          </label>
+          <label id="collectionImportValueField" class="field">
+            <span>Salvage value</span>
+            <input id="collectionImportValue" type="number" min="1" step="1" value="1">
+          </label>
+        </div>
+        <div class="import-source-row">
+          <label class="field import-source-field">
+            <span>Items</span>
+            <textarea id="collectionImportSource" rows="9" placeholder="Pikachu&#10;Raichu&#10;Pichu"></textarea>
+          </label>
+          <div class="import-source-help">
+            <button id="loadCollectionCsvButton" class="button secondary" type="button">Load CSV</button>
+            <input id="collectionCsvFile" type="file" accept=".csv,.txt,text/csv,text/plain" hidden>
+            <p>Names-only lists use one item per line. CSV accepts <code>id,name</code> with an optional header and quoted values.</p>
+          </div>
+        </div>
+        <div class="import-preview-header">
+          <div>
+            <div class="subsection-title">Preview</div>
+            <p id="collectionImportSummary">Enter items to build a preview.</p>
+          </div>
+          <span id="collectionImportStatus" class="metric-chip">WAITING</span>
+        </div>
+        <div id="collectionImportIssues" class="import-issues"></div>
+        <div class="import-table-wrap">
+          <div class="import-table import-table-header">
+            <span>#</span><span>Generated ID</span><span>Display name</span><span>Status</span>
+          </div>
+          <div id="collectionImportPreview" class="import-preview"></div>
+        </div>
+      </div>
+      <div class="import-footer">
+        <span>Applying changes updates the editor only. Save Catalog still requires confirmation and creates backups.</span>
+        <div class="import-footer-actions">
+          <button id="cancelCollectionImportButton" class="button secondary" type="button">Cancel</button>
+          <button id="skipCollectionImportButton" class="button secondary" type="button" hidden>Skip Errors</button>
+          <button id="applyCollectionImportButton" class="button primary" type="button" disabled>Apply to Editor</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <img class="brand-icon" src="circuitos-icon.png" alt="">
+        <div class="brand-title">CircuitOS</div>
+      </div>
+
+      <div class="profile-switcher-wrap">
+        <button id="profileSwitcherTrigger" class="active-profile" type="button" aria-haspopup="listbox" aria-expanded="false">
+          <span>ACTIVE PROFILE</span>
+          <strong id="activeProfileGame">Circuit Components</strong>
+          <small id="activeProfileAdmin">CircuitOS Control Core</small>
+        </button>
+        <div id="profileSwitcherDropdown" class="profile-switcher-dropdown" hidden role="listbox">
+          <div id="profileSwitcherList" class="profile-switcher-list"></div>
+          <button id="profileSwitcherManage" class="profile-switcher-manage" type="button">
+            <i class="ti ti-settings" aria-hidden="true"></i> Manage profiles
+          </button>
+        </div>
+      </div>
+
+      <nav class="nav" aria-label="Admin sections">
+        <button class="nav-button active" data-view="overview">Overview</button>
+        <details class="nav-group" id="settingsNav">
+          <summary>Configure</summary>
+          <div class="nav-group-items">
+            <button class="nav-button" data-view="branding">Game Profile</button>
+            <button class="nav-button" data-view="overlay">Overlay Editor</button>
+            <button class="nav-button" data-view="messages">Messages</button>
+          </div>
+        </details>
+        <details class="nav-group" id="collectionsNav">
+          <summary>Catalog</summary>
+          <div class="nav-group-items">
+            <button class="nav-button" data-view="collections">Collections</button>
+            <button class="nav-button" data-view="events">Events</button>
+            <button class="nav-button" data-view="boost">Featured Boost</button>
+          </div>
+        </details>
+        <details class="nav-group" id="viewersNav">
+          <summary>Community</summary>
+          <div class="nav-group-items">
+            <button class="nav-button" data-view="viewers">Inventory</button>
+            <button class="nav-button" data-view="roles">Discord Roles <span id="roleNavBadge" class="nav-badge" hidden></span></button>
+            <button class="nav-button" data-view="economy">Economy</button>
+            <button class="nav-button" data-view="patchnotes">Patch Notes</button>
+          </div>
+        </details>
+        <button class="nav-button" data-view="setup">Streamer.bot</button>
+        <details class="nav-group" id="toolsNav">
+          <summary>Tools</summary>
+          <div class="nav-group-items">
+            <button class="nav-button" data-view="ratelab">Rate Lab</button>
+            <button class="nav-button" data-view="backups">Backups</button>
+          </div>
+        </details>
+      </nav>
+
+      <div class="sidebar-footer">
+        <span class="connection-dot"></span>
+        <div>
+          <small id="runtimeVersion">Version...</small>
+          <button type="button" id="sessionMode" class="session-mode">Connecting...</button>
+        </div>
+        <div id="sessionPanel" class="session-panel" hidden></div>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">CIRCUITOS PLATFORM</div>
+          <h1 id="viewTitle">System Overview</h1>
+        </div>
+        <div class="top-actions">
+          <input id="importFile" type="file" accept="application/json" hidden>
+          <button id="importButton" class="button secondary">Import Catalog</button>
+          <button id="exportButton" class="button secondary">Export Catalog</button>
+          <button id="reloadButton" class="button secondary" title="Reload configuration, profile, inventory analytics, roles, and backups from disk">Refresh Live Data</button>
+          <button id="saveButton" class="button primary">Save Catalog</button>
+        </div>
+      </header>
+
+      <div id="notice" class="notice" hidden></div>
+
+      <section id="brandingView" class="view">
+        <div class="branding-layout">
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">SYSTEM PROFILE</div>
+                <h2>Game Profile</h2>
+              </div>
+              <span id="profileStatus" class="metric-chip"></span>
+            </div>
+            <p class="profile-help">These labels change the administration experience and generated Streamer.bot code without changing stable data keys.</p>
+            <div class="profile-fields">
+              <label class="field"><span>Game name</span><input id="profileGameName" type="text" maxlength="80"></label>
+              <label class="field"><span>Admin name</span><input id="profileAdminName" type="text" maxlength="80"></label>
+              <label class="field"><span>Eyebrow label</span><input id="profileBrandKicker" type="text" maxlength="80" title="Short uppercase phrase shown above panel titles, e.g. CIRCUITOS"></label>
+              <label class="field"><span>Redemption name</span><input id="profileRedemptionName" type="text" maxlength="80"></label>
+              <label class="field"><span>Item singular</span><input id="profileItemSingular" type="text" maxlength="80"></label>
+              <label class="field"><span>Item plural</span><input id="profileItemPlural" type="text" maxlength="80"></label>
+              <label class="field"><span>Collection singular</span><input id="profileCollectionSingular" type="text" maxlength="80"></label>
+              <label class="field"><span>Collection plural</span><input id="profileCollectionPlural" type="text" maxlength="80"></label>
+              <label class="field"><span>Currency name</span><input id="profileCurrencyName" type="text" maxlength="80"></label>
+              <label class="field"><span>Redeem cooldown (sec)</span><input id="profileCooldown" type="number" min="0" max="3600" step="1" title="Seconds between pulls per viewer. 0 = no cooldown. Applies when you regenerate Streamer.bot actions."></label>
+              <label class="field"><span>Dupe protection (pulls)</span><input id="profileDupProtection" type="number" min="0" max="20" step="1" title="After a duplicate pull, the next N pulls for that viewer are guaranteed to land on items they don't own yet. 0 = disabled. Applies when you regenerate Streamer.bot actions."></label>
+            </div>
+            <div class="subsection-title">Chat commands</div>
+            <div id="profileCommands" class="command-grid"></div>
+            <div class="subsection-title">Theme colors</div>
+            <div id="profileColors" class="color-grid"></div>
+            <div class="profile-actions">
+              <button id="resetProfileButton" class="button secondary">Circuit Defaults</button>
+              <button id="saveProfileButton" class="button primary">Save System Profile</button>
+            </div>
+          </article>
+
+          <article class="panel profile-preview-panel">
+            <div class="panel-kicker">LIVE PREVIEW</div>
+            <div class="profile-preview-brand">
+              <img class="brand-icon profile-preview-icon" src="circuitos-icon.png" alt="">
+              <div>
+                <small id="previewBrandKicker"></small>
+                <h2 id="previewAdminName"></h2>
+              </div>
+            </div>
+            <div class="profile-preview-card">
+              <span id="previewGameName"></span>
+              <strong id="previewRedemptionName"></strong>
+              <p id="previewTerminology"></p>
+            </div>
+            <div class="profile-preview-message" id="previewMessage"></div>
+            <p class="profile-path">Profile location:<br><code id="profilePath"></code></p>
+          </article>
+        </div>
+      </section>
+
+      <section id="messagesView" class="view">
+        <div class="messages-toolbar">
+          <div>
+            <div class="panel-kicker">CHAT OUTPUT</div>
+            <h2>Message Templates</h2>
+            <p>Use only the placeholders shown for each message. Changes are applied to newly generated Streamer.bot actions.</p>
+          </div>
+          <span id="messageStatus" class="metric-chip"></span>
+          <button id="resetAllMessagesButton" class="button secondary">Reset All Messages</button>
+          <button id="saveMessagesButton" class="button primary">Save Messages</button>
+        </div>
+        <details class="message-guide">
+          <summary>How message templates work</summary>
+          <div class="message-guide-body">
+            <p>Write the sentence exactly as viewers should see it. Placeholder chips insert live values such as the viewer name, item, progress, or balance.</p>
+            <p>Click a chip to insert it at the cursor. Hover or focus a chip to see what it means. Keep the braces intact, and regenerate the Streamer.bot actions after saving.</p>
+          </div>
+        </details>
+        <div id="messageList" class="message-list"></div>
+      </section>
+
+      <section id="setupView" class="view">
+        <div class="setup-toolbar">
+          <div>
+            <div class="panel-kicker">INSTALLATION WORKFLOW</div>
+            <h2>Streamer.bot Setup</h2>
+            <p>Generated code is configured for this profile and data folder.</p>
+          </div>
+          <span id="setupVersion" class="metric-chip"></span>
+          <button id="regenerateSetupButton" class="button primary">Regenerate C#</button>
+        </div>
+        <div id="setupSummary" class="setup-summary"></div>
+        <div id="setupActions" class="setup-actions"></div>
+        <article class="panel setup-checklist-panel">
+          <div class="panel-kicker">FINAL CHECK</div>
+          <h2>Installation Checklist</h2>
+          <div id="setupChecklist" class="setup-checklist"></div>
+        </article>
+      </section>
+
+      <section id="overviewView" class="view active">
+        <div id="stats" class="stats-grid overview-stats"></div>
+        <div class="overview-grid">
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">PULL ODDS</div>
+                <h2 id="rateChartTitle">Pull Rates</h2>
+              </div>
+              <div class="rate-panel-actions">
+                <button class="button small" data-jump-view="ratelab">Tune in Rate Lab</button>
+                <span id="rateStateChip" class="metric-chip">BASE RATES</span>
+              </div>
+            </div>
+            <div id="rateChart" class="rate-chart"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">SYSTEM CHECK</div>
+                <h2>Configuration Health</h2>
+              </div>
+              <button id="downloadDiagnosticsButton" class="button small">Download Diagnostics</button>
+            </div>
+            <div id="healthList" class="health-list"></div>
+          </article>
+        </div>
+
+        <div class="dashboard-grid">
+          <article class="panel dashboard-wide">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">SCHEDULE</div>
+                <h2>Event Timeline</h2>
+              </div>
+              <button class="button small" data-jump-view="events">Manage Events</button>
+            </div>
+            <div id="overviewEvents" class="timeline-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">ECONOMY PULSE</div>
+                <h2 id="overviewEconomyTitle">Scrap &amp; Duplicates</h2>
+              </div>
+              <button class="button small" data-jump-view="economy">Open Economy</button>
+            </div>
+            <div id="overviewEconomy" class="pulse-grid"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">VIEWER ACTIVITY</div>
+                <h2>Top Collectors</h2>
+              </div>
+              <button class="button small" data-jump-view="viewers">Inspect Viewers</button>
+            </div>
+            <div id="overviewLeaders" class="leader-list compact-list"></div>
+          </article>
+
+          <article class="panel dashboard-wide">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">CATALOG REACH</div>
+                <h2 id="collectionHealthTitle">Collection Health</h2>
+              </div>
+              <button id="editCollectionsButton" class="button small" data-jump-view="collections">Edit Collections</button>
+            </div>
+            <div id="overviewCollections" class="health-table"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">ATTENTION</div>
+                <h2>Action Center</h2>
+              </div>
+            </div>
+            <div id="actionCenter" class="action-list"></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="economyView" class="view">
+        <div id="economyStats" class="stats-grid"></div>
+        <div class="overview-grid">
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">DUPLICATE PRESSURE</div>
+                <h2 id="collectionEconomyTitle">Unclaimed Scrap by Collection</h2>
+              </div>
+            </div>
+            <div id="collectionEconomy" class="economy-table"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">CIRCULATION</div>
+                <h2 id="currencyLeaderTitle">Top Scrap Balances</h2>
+              </div>
+            </div>
+            <div id="scrapLeaders" class="leader-list"></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="viewersView" class="view">
+        <div class="viewer-toolbar">
+          <div>
+            <div class="panel-kicker">READ-ONLY INVENTORY</div>
+            <h2>Viewer Inspector</h2>
+          </div>
+          <input id="viewerSearch" type="search" placeholder="Search display name or Twitch ID">
+        </div>
+        <div class="viewer-layout">
+          <div id="viewerList" class="viewer-list"></div>
+          <article id="viewerDetail" class="panel viewer-detail"></article>
+        </div>
+      </section>
+
+      <section id="rolesView" class="view">
+        <div id="roleStats" class="stats-grid"></div>
+        <div class="role-layout">
+          <article class="panel role-queue-panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">ACTION REQUIRED</div>
+                <h2>Pending Role Awards</h2>
+              </div>
+              <span id="pendingRoleCount" class="metric-chip"></span>
+            </div>
+            <div id="pendingRoleAwards" class="role-award-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">ROLE MAPPING</div>
+                <h2>Discord Role Names</h2>
+              </div>
+            </div>
+            <p class="role-help">Enter the exact role name used in your Discord server.</p>
+            <div id="roleNameSettings" class="role-name-list"></div>
+            <button id="saveRoleNamesButton" class="button primary role-save">Save Role Names</button>
+          </article>
+
+          <article class="panel role-history-panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">COMPLETED TASKS</div>
+                <h2>Assignment History</h2>
+              </div>
+            </div>
+            <div id="assignedRoleAwards" class="role-award-list"></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="ratelabView" class="view">
+        <div class="ratelab-toolbar">
+          <div>
+            <div class="panel-kicker">PULL ODDS</div>
+            <h2>Rate Lab</h2>
+            <p>Tune collection weights and verify distribution. Weight changes use the main Save Catalog flow.</p>
+          </div>
+          <div class="ratelab-toolbar-controls">
+            <label class="simulation-count">
+              <span>SIMULATED REDEEMS</span>
+              <input id="ratelabSimCount" type="number" min="100" max="100000" step="100" value="10000">
+            </label>
+            <button id="runRatelabSimButton" class="button primary">Run Check</button>
+          </div>
+          <span id="ratelabBoostChip" class="metric-chip">BASE RATES</span>
+        </div>
+
+        <div id="ratelabStats" class="stats-grid"></div>
+
+        <div class="ratelab-layout">
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">WEIGHT EDITOR</div>
+                <h2>Collection Weights</h2>
+              </div>
+              <button class="help-tip" type="button" data-tip="Each collection's weight is a relative number — higher weight means a higher pull chance. The % shown is that collection's share of all active weight. Changes are saved with Save Catalog.">?</button>
+            </div>
+            <div id="ratelabWeightEditor" class="weight-editor"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">DISTRIBUTION CHECK</div>
+                <h2>Expected vs. Simulated</h2>
+              </div>
+              <span id="ratelabSimStatus" class="metric-chip">READY</span>
+            </div>
+            <div id="ratelabSimResults" class="simulation-table"></div>
+          </article>
+        </div>
+
+        <article class="panel ratelab-tiers-panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-kicker">ITEM RARITY</div>
+              <h2>Rarity Tiers</h2>
+            </div>
+            <button class="help-tip" type="button" data-tip="Rarity tiers give items within a collection different pull weights. When tiers are defined, the pull rolls a tier first (weighted), then picks a random item from that tier. Collections without tiers pull all items at equal odds.">?</button>
+          </div>
+          <div id="ratelabTiersContent"></div>
+        </article>
+      </section>
+
+      <section id="patchnotesView" class="view">
+        <div class="patch-layout">
+          <article class="panel patch-editor">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">DISCORD DRAFT</div>
+                <h2>Patch Note Builder</h2>
+              </div>
+              <span id="patchChangeCount" class="metric-chip">0 CHANGES</span>
+            </div>
+            <label class="field wide patch-field">
+              <span>Post title</span>
+              <input id="patchTitle" type="text" maxlength="120" value="Circuit Components Update">
+            </label>
+            <label class="field wide patch-field">
+              <span>Opening message (optional)</span>
+              <textarea id="patchIntro" rows="3" placeholder="A quick update to the Circuit Components system..."></textarea>
+            </label>
+            <label class="field wide patch-field">
+              <span>Extra notes (one item per line)</span>
+              <textarea id="patchExtra" rows="5" placeholder="Added a new viewer perk&#10;Adjusted event artwork"></textarea>
+            </label>
+            <div class="patch-actions">
+              <button id="markPublishedButton" class="button secondary">Mark Published</button>
+              <small>Resets the comparison point to the current editor values.</small>
+            </div>
+          </article>
+
+          <article class="panel patch-preview-panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">READY TO POST</div>
+                <h2>Discord Preview</h2>
+              </div>
+              <span id="patchCharacterCount" class="metric-chip">0 / 2000</span>
+            </div>
+            <textarea id="patchOutput" class="patch-output" readonly aria-label="Generated Discord patch notes"></textarea>
+            <button id="copyPatchButton" class="button primary patch-copy">Copy for Discord</button>
+          </article>
+        </div>
+      </section>
+
+      <section id="backupsView" class="view">
+        <div class="backup-toolbar">
+          <div>
+            <div class="panel-kicker">RECOVERY CONTROL</div>
+            <h2>Backup &amp; Recovery Center</h2>
+            <p>Configuration backups only. Viewer inventory is never available for restore here.</p>
+          </div>
+          <label class="backup-filter">
+            <span>SHOW</span>
+            <select id="backupFilter">
+              <option value="all">All managed files</option>
+              <option value="components">Components Catalog</option>
+              <option value="boost">Featured Boost</option>
+              <option value="roles">Discord Role Awards</option>
+              <option value="profile">System Profile</option>
+            </select>
+          </label>
+          <button id="refreshBackupsButton" class="button secondary">Refresh History</button>
+        </div>
+
+        <div id="backupStats" class="stats-grid"></div>
+        <div class="backup-layout">
+          <article class="panel backup-list-panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">TIMESTAMPED FILES</div>
+                <h2>Backup History</h2>
+              </div>
+            </div>
+            <div id="backupList" class="backup-list"></div>
+          </article>
+
+          <article class="panel backup-preview-panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">INSPECT BEFORE RESTORE</div>
+                <h2 id="backupPreviewTitle">Select a Backup</h2>
+              </div>
+              <span id="backupValidationBadge" class="metric-chip">NO FILE</span>
+            </div>
+            <div id="backupPreviewMeta" class="backup-meta"></div>
+            <div id="backupDifference" class="backup-difference"></div>
+            <div id="backupValidation" class="health-list"></div>
+            <pre id="backupJson" class="backup-json">Choose a backup from the history to inspect its contents.</pre>
+            <div class="backup-actions">
+              <button id="downloadBackupButton" class="button secondary" disabled>Download Backup</button>
+              <button id="restoreBackupButton" class="button danger" disabled>Restore This Backup</button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="collectionsView" class="view">
+        <div class="section-toolbar">
+          <p id="collectionsHelp">Edit permanent collection rates, salvage value, labels, and parts.</p>
+          <div class="toolbar-actions">
+            <button id="importCollectionButton" class="button primary">Import Items</button>
+            <button id="addCollectionButton" class="button secondary">Add Collection</button>
+          </div>
+        </div>
+        <div class="collection-browser-toolbar">
+          <label class="collection-search">
+            <span>Search collections or items</span>
+            <input id="collectionSearch" type="search" placeholder="Search by collection, key, item, or ID">
+          </label>
+          <span id="collectionListSummary" class="collection-list-summary"></span>
+          <button id="expandCollectionsButton" class="button secondary small" type="button">Expand All</button>
+          <button id="collapseCollectionsButton" class="button secondary small" type="button">Collapse All</button>
+        </div>
+        <div id="permanentCollections" class="card-list"></div>
+      </section>
+
+      <section id="eventsView" class="view">
+        <div class="section-toolbar">
+          <p id="eventsHelp">Events only affect pulls while enabled and inside their UTC window.</p>
+          <div class="toolbar-actions">
+            <button id="importEventButton" class="button primary">Import Items</button>
+            <button id="addEventButton" class="button secondary">Add Event</button>
+          </div>
+        </div>
+        <div id="eventCollections" class="card-list"></div>
+      </section>
+
+      <section id="boostView" class="view">
+        <article class="panel boost-panel">
+          <div class="boost-master-row">
+            <div>
+              <div class="panel-kicker">FEATURED STREAM</div>
+              <h2>Boost Controls</h2>
+              <p>Multipliers change relative collection weight while enabled.</p>
+            </div>
+            <label class="toggle">
+              <input id="boostEnabled" type="checkbox">
+              <span></span>
+              Enabled
+            </label>
+          </div>
+
+          <label class="field wide">
+            <span>Display name</span>
+            <input id="boostName" type="text" maxlength="80">
+          </label>
+
+          <div class="subsection-title">Collection multipliers</div>
+          <div id="boostMultipliers" class="multiplier-grid"></div>
+        </article>
+      </section>
+
+      <section id="overlayView" class="view">
+        <div class="section-toolbar">
+          <p>Configure the OBS lower-third overlay — colors, position, timing, and content toggles.</p>
+          <div class="toolbar-actions">
+            <button id="refreshOverlayPreviewButton" class="button secondary" type="button">Refresh Preview</button>
+            <button id="saveOverlayButton" class="button primary" type="button" disabled>Save Overlay Config</button>
+          </div>
+        </div>
+
+        <div class="overlay-editor-layout">
+          <div class="panel overlay-preview-panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">PREVIEW</div>
+                <h2>Lower-Third Preview</h2>
+              </div>
+              <div class="overlay-preview-states">
+                <button class="button secondary small active" data-preview-state="normal" type="button">Normal</button>
+                <button class="button secondary small" data-preview-state="rare" type="button">Rare</button>
+                <button class="button secondary small" data-preview-state="complete" type="button">Complete</button>
+                <button class="button secondary small" data-preview-state="duplicate" type="button">Duplicate</button>
+              </div>
+            </div>
+            <div class="overlay-preview-wrap">
+              <iframe id="overlayPreviewFrame" src="/overlay/index.html?preview=1" title="Overlay preview" scrolling="no"></iframe>
+            </div>
+          </div>
+
+          <div class="overlay-editor-panels">
+            <article class="panel obs-source-panel">
+              <div class="panel-kicker">OBS SETUP</div>
+              <h2>Browser Source</h2>
+              <p class="panel-note">In OBS, add a <strong>Browser Source</strong>. Enable <strong>Local file</strong> and navigate to this path:</p>
+              <div class="obs-path-row">
+                <span id="obsFilePath" class="obs-path-code">(loading&hellip;)</span>
+                <button id="copyObsPathButton" class="button secondary small" type="button">Copy</button>
+              </div>
+              <p class="panel-note">Set width to <strong>1920</strong> and height to <strong>300</strong>. Perform a test redemption to confirm it updates.</p>
+            </article>
+
+            <article class="panel">
+              <div class="panel-kicker">LAYOUT</div>
+              <h2>Position &amp; Size</h2>
+              <div class="overlay-field-grid" id="overlayLayoutFields"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-kicker">COLORS</div>
+              <h2>Appearance</h2>
+              <div class="overlay-field-grid" id="overlayAppearanceFields"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-kicker">TIMING</div>
+              <h2>Display &amp; Animation</h2>
+              <div class="overlay-field-grid" id="overlayTimingFields"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-kicker">CONTENT</div>
+              <h2>Display Options</h2>
+              <div id="overlayContentFields"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-kicker">TEXT</div>
+              <h2>Labels</h2>
+              <p class="panel-note">Customize the static text shown on the overlay. Badge text (status, duplicate, complete) auto-uppercases.</p>
+              <div class="overlay-field-grid" id="overlayLabelFields"></div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="profilesView" class="view">
+        <div class="section-toolbar">
+          <p style="margin:0;color:var(--muted)">Manage game profiles. Each profile has its own catalog, inventory, and configuration.</p>
+          <div class="toolbar-actions">
+            <input id="moduleImportFile" type="file" accept=".circuitmodule,application/json" hidden>
+            <button id="importModuleButton" class="button secondary" type="button">Import Module</button>
+            <button id="exportModuleButton" class="button secondary" type="button">Export Active Profile</button>
+            <button id="createProfileButton" class="button primary" type="button">New Profile</button>
+          </div>
+        </div>
+        <div id="profileGrid" class="profile-grid"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="profileSwitchModal" class="confirm-overlay" role="dialog" aria-modal="true" aria-labelledby="profileSwitchTitle" hidden>
+    <div class="confirm-shell">
+      <div class="panel-kicker">PROFILES</div>
+      <h2 id="profileSwitchTitle">Switch Profile?</h2>
+      <p id="profileSwitchMessage"></p>
+      <div class="confirm-actions">
+        <button id="cancelProfileSwitchButton" class="button secondary" type="button">Cancel</button>
+        <button id="confirmProfileSwitchButton" class="button primary" type="button">Switch Profile</button>
+      </div>
+    </div>
+  </div>
+
+  <template id="statTemplate">
+    <article class="stat-card">
+      <div class="stat-label"></div>
+      <div class="stat-value"></div>
+      <div class="stat-detail"></div>
+    </article>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>

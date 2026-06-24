@@ -1,0 +1,21 @@
+CIRCUITOS OBS LOWER-QUARTER SETUP
+=================================
+
+The optional lower-quarter shows the latest successful redemption for about
+20 seconds.
+
+1. Complete the Streamer.bot Setup inside CircuitOS first.
+2. Open CircuitOS and go to the Overlay Editor section.
+3. Find the "OBS SETUP" panel — it shows the exact file path for this install.
+4. In OBS, add a Browser source.
+5. Enable Local file.
+6. Click Browse and navigate to the path shown in the Overlay Editor.
+7. Set the source width to 1920 and height to 300.
+8. Position it along the bottom of the scene.
+9. Perform a test redemption.
+
+The overlay file is inside the Data\profiles\<profile>\overlay\ folder.
+The Overlay Editor panel shows the exact path — use that, not this file.
+
+If the overlay does not update, regenerate and reinstall the Redemption action,
+then check Streamer.bot logs for an overlay warning.

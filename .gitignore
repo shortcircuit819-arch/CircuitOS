@@ -1,0 +1,19 @@
+# Build outputs (all .NET projects)
+**/bin/
+**/obj/
+tools/runtime/publish/
+
+# Packaged EXE (binary artifact — rebuild with dotnet publish before packaging)
+tools/admin/runtime/CircuitOS.exe
+
+# Release packages (built by Build-CircuitOSPackage.ps1)
+dist/
+
+# Local secrets — Appwrite connection (NEVER commit the real one)
+appwrite.local.json
+.env
+.env.local
+
+# Local secrets — Twitch OAuth app credentials + cached tokens (NEVER commit)
+twitch.local.json
+twitch-tokens.local.json

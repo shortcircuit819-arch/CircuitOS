@@ -1,0 +1,8 @@
+{
+  "_comment": "TEMPLATE — copy this to 'appwrite.local.json' (which is gitignored), fill in your values, and place it in your CircuitOS Data folder root. Never commit the real file or paste the apiKey into chat.",
+  "endpoint": "https://cloud.appwrite.io/v1",
+  "projectId": "REPLACE_WITH_PROJECT_ID",
+  "apiKey": "REPLACE_WITH_API_KEY_SECRET",
+  "databaseId": "circuitos",
+  "collectionId": "profile_data"
+}

@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "updatedAtUtc": "2026-06-20T18:30:00.000Z",
+  "visibleUntilUtc": "2026-06-20T18:30:20.000Z",
+  "viewerName": "CircuitViewer",
+  "partName": "Quantum Resistor",
+  "collectionKey": "quantum",
+  "collectionName": "Quantum Collection",
+  "ownedCount": 4,
+  "totalCount": 6,
+  "quantity": 2,
+  "isDuplicate": true,
+  "newlyCompleted": false,
+  "rareLabel": "QUANTUM PULL",
+  "featuredBoost": "Quantum Boost"
+}

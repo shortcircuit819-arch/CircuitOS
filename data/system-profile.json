@@ -1,0 +1,30 @@
+{
+    "schemaVersion":  1,
+    "gameName":  "Circuit Components",
+    "adminName":  "CircuitOS Control Core",
+    "brandKicker":  "CIRCUITOS",
+    "itemSingular":  "component",
+    "itemPlural":  "components",
+    "collectionSingular":  "collection",
+    "collectionPlural":  "collections",
+    "currencyName":  "Scrap",
+    "redemptionName":  "Circuit Component",
+    "commands":  {
+                     "inventory":  "components",
+                     "missing":  "missing",
+                     "duplicates":  "dupes",
+                     "leaderboard":  "leaderboard",
+                     "balance":  "scrap",
+                     "collection":  "collection",
+                     "salvage":  "salvage"
+                 },
+    "colors":  {
+                   "background":  "#000d19",
+                   "panel":  "#061a2b",
+                   "panelAlt":  "#092239",
+                   "line":  "#193a55",
+                   "accent":  "#ff1a24",
+                   "text":  "#eef5fb",
+                   "muted":  "#8295a8"
+               }
+}

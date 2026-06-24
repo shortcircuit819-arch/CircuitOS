@@ -1,0 +1,17 @@
+{
+  "event_example": {
+    "displayName": "Example Event Collection",
+    "type": "event",
+    "enabled": false,
+    "activeFromUtc": "2099-01-01T00:00:00Z",
+    "activeUntilUtc": "2099-01-08T00:00:00Z",
+    "weight": 10,
+    "salvageValue": 3,
+    "rareLabel": "EVENT PULL",
+    "parts": [
+      { "id": "event_example_part_one", "name": "Example Part One" },
+      { "id": "event_example_part_two", "name": "Example Part Two" },
+      { "id": "event_example_part_three", "name": "Example Part Three" }
+    ]
+  }
+}

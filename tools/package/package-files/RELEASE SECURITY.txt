@@ -1,0 +1,17 @@
+CIRCUITOS RELEASE SECURITY
+==========================
+
+CircuitOS should be distributed as the original ZIP from the publisher. The
+release ZIP includes checksums.sha256 for its packaged files. The publisher
+should also provide the ZIP's SHA-256 checksum with release notes.
+
+A valid Authenticode signature identifies the publisher and protects the EXE
+against modification after signing. Windows users can check it by opening
+CircuitOS.exe Properties, selecting Digital Signatures, and verifying that the
+signature is valid.
+
+An unsigned development build may produce Microsoft SmartScreen or antivirus
+reputation warnings even when the code is unchanged. Do not tell recipients to
+disable antivirus protection or add broad exclusions. The publisher should sign
+public releases with a trusted code-signing certificate and submit suspected
+false positives to the security vendor for review.

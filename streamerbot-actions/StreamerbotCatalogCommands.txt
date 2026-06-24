@@ -1,0 +1,795 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+
+public class CPHInline
+{
+    private const string NoInventoryTemplate = "@{viewer} you don't have any {itemPlural} yet. Redeem {redemption} to start your {collectionSingular}.";
+    private const string BalanceTemplate = "@{viewer} {currency} balance: {balance}.";
+    private const string NoDuplicatesTemplate = "@{viewer} you don't have any duplicate {itemPlural} yet.";
+
+    private class CollectionDefinition
+    {
+        public string Key = "";
+        public string DisplayName = "";
+        public bool IsEvent;
+        public bool IsActive;
+        public List<string> PartIds = new List<string>();
+        public List<string> PartNames = new List<string>();
+    }
+
+    private class LeaderboardEntry
+    {
+        public string ViewerId = "";
+        public string DisplayName = "";
+        public int UniqueCount;
+        public int CompletedCount;
+    }
+
+    public bool Execute()
+    {
+        string folderPath = @"C:\CircuitOS\Data";
+        string componentsPath = Path.Combine(folderPath, "components.json");
+        string inventoryPath = Path.Combine(folderPath, "inventory.json");
+        string viewerId = GetArgOrDefault("userId", "");
+        string viewerName = GetViewerName();
+        string commandName = GetCommandName();
+
+        if (commandName != "components" &&
+            commandName != "missing" &&
+            commandName != "dupes" &&
+            commandName != "leaderboard" &&
+            commandName != "scrap")
+        {
+            CPH.SendMessage("Circuit command error: unknown command trigger.", true, true);
+            CPH.LogError("[Catalog Commands] Unsupported command argument: " + commandName);
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(viewerId))
+        {
+            CPH.SendMessage(
+                "@" + viewerName + " I couldn't find your Twitch user ID yet. Try redeeming a Circuit Component first.",
+                true,
+                true
+            );
+            return false;
+        }
+
+        if (!File.Exists(componentsPath) || !File.Exists(inventoryPath))
+        {
+            CPH.SendMessage("Circuit command error: a data file was not found.", true, true);
+            CPH.LogError("[Catalog Commands] Missing components.json or inventory.json.");
+            return false;
+        }
+
+        string catalogText;
+        string inventoryText;
+
+        try
+        {
+            catalogText = File.ReadAllText(componentsPath);
+            inventoryText = File.ReadAllText(inventoryPath);
+        }
+        catch (Exception ex)
+        {
+            CPH.SendMessage("Circuit command error: data files could not be read.", true, true);
+            CPH.LogError("[Catalog Commands] Read error: " + ex.Message);
+            return false;
+        }
+
+        List<CollectionDefinition> collections;
+
+        try
+        {
+            collections = LoadCollections(catalogText);
+        }
+        catch (Exception ex)
+        {
+            CPH.SendMessage("Circuit command error: components.json is invalid.", true, true);
+            CPH.LogError("[Catalog Commands] Catalog error: " + ex.Message);
+            return false;
+        }
+
+        if (commandName == "leaderboard")
+        {
+            SendLeaderboard(
+                viewerId,
+                viewerName,
+                GetCommandInput(),
+                inventoryText,
+                collections
+            );
+            CPH.LogInfo("[Catalog Commands] " + viewerName + " ran !leaderboard.");
+            return true;
+        }
+
+        string viewerBlock = ExtractObjectForKey(inventoryText, viewerId);
+
+        if (string.IsNullOrWhiteSpace(viewerBlock))
+        {
+            CPH.SendMessage(
+                FormatMessage(NoInventoryTemplate,
+                    "viewer", viewerName,
+                    "itemPlural", "components",
+                    "redemption", "Circuit Component",
+                    "collectionSingular", "collection"),
+                true,
+                true
+            );
+            return true;
+        }
+
+        if (commandName == "scrap")
+        {
+            string walletBlock = ExtractObjectForKey(viewerBlock, "wallet");
+            int scrapBalance = GetQuantity(walletBlock, "scrap");
+            CPH.SendMessage(
+                FormatMessage(BalanceTemplate,
+                    "viewer", viewerName,
+                    "currency", "Scrap",
+                    "balance", scrapBalance.ToString()),
+                true,
+                true
+            );
+            CPH.LogInfo("[Catalog Commands] " + viewerName + " ran !scrap.");
+            return true;
+        }
+
+        string componentsBlock = ExtractObjectForKey(viewerBlock, "components");
+        string completionsBlock = ExtractObjectForKey(viewerBlock, "completedCollections");
+
+        if (string.IsNullOrWhiteSpace(componentsBlock))
+        {
+            componentsBlock = "{}";
+        }
+
+        if (commandName == "components")
+        {
+            SendComponents(viewerName, componentsBlock, completionsBlock, collections);
+        }
+        else if (commandName == "missing")
+        {
+            SendMissing(viewerName, componentsBlock, collections);
+        }
+        else
+        {
+            SendDuplicates(viewerName, componentsBlock, collections);
+        }
+
+        CPH.LogInfo("[Catalog Commands] " + viewerName + " ran !" + commandName + ".");
+        return true;
+    }
+
+    private void SendLeaderboard(
+        string requestingViewerId,
+        string requestingViewerName,
+        string requestedCollection,
+        string inventoryText,
+        List<CollectionDefinition> collections)
+    {
+        CollectionDefinition selectedCollection = null;
+        List<CollectionDefinition> rankedCollections = new List<CollectionDefinition>();
+
+        if (!string.IsNullOrWhiteSpace(requestedCollection))
+        {
+            string normalizedRequest = NormalizeCollectionName(requestedCollection);
+
+            foreach (CollectionDefinition collection in collections)
+            {
+                if (NormalizeCollectionName(collection.Key) == normalizedRequest ||
+                    NormalizeCollectionName(collection.DisplayName) == normalizedRequest)
+                {
+                    selectedCollection = collection;
+                    rankedCollections.Add(collection);
+                    break;
+                }
+            }
+
+            if (selectedCollection == null)
+            {
+                CPH.SendMessage(
+                    "@" + requestingViewerName + " unknown collection for leaderboard.",
+                    true,
+                    true
+                );
+                return;
+            }
+        }
+        else
+        {
+            foreach (CollectionDefinition collection in collections)
+            {
+                if (!collection.IsEvent)
+                {
+                    rankedCollections.Add(collection);
+                }
+            }
+        }
+
+        int maximumUnique = 0;
+        foreach (CollectionDefinition collection in rankedCollections)
+        {
+            maximumUnique += collection.PartIds.Count;
+        }
+
+        List<LeaderboardEntry> entries = new List<LeaderboardEntry>();
+
+        foreach (string viewerId in GetTopLevelObjectKeys(inventoryText))
+        {
+            string viewerBlock = ExtractObjectForKey(inventoryText, viewerId);
+            string componentsBlock = ExtractObjectForKey(viewerBlock, "components");
+
+            if (string.IsNullOrWhiteSpace(componentsBlock))
+            {
+                continue;
+            }
+
+            LeaderboardEntry entry = new LeaderboardEntry();
+            entry.ViewerId = viewerId;
+            entry.DisplayName = GetStringValue(viewerBlock, "displayName");
+
+            if (string.IsNullOrWhiteSpace(entry.DisplayName))
+            {
+                entry.DisplayName = viewerId;
+            }
+
+            foreach (CollectionDefinition collection in rankedCollections)
+            {
+                int owned = CountOwned(componentsBlock, collection.PartIds);
+                entry.UniqueCount += owned;
+
+                if (owned == collection.PartIds.Count)
+                {
+                    entry.CompletedCount++;
+                }
+            }
+
+            if (entry.UniqueCount > 0)
+            {
+                entries.Add(entry);
+            }
+        }
+
+        entries.Sort(delegate(LeaderboardEntry left, LeaderboardEntry right)
+        {
+            int uniqueComparison = right.UniqueCount.CompareTo(left.UniqueCount);
+            if (uniqueComparison != 0) return uniqueComparison;
+
+            int completionComparison = right.CompletedCount.CompareTo(left.CompletedCount);
+            if (completionComparison != 0) return completionComparison;
+
+            return StringComparer.OrdinalIgnoreCase.Compare(left.DisplayName, right.DisplayName);
+        });
+
+        if (entries.Count == 0)
+        {
+            CPH.SendMessage("No viewers have progress for that leaderboard yet.", true, true);
+            return;
+        }
+
+        List<string> leaders = new List<string>();
+        int displayedCount = Math.Min(5, entries.Count);
+
+        for (int i = 0; i < displayedCount; i++)
+        {
+            LeaderboardEntry entry = entries[i];
+            string result = "#" + (i + 1) + " " + entry.DisplayName + " " +
+                entry.UniqueCount + "/" + maximumUnique;
+
+            if (selectedCollection == null && entry.CompletedCount > 0)
+            {
+                result += " (" + entry.CompletedCount + " complete)";
+            }
+
+            leaders.Add(result);
+        }
+
+        string title = selectedCollection == null
+            ? "Circuit Leaderboard: "
+            : ShortCollectionName(selectedCollection.DisplayName) + " Leaderboard: ";
+
+        SendSegments(requestingViewerName, title, leaders, "No leaderboard entries yet.");
+
+        for (int i = displayedCount; i < entries.Count; i++)
+        {
+            if (entries[i].ViewerId == requestingViewerId)
+            {
+                CPH.SendMessage(
+                    "@" + requestingViewerName + " Your rank: #" + (i + 1) +
+                    " with " + entries[i].UniqueCount + "/" + maximumUnique + ".",
+                    true,
+                    true
+                );
+                break;
+            }
+        }
+    }
+
+    private string GetCommandInput()
+    {
+        string input = GetArgOrDefault("rawInput", "");
+        if (string.IsNullOrWhiteSpace(input)) input = GetArgOrDefault("input0", "");
+        if (string.IsNullOrWhiteSpace(input)) input = GetArgOrDefault("argument0", "");
+        return input.Trim();
+    }
+
+    private string NormalizeCollectionName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "";
+        StringBuilder normalized = new StringBuilder();
+
+        foreach (char character in value.ToLowerInvariant())
+        {
+            if (Char.IsLetterOrDigit(character)) normalized.Append(character);
+        }
+
+        string result = normalized.ToString();
+        const string suffix = "collection";
+
+        if (result.EndsWith(suffix, StringComparison.Ordinal))
+        {
+            result = result.Substring(0, result.Length - suffix.Length);
+        }
+
+        return result;
+    }
+
+    private void SendComponents(
+        string viewerName,
+        string componentsBlock,
+        string completionsBlock,
+        List<CollectionDefinition> collections)
+    {
+        List<string> summaries = new List<string>();
+
+        foreach (CollectionDefinition collection in collections)
+        {
+            int owned = CountOwned(componentsBlock, collection.PartIds);
+            bool hasCompletion = !string.IsNullOrWhiteSpace(
+                GetStringValue(completionsBlock, collection.Key)
+            );
+
+            if (collection.IsEvent && !collection.IsActive && owned == 0 && !hasCompletion)
+            {
+                continue;
+            }
+
+            string summary = ShortCollectionName(collection.DisplayName) + " " +
+                owned + "/" + collection.PartIds.Count;
+
+            if (collection.IsEvent)
+            {
+                summary += collection.IsActive ? " [ACTIVE]" : " [HISTORICAL]";
+            }
+
+            summaries.Add(summary);
+        }
+
+        SendSegments(viewerName, "Collections: ", summaries, "No collections found.");
+    }
+
+    private void SendMissing(
+        string viewerName,
+        string componentsBlock,
+        List<CollectionDefinition> collections)
+    {
+        List<string> summaries = new List<string>();
+
+        foreach (CollectionDefinition collection in collections)
+        {
+            if (collection.IsEvent && !collection.IsActive)
+            {
+                continue;
+            }
+
+            List<string> missing = new List<string>();
+
+            for (int i = 0; i < collection.PartIds.Count; i++)
+            {
+                if (GetQuantity(componentsBlock, collection.PartIds[i]) <= 0)
+                {
+                    missing.Add(collection.PartNames[i]);
+                }
+            }
+
+            summaries.Add(
+                ShortCollectionName(collection.DisplayName) + ": " +
+                JoinOrDefault(missing, ", ", "COMPLETE")
+            );
+        }
+
+        SendSegments(viewerName, "Missing: ", summaries, "No active collections found.");
+    }
+
+    private void SendDuplicates(
+        string viewerName,
+        string componentsBlock,
+        List<CollectionDefinition> collections)
+    {
+        List<string> duplicates = new List<string>();
+
+        foreach (CollectionDefinition collection in collections)
+        {
+            for (int i = 0; i < collection.PartIds.Count; i++)
+            {
+                int quantity = GetQuantity(componentsBlock, collection.PartIds[i]);
+
+                if (quantity > 1)
+                {
+                    duplicates.Add(
+                        ShortCollectionName(collection.DisplayName) + " " +
+                        collection.PartNames[i] + " x" + quantity
+                    );
+                }
+            }
+        }
+
+        if (duplicates.Count == 0)
+        {
+            CPH.SendMessage(
+                FormatMessage(NoDuplicatesTemplate,
+                    "viewer", viewerName,
+                    "itemPlural", "components"),
+                true,
+                true
+            );
+            return;
+        }
+
+        SendSegments(viewerName, "Duplicates: ", duplicates, "No duplicates found.");
+    }
+
+    private void SendSegments(
+        string viewerName,
+        string prefix,
+        List<string> segments,
+        string emptyMessage)
+    {
+        if (segments.Count == 0)
+        {
+            CPH.SendMessage("@" + viewerName + " " + emptyMessage, true, true);
+            return;
+        }
+
+        string messagePrefix = "@" + viewerName + " " + prefix;
+        string current = messagePrefix;
+
+        foreach (string segment in segments)
+        {
+            string separator = current == messagePrefix ? "" : " | ";
+
+            if (current.Length > messagePrefix.Length &&
+                current.Length + separator.Length + segment.Length > 440)
+            {
+                CPH.SendMessage(current, true, true);
+                current = messagePrefix + segment;
+            }
+            else
+            {
+                current += separator + segment;
+            }
+        }
+
+        if (current.Length > messagePrefix.Length)
+        {
+            CPH.SendMessage(current, true, true);
+        }
+    }
+
+    private List<CollectionDefinition> LoadCollections(string catalogText)
+    {
+        string collectionsBlock = ExtractObjectForKey(catalogText, "collections");
+
+        if (string.IsNullOrWhiteSpace(collectionsBlock))
+        {
+            throw new Exception("Missing collections object.");
+        }
+
+        List<CollectionDefinition> collections = new List<CollectionDefinition>();
+
+        foreach (string key in GetTopLevelObjectKeys(collectionsBlock))
+        {
+            string collectionBlock = ExtractObjectForKey(collectionsBlock, key);
+            string partsBlock = ExtractArrayForKey(collectionBlock, "parts");
+            CollectionDefinition collection = new CollectionDefinition();
+            collection.Key = key;
+            collection.DisplayName = GetStringValue(collectionBlock, "displayName");
+
+            if (string.IsNullOrWhiteSpace(collection.DisplayName))
+            {
+                collection.DisplayName = key;
+            }
+
+            collection.IsEvent = GetStringValue(collectionBlock, "type")
+                .Equals("event", StringComparison.OrdinalIgnoreCase);
+            collection.IsActive = !collection.IsEvent || IsEventActive(collectionBlock);
+
+            foreach (string partObject in ExtractObjectsFromArray(partsBlock))
+            {
+                string partId = GetStringValue(partObject, "id");
+                string partName = GetStringValue(partObject, "name");
+
+                if (!string.IsNullOrWhiteSpace(partId) && !string.IsNullOrWhiteSpace(partName))
+                {
+                    collection.PartIds.Add(partId);
+                    collection.PartNames.Add(partName);
+                }
+            }
+
+            if (collection.PartIds.Count > 0)
+            {
+                collections.Add(collection);
+            }
+        }
+
+        return collections;
+    }
+
+    private bool IsEventActive(string collectionBlock)
+    {
+        bool enabled;
+
+        if (!TryGetBooleanValue(collectionBlock, "enabled", out enabled) || !enabled)
+        {
+            return false;
+        }
+
+        DateTimeOffset activeFrom;
+        DateTimeOffset activeUntil;
+
+        if (!DateTimeOffset.TryParse(GetStringValue(collectionBlock, "activeFromUtc"), out activeFrom) ||
+            !DateTimeOffset.TryParse(GetStringValue(collectionBlock, "activeUntilUtc"), out activeUntil) ||
+            activeUntil <= activeFrom)
+        {
+            return false;
+        }
+
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        return now >= activeFrom.ToUniversalTime() && now < activeUntil.ToUniversalTime();
+    }
+
+    private string FormatMessage(string template, params string[] replacements)
+    {
+        string result = template ?? "";
+        for (int i = 0; i + 1 < replacements.Length; i += 2)
+        {
+            result = result.Replace("{" + replacements[i] + "}", replacements[i + 1] ?? "");
+        }
+        return result;
+    }
+
+    private string GetCommandName()
+    {
+        string command = GetArgOrDefault("command", "");
+
+        if (string.IsNullOrWhiteSpace(command))
+        {
+            command = GetArgOrDefault("commandName", "");
+        }
+
+        command = command.Trim().ToLowerInvariant();
+
+        if (command.StartsWith("!"))
+        {
+            command = command.Substring(1);
+        }
+
+        int spaceIndex = command.IndexOf(' ');
+
+        if (spaceIndex >= 0)
+        {
+            command = command.Substring(0, spaceIndex);
+        }
+
+        return command;
+    }
+
+    private string GetViewerName()
+    {
+        string name = GetArgOrDefault("userName", "");
+        if (string.IsNullOrWhiteSpace(name)) name = GetArgOrDefault("displayName", "");
+        if (string.IsNullOrWhiteSpace(name)) name = GetArgOrDefault("user", "Viewer");
+        return name;
+    }
+
+    private string GetArgOrDefault(string name, string defaultValue)
+    {
+        string value;
+        return CPH.TryGetArg(name, out value) && !string.IsNullOrWhiteSpace(value)
+            ? value
+            : defaultValue;
+    }
+
+    private int CountOwned(string componentsBlock, List<string> partIds)
+    {
+        int count = 0;
+        foreach (string partId in partIds) if (GetQuantity(componentsBlock, partId) > 0) count++;
+        return count;
+    }
+
+    private int GetQuantity(string text, string partId)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return 0;
+        string search = "\"" + partId + "\"";
+        int keyIndex = text.IndexOf(search, StringComparison.OrdinalIgnoreCase);
+        if (keyIndex < 0) return 0;
+        int colonIndex = text.IndexOf(':', keyIndex + search.Length);
+        if (colonIndex < 0) return 0;
+        int start = colonIndex + 1;
+        while (start < text.Length && Char.IsWhiteSpace(text[start])) start++;
+        int end = start;
+        while (end < text.Length && Char.IsDigit(text[end])) end++;
+        int quantity;
+        return end > start && Int32.TryParse(text.Substring(start, end - start), out quantity)
+            ? quantity
+            : 0;
+    }
+
+    private string ShortCollectionName(string displayName)
+    {
+        const string suffix = " Collection";
+        return displayName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
+            ? displayName.Substring(0, displayName.Length - suffix.Length)
+            : displayName;
+    }
+
+    private string JoinOrDefault(List<string> values, string separator, string defaultValue)
+    {
+        return values.Count == 0 ? defaultValue : string.Join(separator, values.ToArray());
+    }
+
+    private string GetStringValue(string json, string key)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return "";
+        string search = "\"" + key + "\"";
+        int keyIndex = json.IndexOf(search, StringComparison.OrdinalIgnoreCase);
+        if (keyIndex < 0) return "";
+        int colonIndex = json.IndexOf(':', keyIndex + search.Length);
+        if (colonIndex < 0) return "";
+        int quoteStart = json.IndexOf('\"', colonIndex + 1);
+        if (quoteStart < 0) return "";
+        StringBuilder value = new StringBuilder();
+        bool escaped = false;
+
+        for (int i = quoteStart + 1; i < json.Length; i++)
+        {
+            char character = json[i];
+            if (escaped) { value.Append(character); escaped = false; }
+            else if (character == '\\') escaped = true;
+            else if (character == '\"') return value.ToString();
+            else value.Append(character);
+        }
+
+        return "";
+    }
+
+    private bool TryGetBooleanValue(string json, string key, out bool value)
+    {
+        value = false;
+        if (string.IsNullOrWhiteSpace(json)) return false;
+        string search = "\"" + key + "\"";
+        int keyIndex = json.IndexOf(search, StringComparison.OrdinalIgnoreCase);
+        if (keyIndex < 0) return false;
+        int colonIndex = json.IndexOf(':', keyIndex + search.Length);
+        if (colonIndex < 0) return false;
+        int start = colonIndex + 1;
+        while (start < json.Length && Char.IsWhiteSpace(json[start])) start++;
+        if (start + 4 <= json.Length && json.Substring(start, 4).Equals("true", StringComparison.OrdinalIgnoreCase)) { value = true; return true; }
+        if (start + 5 <= json.Length && json.Substring(start, 5).Equals("false", StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    private string ExtractObjectForKey(string json, string key)
+    {
+        return ExtractContainerForKey(json, key, '{', '}');
+    }
+
+    private string ExtractArrayForKey(string json, string key)
+    {
+        return ExtractContainerForKey(json, key, '[', ']');
+    }
+
+    private string ExtractContainerForKey(string json, string key, char opening, char closing)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return "";
+        string search = "\"" + key + "\"";
+        int keyIndex = json.IndexOf(search, StringComparison.OrdinalIgnoreCase);
+        if (keyIndex < 0) return "";
+        int colonIndex = json.IndexOf(':', keyIndex + search.Length);
+        if (colonIndex < 0) return "";
+        int start = json.IndexOf(opening, colonIndex + 1);
+        if (start < 0) return "";
+        int depth = 0;
+        bool insideString = false;
+        bool escaped = false;
+
+        for (int i = start; i < json.Length; i++)
+        {
+            char character = json[i];
+            if (insideString)
+            {
+                if (escaped) escaped = false;
+                else if (character == '\\') escaped = true;
+                else if (character == '\"') insideString = false;
+                continue;
+            }
+            if (character == '\"') insideString = true;
+            else if (character == opening) depth++;
+            else if (character == closing && --depth == 0) return json.Substring(start, i - start + 1);
+        }
+
+        return "";
+    }
+
+    private List<string> GetTopLevelObjectKeys(string json)
+    {
+        List<string> keys = new List<string>();
+        int depth = 0;
+        bool insideString = false;
+        bool escaped = false;
+        int stringStart = -1;
+
+        for (int i = 0; i < json.Length; i++)
+        {
+            char character = json[i];
+            if (insideString)
+            {
+                if (escaped) escaped = false;
+                else if (character == '\\') escaped = true;
+                else if (character == '\"')
+                {
+                    insideString = false;
+                    if (depth == 1)
+                    {
+                        int next = i + 1;
+                        while (next < json.Length && Char.IsWhiteSpace(json[next])) next++;
+                        if (next < json.Length && json[next++] == ':')
+                        {
+                            while (next < json.Length && Char.IsWhiteSpace(json[next])) next++;
+                            if (next < json.Length && json[next] == '{') keys.Add(json.Substring(stringStart, i - stringStart));
+                        }
+                    }
+                }
+                continue;
+            }
+            if (character == '\"') { insideString = true; stringStart = i + 1; }
+            else if (character == '{') depth++;
+            else if (character == '}') depth--;
+        }
+
+        return keys;
+    }
+
+    private List<string> ExtractObjectsFromArray(string json)
+    {
+        List<string> objects = new List<string>();
+        if (string.IsNullOrWhiteSpace(json)) return objects;
+        int depth = 0;
+        int start = -1;
+        bool insideString = false;
+        bool escaped = false;
+
+        for (int i = 0; i < json.Length; i++)
+        {
+            char character = json[i];
+            if (insideString)
+            {
+                if (escaped) escaped = false;
+                else if (character == '\\') escaped = true;
+                else if (character == '\"') insideString = false;
+                continue;
+            }
+            if (character == '\"') insideString = true;
+            else if (character == '{') { if (depth == 0) start = i; depth++; }
+            else if (character == '}' && --depth == 0 && start >= 0)
+            {
+                objects.Add(json.Substring(start, i - start + 1));
+                start = -1;
+            }
+        }
+
+        return objects;
+    }
+}

@@ -1,0 +1,749 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+
+public class CPHInline
+{
+    private const string CollectionUsageTemplate = "@{viewer} usage: !{collectionCommand} <{collectionSingular}>";
+    private const string CollectionSummaryTemplate = "@{viewer} {collection}: {owned}/{total} | {status}{availability}";
+
+    public bool Execute()
+    {
+        string folderPath = @"C:\CircuitOS\Data";
+        string componentsPath = Path.Combine(folderPath, "components.json");
+        string inventoryPath = Path.Combine(folderPath, "inventory.json");
+
+        string viewerId = GetArgOrDefault("userId", "");
+        string viewerName = GetViewerName();
+        string requestedCollection = GetCommandInput();
+
+        if (string.IsNullOrWhiteSpace(requestedCollection))
+        {
+            CPH.SendMessage(
+                FormatMessage(CollectionUsageTemplate,
+                    "viewer", viewerName,
+                    "collectionCommand", "collection",
+                    "collectionSingular", "collection"),
+                true,
+                true
+            );
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(viewerId))
+        {
+            CPH.SendMessage(
+                "@" + viewerName + " I couldn't find your Twitch user ID yet. Try redeeming a Circuit Component first.",
+                true,
+                true
+            );
+            return false;
+        }
+
+        if (!File.Exists(componentsPath))
+        {
+            CPH.SendMessage("Collection command error: components.json was not found.", true, true);
+            CPH.LogError("[Collection Command] components.json missing at: " + componentsPath);
+            return false;
+        }
+
+        if (!File.Exists(inventoryPath))
+        {
+            CPH.SendMessage("Collection command error: inventory.json was not found.", true, true);
+            CPH.LogError("[Collection Command] inventory.json missing at: " + inventoryPath);
+            return false;
+        }
+
+        string catalogText;
+        string inventoryText;
+
+        try
+        {
+            catalogText = File.ReadAllText(componentsPath);
+            inventoryText = File.ReadAllText(inventoryPath);
+        }
+        catch (Exception ex)
+        {
+            CPH.SendMessage("Collection command error: data files could not be read.", true, true);
+            CPH.LogError("[Collection Command] Read error: " + ex.Message);
+            return false;
+        }
+
+        string collectionsBlock = ExtractJsonObjectForKey(catalogText, "collections");
+
+        if (string.IsNullOrWhiteSpace(collectionsBlock))
+        {
+            CPH.SendMessage("Collection command error: the catalog is invalid.", true, true);
+            CPH.LogError("[Collection Command] Missing collections object.");
+            return false;
+        }
+
+        List<string> collectionKeys = GetTopLevelObjectKeys(collectionsBlock);
+        string collectionKey = ResolveCollectionKey(
+            requestedCollection,
+            collectionsBlock,
+            collectionKeys
+        );
+
+        if (string.IsNullOrWhiteSpace(collectionKey))
+        {
+            CPH.SendMessage(
+                "@" + viewerName + " unknown collection. Available: " +
+                JoinOrDefault(collectionKeys, ", ", "none"),
+                true,
+                true
+            );
+            return true;
+        }
+
+        string collectionBlock = ExtractJsonObjectForKey(collectionsBlock, collectionKey);
+        string displayName = GetJsonStringValue(collectionBlock, "displayName");
+        string partsBlock = ExtractJsonArrayForKey(collectionBlock, "parts");
+        string availabilityStatus = GetCollectionAvailabilityStatus(collectionBlock);
+
+        if (string.IsNullOrWhiteSpace(displayName))
+        {
+            displayName = collectionKey;
+        }
+
+        List<string> partObjects = ExtractJsonObjectsFromArray(partsBlock);
+        List<string> partIds = new List<string>();
+        List<string> partNames = new List<string>();
+
+        foreach (string partObject in partObjects)
+        {
+            string partId = GetJsonStringValue(partObject, "id");
+            string partName = GetJsonStringValue(partObject, "name");
+
+            if (!string.IsNullOrWhiteSpace(partId) && !string.IsNullOrWhiteSpace(partName))
+            {
+                partIds.Add(partId);
+                partNames.Add(partName);
+            }
+        }
+
+        if (partIds.Count == 0)
+        {
+            CPH.SendMessage("Collection command error: " + displayName + " has no valid parts.", true, true);
+            CPH.LogError("[Collection Command] No valid parts for: " + collectionKey);
+            return false;
+        }
+
+        string viewerBlock = ExtractJsonObjectForKey(inventoryText, viewerId);
+        string componentsBlock = ExtractJsonObjectForKey(viewerBlock, "components");
+        string completionsBlock = ExtractJsonObjectForKey(viewerBlock, "completedCollections");
+
+        List<string> owned = new List<string>();
+        List<string> missing = new List<string>();
+        List<string> duplicates = new List<string>();
+
+        for (int i = 0; i < partIds.Count; i++)
+        {
+            int quantity = GetComponentQuantity(componentsBlock, partIds[i]);
+
+            if (quantity > 0)
+            {
+                owned.Add(partNames[i]);
+
+                if (quantity > 1)
+                {
+                    duplicates.Add(partNames[i] + " x" + quantity);
+                }
+            }
+            else
+            {
+                missing.Add(partNames[i]);
+            }
+        }
+
+        string completedAt = GetJsonStringValue(completionsBlock, collectionKey);
+        string status = GetCompletionStatus(owned.Count, partIds.Count, completedAt);
+
+        CPH.SendMessage(
+            FormatMessage(CollectionSummaryTemplate,
+                "viewer", viewerName,
+                "collection", displayName,
+                "owned", owned.Count.ToString(),
+                "total", partIds.Count.ToString(),
+                "status", status,
+                "availability", availabilityStatus),
+            true,
+            true
+        );
+
+        CPH.SendMessage(
+            "@" + viewerName +
+            " Owned: " + JoinOrDefault(owned, ", ", "none") +
+            " | Missing: " + JoinOrDefault(missing, ", ", "none") +
+            " | Duplicates: " + JoinOrDefault(duplicates, ", ", "none"),
+            true,
+            true
+        );
+
+        CPH.LogInfo(
+            "[Collection Command] " + viewerName + " checked " + collectionKey +
+            " (" + owned.Count + "/" + partIds.Count + ")."
+        );
+
+        return true;
+    }
+
+    private string FormatMessage(string template, params string[] replacements)
+    {
+        string result = template ?? "";
+        for (int i = 0; i + 1 < replacements.Length; i += 2)
+        {
+            result = result.Replace("{" + replacements[i] + "}", replacements[i + 1] ?? "");
+        }
+        return result;
+    }
+
+    private string GetViewerName()
+    {
+        string viewerName = GetArgOrDefault("userName", "");
+
+        if (string.IsNullOrWhiteSpace(viewerName))
+        {
+            viewerName = GetArgOrDefault("displayName", "");
+        }
+
+        if (string.IsNullOrWhiteSpace(viewerName))
+        {
+            viewerName = GetArgOrDefault("user", "Viewer");
+        }
+
+        return viewerName;
+    }
+
+    private string GetCommandInput()
+    {
+        string input = GetArgOrDefault("rawInput", "");
+
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            input = GetArgOrDefault("input0", "");
+        }
+
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            input = GetArgOrDefault("argument0", "");
+        }
+
+        input = input.Trim();
+
+        if (input.StartsWith("!collection", StringComparison.OrdinalIgnoreCase))
+        {
+            input = input.Substring("!collection".Length).Trim();
+        }
+
+        return input;
+    }
+
+    private string ResolveCollectionKey(
+        string requestedCollection,
+        string collectionsBlock,
+        List<string> collectionKeys)
+    {
+        string normalizedRequest = NormalizeCollectionName(requestedCollection);
+
+        foreach (string key in collectionKeys)
+        {
+            if (NormalizeCollectionName(key) == normalizedRequest)
+            {
+                return key;
+            }
+
+            string collectionBlock = ExtractJsonObjectForKey(collectionsBlock, key);
+            string displayName = GetJsonStringValue(collectionBlock, "displayName");
+
+            if (NormalizeCollectionName(displayName) == normalizedRequest)
+            {
+                return key;
+            }
+        }
+
+        return "";
+    }
+
+    private string NormalizeCollectionName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "";
+        }
+
+        StringBuilder normalized = new StringBuilder();
+
+        foreach (char character in value.ToLowerInvariant())
+        {
+            if (Char.IsLetterOrDigit(character))
+            {
+                normalized.Append(character);
+            }
+        }
+
+        string result = normalized.ToString();
+
+        if (result.EndsWith("collection", StringComparison.Ordinal))
+        {
+            result = result.Substring(0, result.Length - "collection".Length);
+        }
+
+        return result;
+    }
+
+    private string GetCompletionStatus(int ownedCount, int totalCount, string completedAt)
+    {
+        string recordedDate = FormatCompletionDate(completedAt);
+
+        if (!string.IsNullOrWhiteSpace(completedAt) && ownedCount == totalCount)
+        {
+            return "COMPLETE" + recordedDate;
+        }
+
+        if (!string.IsNullOrWhiteSpace(completedAt))
+        {
+            return "Previously completed" + recordedDate;
+        }
+
+        if (ownedCount == totalCount)
+        {
+            return "COMPLETE (record pending)";
+        }
+
+        return "In progress";
+    }
+
+    private string GetCollectionAvailabilityStatus(string collectionBlock)
+    {
+        string collectionType = GetJsonStringValue(collectionBlock, "type");
+
+        if (!collectionType.Equals("event", StringComparison.OrdinalIgnoreCase))
+        {
+            return "";
+        }
+
+        bool enabled;
+
+        if (!TryGetJsonBooleanValue(collectionBlock, "enabled", out enabled) || !enabled)
+        {
+            return " | Event disabled";
+        }
+
+        string activeFromText = GetJsonStringValue(collectionBlock, "activeFromUtc");
+        string activeUntilText = GetJsonStringValue(collectionBlock, "activeUntilUtc");
+        DateTimeOffset activeFrom;
+        DateTimeOffset activeUntil;
+
+        if (!DateTimeOffset.TryParse(activeFromText, out activeFrom) ||
+            !DateTimeOffset.TryParse(activeUntilText, out activeUntil) ||
+            activeUntil <= activeFrom)
+        {
+            return " | Event schedule invalid";
+        }
+
+        DateTimeOffset utcNow = DateTimeOffset.UtcNow;
+
+        if (utcNow < activeFrom.ToUniversalTime())
+        {
+            return " | Event starts " + activeFrom.ToUniversalTime().ToString("yyyy-MM-dd");
+        }
+
+        if (utcNow >= activeUntil.ToUniversalTime())
+        {
+            return " | Event ended " + activeUntil.ToUniversalTime().ToString("yyyy-MM-dd");
+        }
+
+        return " | Event active until " + activeUntil.ToUniversalTime().ToString("yyyy-MM-dd");
+    }
+
+    private string FormatCompletionDate(string completedAt)
+    {
+        if (string.IsNullOrWhiteSpace(completedAt))
+        {
+            return "";
+        }
+
+        DateTime parsedDate;
+
+        if (DateTime.TryParse(completedAt, out parsedDate))
+        {
+            return " since " + parsedDate.ToString("yyyy-MM-dd");
+        }
+
+        return " (recorded)";
+    }
+
+    private string JoinOrDefault(List<string> values, string separator, string defaultValue)
+    {
+        if (values == null || values.Count == 0)
+        {
+            return defaultValue;
+        }
+
+        return string.Join(separator, values.ToArray());
+    }
+
+    private string GetArgOrDefault(string argName, string defaultValue)
+    {
+        string value = "";
+
+        if (CPH.TryGetArg(argName, out value) && !string.IsNullOrWhiteSpace(value))
+        {
+            return value;
+        }
+
+        return defaultValue;
+    }
+
+    private int GetComponentQuantity(string text, string componentId)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return 0;
+        }
+
+        string search = "\"" + componentId + "\"";
+        int keyIndex = text.IndexOf(search, StringComparison.OrdinalIgnoreCase);
+
+        if (keyIndex < 0)
+        {
+            return 0;
+        }
+
+        int colonIndex = text.IndexOf(":", keyIndex);
+
+        if (colonIndex < 0)
+        {
+            return 0;
+        }
+
+        int numberStart = colonIndex + 1;
+
+        while (numberStart < text.Length && Char.IsWhiteSpace(text[numberStart]))
+        {
+            numberStart++;
+        }
+
+        int numberEnd = numberStart;
+
+        while (numberEnd < text.Length && Char.IsDigit(text[numberEnd]))
+        {
+            numberEnd++;
+        }
+
+        int quantity;
+
+        if (numberEnd > numberStart &&
+            Int32.TryParse(text.Substring(numberStart, numberEnd - numberStart), out quantity))
+        {
+            return quantity;
+        }
+
+        return 0;
+    }
+
+    private string GetJsonStringValue(string json, string key)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return "";
+        }
+
+        string search = "\"" + key + "\"";
+        int keyIndex = json.IndexOf(search, StringComparison.OrdinalIgnoreCase);
+
+        if (keyIndex < 0)
+        {
+            return "";
+        }
+
+        int colonIndex = json.IndexOf(':', keyIndex + search.Length);
+
+        if (colonIndex < 0)
+        {
+            return "";
+        }
+
+        int quoteStart = json.IndexOf('\"', colonIndex + 1);
+
+        if (quoteStart < 0)
+        {
+            return "";
+        }
+
+        StringBuilder value = new StringBuilder();
+        bool escaped = false;
+
+        for (int i = quoteStart + 1; i < json.Length; i++)
+        {
+            char character = json[i];
+
+            if (escaped)
+            {
+                if (character == 'n') value.Append('\n');
+                else if (character == 'r') value.Append('\r');
+                else if (character == 't') value.Append('\t');
+                else value.Append(character);
+
+                escaped = false;
+            }
+            else if (character == '\\')
+            {
+                escaped = true;
+            }
+            else if (character == '\"')
+            {
+                return value.ToString();
+            }
+            else
+            {
+                value.Append(character);
+            }
+        }
+
+        return "";
+    }
+
+    private bool TryGetJsonBooleanValue(string json, string key, out bool value)
+    {
+        value = false;
+
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return false;
+        }
+
+        string search = "\"" + key + "\"";
+        int keyIndex = json.IndexOf(search, StringComparison.OrdinalIgnoreCase);
+
+        if (keyIndex < 0)
+        {
+            return false;
+        }
+
+        int colonIndex = json.IndexOf(':', keyIndex + search.Length);
+
+        if (colonIndex < 0)
+        {
+            return false;
+        }
+
+        int valueStart = colonIndex + 1;
+
+        while (valueStart < json.Length && Char.IsWhiteSpace(json[valueStart]))
+        {
+            valueStart++;
+        }
+
+        if (valueStart + 4 <= json.Length &&
+            json.Substring(valueStart, 4).Equals("true", StringComparison.OrdinalIgnoreCase))
+        {
+            value = true;
+            return true;
+        }
+
+        if (valueStart + 5 <= json.Length &&
+            json.Substring(valueStart, 5).Equals("false", StringComparison.OrdinalIgnoreCase))
+        {
+            value = false;
+            return true;
+        }
+
+        return false;
+    }
+
+    private string ExtractJsonObjectForKey(string json, string key)
+    {
+        return ExtractJsonContainerForKey(json, key, '{', '}');
+    }
+
+    private string ExtractJsonArrayForKey(string json, string key)
+    {
+        return ExtractJsonContainerForKey(json, key, '[', ']');
+    }
+
+    private string ExtractJsonContainerForKey(
+        string json,
+        string key,
+        char openingCharacter,
+        char closingCharacter)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return "";
+        }
+
+        string search = "\"" + key + "\"";
+        int keyIndex = json.IndexOf(search, StringComparison.OrdinalIgnoreCase);
+
+        if (keyIndex < 0)
+        {
+            return "";
+        }
+
+        int colonIndex = json.IndexOf(':', keyIndex + search.Length);
+
+        if (colonIndex < 0)
+        {
+            return "";
+        }
+
+        int containerStart = json.IndexOf(openingCharacter, colonIndex + 1);
+
+        if (containerStart < 0)
+        {
+            return "";
+        }
+
+        int depth = 0;
+        bool insideString = false;
+        bool escaped = false;
+
+        for (int i = containerStart; i < json.Length; i++)
+        {
+            char character = json[i];
+
+            if (insideString)
+            {
+                if (escaped) escaped = false;
+                else if (character == '\\') escaped = true;
+                else if (character == '\"') insideString = false;
+
+                continue;
+            }
+
+            if (character == '\"')
+            {
+                insideString = true;
+            }
+            else if (character == openingCharacter)
+            {
+                depth++;
+            }
+            else if (character == closingCharacter)
+            {
+                depth--;
+
+                if (depth == 0)
+                {
+                    return json.Substring(containerStart, i - containerStart + 1);
+                }
+            }
+        }
+
+        return "";
+    }
+
+    private List<string> GetTopLevelObjectKeys(string jsonObject)
+    {
+        List<string> keys = new List<string>();
+        int depth = 0;
+        bool insideString = false;
+        bool escaped = false;
+        int stringStart = -1;
+
+        for (int i = 0; i < jsonObject.Length; i++)
+        {
+            char character = jsonObject[i];
+
+            if (insideString)
+            {
+                if (escaped) escaped = false;
+                else if (character == '\\') escaped = true;
+                else if (character == '\"')
+                {
+                    insideString = false;
+
+                    if (depth == 1 && stringStart >= 0)
+                    {
+                        int next = i + 1;
+
+                        while (next < jsonObject.Length && Char.IsWhiteSpace(jsonObject[next])) next++;
+
+                        if (next < jsonObject.Length && jsonObject[next] == ':')
+                        {
+                            next++;
+                            while (next < jsonObject.Length && Char.IsWhiteSpace(jsonObject[next])) next++;
+
+                            if (next < jsonObject.Length && jsonObject[next] == '{')
+                            {
+                                keys.Add(jsonObject.Substring(stringStart, i - stringStart));
+                            }
+                        }
+                    }
+                }
+
+                continue;
+            }
+
+            if (character == '\"')
+            {
+                insideString = true;
+                stringStart = i + 1;
+            }
+            else if (character == '{')
+            {
+                depth++;
+            }
+            else if (character == '}')
+            {
+                depth--;
+            }
+        }
+
+        return keys;
+    }
+
+    private List<string> ExtractJsonObjectsFromArray(string jsonArray)
+    {
+        List<string> objects = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(jsonArray))
+        {
+            return objects;
+        }
+
+        int depth = 0;
+        int objectStart = -1;
+        bool insideString = false;
+        bool escaped = false;
+
+        for (int i = 0; i < jsonArray.Length; i++)
+        {
+            char character = jsonArray[i];
+
+            if (insideString)
+            {
+                if (escaped) escaped = false;
+                else if (character == '\\') escaped = true;
+                else if (character == '\"') insideString = false;
+
+                continue;
+            }
+
+            if (character == '\"')
+            {
+                insideString = true;
+            }
+            else if (character == '{')
+            {
+                if (depth == 0) objectStart = i;
+                depth++;
+            }
+            else if (character == '}')
+            {
+                depth--;
+
+                if (depth == 0 && objectStart >= 0)
+                {
+                    objects.Add(jsonArray.Substring(objectStart, i - objectStart + 1));
+                    objectStart = -1;
+                }
+            }
+        }
+
+        return objects;
+    }
+}

@@ -1,0 +1,253 @@
+using System;
+using System.IO;
+using System.Text;
+
+public class CPHInline
+{
+    public bool Execute()
+    {
+        string folderPath = @"C:\Users\nicho\OneDrive\Documents\CircuitComponents";
+        string inventoryPath = Path.Combine(folderPath, "inventory.json");
+
+        if (!File.Exists(inventoryPath))
+        {
+            CPH.SendMessage("⚠️ Components command error: inventory.json was not found.", true, true);
+            return false;
+        }
+
+        string viewerId = GetArgOrDefault("userId", "");
+        string viewerName = GetArgOrDefault("userName", "");
+
+        if (string.IsNullOrWhiteSpace(viewerName))
+        {
+            viewerName = GetArgOrDefault("displayName", "");
+        }
+
+        if (string.IsNullOrWhiteSpace(viewerName))
+        {
+            viewerName = GetArgOrDefault("user", "Viewer");
+        }
+
+        if (string.IsNullOrWhiteSpace(viewerId))
+        {
+            CPH.SendMessage("@" + viewerName + " I couldn't find your Twitch user ID yet. Try redeeming a Circuit Component first.", true, true);
+            return false;
+        }
+
+        string inventoryText = File.ReadAllText(inventoryPath);
+
+        string viewerBlock = ExtractJsonObjectForKey(inventoryText, viewerId);
+
+        if (string.IsNullOrWhiteSpace(viewerBlock))
+        {
+            CPH.SendMessage("@" + viewerName + " you don't have any Circuit Components yet. Redeem Circuit Component to start your collection.", true, true);
+            return true;
+        }
+
+        string componentsBlock = ExtractJsonObjectForKey(viewerBlock, "components");
+
+        if (string.IsNullOrWhiteSpace(componentsBlock))
+        {
+            CPH.SendMessage("@" + viewerName + " you don't have any Circuit Components yet. Redeem Circuit Component to start your collection.", true, true);
+            return true;
+        }
+
+        int basicOwned = CountOwned(
+            componentsBlock,
+            new string[]
+            {
+                "basic_resistor",
+                "basic_capacitor",
+                "basic_wire",
+                "basic_led",
+                "basic_switch"
+            }
+        );
+
+        int powerOwned = CountOwned(
+            componentsBlock,
+            new string[]
+            {
+                "power_battery",
+                "power_capacitor",
+                "power_fuse",
+                "power_switch",
+                "power_surge_protector"
+            }
+        );
+
+        int advancedOwned = CountOwned(
+            componentsBlock,
+            new string[]
+            {
+                "advanced_microprocessor",
+                "advanced_voltage_regulator",
+                "advanced_diode",
+                "advanced_inductor",
+                "advanced_op_amp"
+            }
+        );
+
+        int brokenOwned = CountOwned(
+            componentsBlock,
+            new string[]
+            {
+                "broken_glitchy_wire",
+                "broken_resistor",
+                "broken_overloaded_capacitor",
+                "broken_debugging_code"
+            }
+        );
+
+        int quantumOwned = CountOwned(
+            componentsBlock,
+            new string[]
+            {
+                "quantum_resistor",
+                "quantum_overclocked_chip",
+                "quantum_crystal_oscillator",
+                "quantum_rf_antenna",
+                "quantum_memory_chip",
+                "quantum_shielded_wire"
+            }
+        );
+
+        string message =
+            "@" + viewerName +
+            " Collections: Basic " + basicOwned + "/5" +
+            " | Power " + powerOwned + "/5" +
+            " | Advanced " + advancedOwned + "/5" +
+            " | Broken " + brokenOwned + "/4" +
+            " | Quantum " + quantumOwned + "/6";
+
+        CPH.SendMessage(message, true, true);
+
+        return true;
+    }
+
+    private string GetArgOrDefault(string argName, string defaultValue)
+    {
+        string value = "";
+
+        if (CPH.TryGetArg(argName, out value))
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return defaultValue;
+    }
+
+    private int CountOwned(string componentsBlock, string[] componentIds)
+    {
+        int count = 0;
+
+        for (int i = 0; i < componentIds.Length; i++)
+        {
+            int quantity = GetComponentQuantity(componentsBlock, componentIds[i]);
+
+            if (quantity > 0)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private int GetComponentQuantity(string text, string componentId)
+    {
+        string search = "\"" + componentId + "\"";
+        int keyIndex = text.IndexOf(search, StringComparison.OrdinalIgnoreCase);
+
+        if (keyIndex < 0)
+        {
+            return 0;
+        }
+
+        int colonIndex = text.IndexOf(":", keyIndex);
+
+        if (colonIndex < 0)
+        {
+            return 0;
+        }
+
+        int numberStart = colonIndex + 1;
+
+        while (numberStart < text.Length && Char.IsWhiteSpace(text[numberStart]))
+        {
+            numberStart++;
+        }
+
+        int numberEnd = numberStart;
+
+        while (numberEnd < text.Length && Char.IsDigit(text[numberEnd]))
+        {
+            numberEnd++;
+        }
+
+        if (numberEnd <= numberStart)
+        {
+            return 0;
+        }
+
+        string numberText = text.Substring(numberStart, numberEnd - numberStart);
+
+        int quantity = 0;
+
+        if (Int32.TryParse(numberText, out quantity))
+        {
+            return quantity;
+        }
+
+        return 0;
+    }
+
+    private string ExtractJsonObjectForKey(string json, string key)
+    {
+        string search = "\"" + key + "\"";
+        int keyIndex = json.IndexOf(search, StringComparison.OrdinalIgnoreCase);
+
+        if (keyIndex < 0)
+        {
+            return "";
+        }
+
+        int colonIndex = json.IndexOf(":", keyIndex);
+
+        if (colonIndex < 0)
+        {
+            return "";
+        }
+
+        int objectStart = json.IndexOf("{", colonIndex);
+
+        if (objectStart < 0)
+        {
+            return "";
+        }
+
+        int depth = 0;
+
+        for (int i = objectStart; i < json.Length; i++)
+        {
+            if (json[i] == '{')
+            {
+                depth++;
+            }
+            else if (json[i] == '}')
+            {
+                depth--;
+
+                if (depth == 0)
+                {
+                    return json.Substring(objectStart, i - objectStart + 1);
+                }
+            }
+        }
+
+        return "";
+    }
+}

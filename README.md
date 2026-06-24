@@ -1,0 +1,184 @@
+# CircuitOS
+
+CircuitOS is a configurable Twitch collection-game platform powered by
+Streamer.bot. Circuit Components is the included starter profile, while the
+editor and generated actions support custom games, terminology, collections,
+themes, messages, events, and currencies.
+
+Current application version: **0.6.0.8**
+
+## Current Features
+
+- Weighted Twitch channel-point item redemption
+- Backup-safe viewer inventory with locking and atomic replacement
+- Inventory, missing-item, duplicate, collection, balance, salvage, and
+  leaderboard chat commands
+- One-time collection completion tracking
+- Configurable permanent and date-aware event collections
+- Featured-stream collection boosts
+- Rare-pull and three-identical-pulls odds messages
+- Per-collection item variants (shiny, foil, large, etc.) with independent
+  roll odds, variant-aware chat messages, overlay tags, and simulation
+- Per-collection rarity tiers with independent pull weights, tier-weighted
+  pull logic, Rate Lab tier breakdown, and bulk tier assignment
+- Bulk names/CSV importer with optional tier column
+- Duplicate salvage economy and read-only economy analytics
+- Searchable viewer inspector and Discord role-award queue
+- Pull simulator and Discord-ready patch-note generation
+- Configuration backup, validation, comparison, download, and recovery center
+- Privacy-safe diagnostics report for tester and support workflows
+- Editable branding, terminology, colors, commands, and chat messages
+- Guided first-run setup with generated paste-ready Streamer.bot C# actions
+- Bulk names/CSV importer for permanent and event collections with automatic IDs and preview validation
+- Collapsible, searchable editor designed for large catalogs
+- OBS lower-quarter display for successful pulls
+- Self-contained Windows x64 application with data-free update packages
+- Persistent CircuitOS attribution and official application branding
+- Multiple independent game profiles — each with its own catalog, inventory, branding, and overlay config
+- Switch active profiles from the admin panel without mixing data
+- Auto-migration: existing data moves into the default profile folder on first 0.5 launch
+- Export any active profile as a portable `.circuitmodule` bundle; import modules as new profiles
+- `IDataStore` abstraction layer — data access is interface-driven, making the 0.7 cloud migration a swap rather than a rewrite
+
+## Versioning Policy
+
+CircuitOS uses intentional pre-release versioning:
+
+- **0.3.x** releases contain UI improvements, performance work, bug fixes,
+  documentation, and packaging changes. They do not intentionally change the
+  saved-data contract or introduce a major new workflow.
+- **0.5, 0.6, 0.7 and later milestones** each represent a major feature area.
+  Work within a milestone uses a four-part version: **0.5.1**, **0.5.1.1**,
+  **0.5.1.2**, etc. The third part is a sub-feature; the fourth is an iteration
+  within that sub-feature. The milestone number (second part) only advances when
+  the current milestone is fully satisfactory — not on a fixed schedule.
+- **1.0** is reserved for the signed, stable public release after feature freeze,
+  migration testing, installer/update testing, and release-candidate validation.
+- **2.0** is reserved for the Shop and Currency Workshop architecture.
+
+Application version, data-schema version, and Streamer.bot integration version
+are tracked separately. A UI release does not automatically change the data or
+integration version. The application version string lives in five places that
+must be updated together when cutting a release: `CircuitOS.Runtime.csproj`
+(`<Version>`/`<FileVersion>`/`<AssemblyVersion>`), `Program.cs` (`/api/health`),
+`CircuitService.Core.cs` (`integrationVersion`), `CircuitService.Modules.cs`
+(`circuitosVersion`), and this `README.md`.
+
+## Roadmap
+
+### 0.3.x - Stabilization
+
+- Continue tester-driven UI, accessibility, performance, and bug fixes
+- Keep large catalogs responsive and reduce setup friction
+- Harden packaging, recovery, diagnostics, and update documentation
+
+### 0.4 - Lower-Third Editor *(complete as of 0.4.6)*
+
+- Panel background image with configurable opacity
+- Customizable text labels and badge copy
+- Accent color, position, sizing, and animation controls
+- Live 1920×1080 preview in the admin panel
+- Image upload and persistent overlay configuration
+
+### 0.5 - Profiles and Modules *(complete as of 0.5.0.1)*
+
+- Multiple independent collection games from one installation ✓
+- Each profile has its own catalog, viewer inventory, branding, and overlay settings ✓
+- Switch active profiles from the admin panel ✓
+- Migration path: existing data auto-moves into the default profile folder on first launch ✓
+- Export any active profile as a portable `.circuitmodule` bundle; import as new profiles ✓
+- Profile create, rename, and delete ✓
+- `IDataStore` abstraction layer — all data access routed through a swappable interface ✓
+
+### 0.6 - Item Variants and Rarity Tiers *(complete as of 0.6.0.6)*
+
+- Per-collection weighted variants such as shiny, foil, large, small, or
+  alternate art — up to two variant tags per pull, independent rolls ✓
+- Variant-aware odds, optional variant chat message, overlay tags, and
+  simulation ✓
+- Per-collection rarity tiers with independent pull weights; items assigned to
+  a tier; tier-weighted pull logic in the Streamer.bot action ✓
+- Rate Lab tier breakdown panel and tier-aware pull simulation ✓
+- Bulk tier assignment (assign-all / assign-unassigned) and CSV tier column ✓
+- Backward-compatible catalog rules — `variants` and `tiers` are optional and
+  absent collections behave exactly as before ✓
+
+### 0.7 - Cloud Platform + Twitch Integration *(in progress — cloud data + Twitch auth working in a desktop bridge)*
+
+*CircuitOS transitions from a local Windows app to a hosted web platform in this release.*
+
+**Progress (unreleased; default behavior remains local and unchanged):** the data layer now runs
+on Appwrite behind a `--cloud` switch — the app reads/writes its catalog, profile, and inventory
+from the cloud, with cloud profile management and a backup recovery point. Twitch OAuth login/logout
+works in-app, keying the data to the streamer's real Twitch account. The shared pull engine for the
+native EventSub path is built and tested. Still to come: native EventSub redemptions + reward
+creation, hosted admin/overlay, and folding the cloud switch into a shipped release. See
+`docs/0.7-cloud-foundation.md`.
+
+- Data migrates from local JSON files to Appwrite (database, file storage, auth)
+- Streamers log in with Twitch OAuth — no local app install required
+- **Native Twitch is the one-stop shop: zero-config, no code to paste.** CircuitOS
+  creates and manages the channel-point reward via the Twitch API and handles
+  redemptions through EventSub webhooks — the streamer just logs in
+- Streamer.bot remains supported as an *optional* alternative (MixItUp planned for
+  0.8); they forward to the same shared pull logic and are never required
+- Admin panel accessible from any browser on any device
+- OBS overlay served from a cloud URL
+
+### 0.8 - Additional Bot Support
+
+- MixItUp Bot integration alongside Streamer.bot and native Twitch EventSub
+- Shared platform-neutral collection rules where practical
+
+### 0.9 - Release Candidate
+
+- Feature freeze and migration coverage
+- Fresh-install and update-matrix testing
+- Onboarding, diagnostics, recovery, and documentation review
+- Signing and public-release preparation
+
+### 1.0 - Signed Stable Release
+
+- Trusted signed executable and release artifacts
+- Stable compatibility promises for saved data and supported integrations
+- Public installation, update, recovery, and support workflow
+
+### 2.0 - Shop and Currency Workshop
+
+- Configurable currencies and earning rules
+- Shops, purchases, perks, and inventory-backed rewards
+- Optional gambling and other currency sinks
+- Discord roles, titles, and additional fulfillment workflows
+- Economy controls, audit history, and abuse safeguards
+
+## Important Files
+
+- `data/components.json`: master collection catalog
+- `data/inventory.json`: viewer inventory save file
+- `data/system-profile.template.json`: portable branding profile template
+- `streamerbot-actions/`: paste-ready Streamer.bot C# source
+- `tools/admin/`: administration interface and local runtime
+- `tools/runtime/`: .NET application source
+- `tools/package/`: repeatable release, update, and signing scripts
+- `dist/CircuitOS-Release/`: inspectable fresh-install package
+- `dist/CircuitOS-Windows-x64.zip`: send-ready fresh-install archive
+- `dist/CircuitOS-Update-<version>.zip`: data-free update archive
+- `overlays/lower-quarter/`: OBS lower-quarter source
+- `docs/`: setup, operation, safety, and feature documentation
+
+For a safe manual UI and patch-fix workflow, see
+`docs/maintainer-quick-fixes.md`.
+
+## Safety Principles
+
+- Never overwrite `inventory.json` without first creating a backup.
+- Keep inventory writes locked, validated, and atomic.
+- Keep the administration API bound to `127.0.0.1`.
+- Validate catalog IDs, weights, event windows, salvage values, and boost
+  references before saving.
+- Keep update packages free of user data.
+- Do not advise users to disable antivirus protection.
+- Sign public 1.0+ releases and timestamp the signature.
+
+See `docs/distribution-and-streamerbot-setup.md` for installation and update
+instructions, and `docs/release-signing.md` for the signing workflow.

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="..\runtime\JsonUtil.cs" Link="JsonUtil.cs" />
+    <Compile Include="..\runtime\IDataStore.cs" Link="IDataStore.cs" />
+    <Compile Include="..\runtime\LocalFileDataStore.cs" Link="LocalFileDataStore.cs" />
+    <Compile Include="..\runtime\PullEngine.cs" Link="PullEngine.cs" />
+    <Compile Include="..\runtime\AppwriteOptions.cs" Link="AppwriteOptions.cs" />
+    <Compile Include="..\runtime\TwitchOptions.cs" Link="TwitchOptions.cs" />
+    <Compile Include="..\runtime\CircuitService.Core.cs" Link="CircuitService.Core.cs" />
+    <Compile Include="..\runtime\CircuitService.Backups.cs" Link="CircuitService.Backups.cs" />
+    <Compile Include="..\runtime\CircuitService.AnalyticsRoles.cs" Link="CircuitService.AnalyticsRoles.cs" />
+  </ItemGroup>
+</Project>

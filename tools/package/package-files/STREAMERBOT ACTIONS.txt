@@ -1,0 +1,9 @@
+CIRCUITOS STREAMER.BOT ACTION SOURCES
+=====================================
+
+These files are templates used by the Streamer.bot Setup page inside CircuitOS.
+They are included so CircuitOS can generate personalized, paste-ready C# with
+the correct Data path, commands, terminology, and chat messages.
+
+For installation, launch CircuitOS and use Streamer.bot Setup. Do not paste the
+template files directly unless you are intentionally maintaining the source.

@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "enabled": true,
+  "layout": {
+    "position": "bottom-center",
+    "width": 1500,
+    "minHeight": 178,
+    "offsetX": 0,
+    "offsetY": 54
+  },
+  "timing": {
+    "displaySeconds": 8,
+    "enterMilliseconds": 620,
+    "exitMilliseconds": 430
+  },
+  "appearance": {
+    "backgroundColor": "#00101f",
+    "panelColor": "#06233e",
+    "accentColor": "#ff1821",
+    "textColor": "#f8fbff",
+    "mutedColor": "#8094ad",
+    "backgroundImage": "",
+    "backgroundOpacity": 0.98
+  },
+  "typography": {
+    "fontFamily": "Segoe UI"
+  },
+  "content": {
+    "showCollection": true,
+    "showProgress": true,
+    "showCircuitOSBranding": true
+  },
+  "animation": {
+    "style": "slide"
+  },
+  "labels": {
+    "eyebrow": "CIRCUIT SCAN",
+    "componentAcquired": "COMPONENT ACQUIRED",
+    "collectionProgress": "COLLECTION PROGRESS",
+    "newItem": "NEW COMPONENT",
+    "collectionComplete": "COLLECTION COMPLETE",
+    "duplicate": "DUPLICATE"
+  }
+}

@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>CircuitOS</AssemblyName>
+    <RootNamespace>CircuitOS.Runtime</RootNamespace>
+    <Version>0.6.0.8</Version>
+    <FileVersion>0.6.0.8</FileVersion>
+    <AssemblyVersion>0.6.0.8</AssemblyVersion>
+    <Description>CircuitOS collection game administration</Description>
+    <Company>CircuitOS</Company>
+    <Product>CircuitOS</Product>
+    <Copyright>Copyright CircuitOS</Copyright>
+    <ApplicationIcon>CircuitOS.ico</ApplicationIcon>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Appwrite" Version="5.1.0" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3650.58" />
+  </ItemGroup>
+  <Target Name="RemoveUnusedWebView2WpfReference" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Reference.Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
+</Project>

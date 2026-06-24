@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "gameName": "Circuit Components",
+  "adminName": "CircuitOS Control Core",
+  "brandKicker": "CIRCUITOS",
+  "itemSingular": "component",
+  "itemPlural": "components",
+  "collectionSingular": "collection",
+  "collectionPlural": "collections",
+  "currencyName": "Scrap",
+  "redemptionName": "Circuit Component",
+  "redeemCooldownSeconds": 120,
+  "redeemDupProtectionTurns": 0,
+  "commands": {
+    "inventory": "components",
+    "missing": "missing",
+    "duplicates": "dupes",
+    "leaderboard": "leaderboard",
+    "balance": "scrap",
+    "collection": "collection",
+    "salvage": "salvage"
+  },
+  "messages": {
+    "redeemSuccess": "⚡ Scan complete: @{viewer} found {item} [{collection}]. Progress: {owned}/{total}.{duplicateText}",
+    "rarePull": "{rareLabel}: @{viewer} pulled {item}! Current odds: about 1 in {odds}.",
+    "triplePull": "TRIPLE MATCH: @{viewer} pulled {item} three times in a row! Sequence odds: about 1 in {odds}.",
+    "collectionComplete": "✅ COLLECTION COMPLETE: @{viewer} completed {collection}!",
+    "noInventory": "@{viewer} you don't have any {itemPlural} yet. Redeem {redemption} to start your {collectionSingular}.",
+    "balance": "@{viewer} {currency} balance: {balance}.",
+    "noDuplicates": "@{viewer} you don't have any duplicate {itemPlural} yet.",
+    "collectionUsage": "@{viewer} usage: !{collectionCommand} <{collectionSingular}>",
+    "collectionSummary": "@{viewer} {collection}: {owned}/{total} | {status}{availability}",
+    "salvageUsage": "@{viewer} usage: !{salvageCommand} <{collectionSingular}> or !{salvageCommand} all",
+    "nothingToSalvage": "@{viewer} you have no extra copies to salvage in {selection}.",
+    "salvageSuccess": "@{viewer} salvaged {count} extra {itemWord} for {earned} {currency}. Balance: {balance}."
+  },
+  "colors": {
+    "background": "#000d19",
+    "panel": "#061a2b",
+    "panelAlt": "#092239",
+    "line": "#193a55",
+    "accent": "#ff1a24",
+    "text": "#eef5fb",
+    "muted": "#8295a8"
+  }
+}

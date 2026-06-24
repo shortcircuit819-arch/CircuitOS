@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Circuit Components Lower Quarter</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main id="tracker" class="tracker" aria-live="polite" aria-hidden="true">
+    <div class="edge-glow"></div>
+    <div class="circuit-mark" aria-hidden="true">
+      <span class="node node-a"></span>
+      <span class="node node-b"></span>
+      <span class="node node-c"></span>
+      <span class="trace trace-a"></span>
+      <span class="trace trace-b"></span>
+    </div>
+
+    <section class="identity">
+      <div class="eyebrow">CIRCUIT SCAN</div>
+      <div id="viewerName" class="viewer-name">Viewer</div>
+      <div id="collectionName" class="collection-name">Collection</div>
+    </section>
+
+    <section class="pull-details">
+      <div class="pull-heading">
+        <div>
+          <div class="label">COMPONENT ACQUIRED</div>
+          <div id="partName" class="part-name">Component</div>
+        </div>
+        <div id="statusBadge" class="status-badge">NEW COMPONENT</div>
+      </div>
+
+      <div class="progress-copy">
+        <span>COLLECTION PROGRESS</span>
+        <strong id="progressText">0 / 0</strong>
+      </div>
+      <div class="progress-track">
+        <div id="progressBar" class="progress-bar"></div>
+      </div>
+
+      <div id="tags" class="tags"></div>
+    </section>
+  </main>
+
+  <script src="overlay.js"></script>
+</body>
+</html>
