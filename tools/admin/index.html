@@ -179,7 +179,7 @@ Item Three</textarea></label>
         </div>
       </div>
       <div class="import-footer">
-        <span>Applying changes updates the editor only. Save Catalog still requires confirmation and creates backups.</span>
+        <span>Applying changes updates the editor only. Saving still requires confirmation and creates backups.</span>
         <div class="import-footer-actions">
           <button id="cancelEventImportButton" class="button secondary" type="button">Cancel</button>
           <button id="skipEventImportButton" class="button secondary" type="button" hidden>Skip Errors</button>
@@ -260,7 +260,7 @@ Item Three</textarea></label>
         </div>
       </div>
       <div class="import-footer">
-        <span>Applying changes updates the editor only. Save Catalog still requires confirmation and creates backups.</span>
+        <span>Applying changes updates the editor only. Saving still requires confirmation and creates backups.</span>
         <div class="import-footer-actions">
           <button id="cancelCollectionImportButton" class="button secondary" type="button">Cancel</button>
           <button id="skipCollectionImportButton" class="button secondary" type="button" hidden>Skip Errors</button>
@@ -297,6 +297,7 @@ Item Three</textarea></label>
           <summary>Configure</summary>
           <div class="nav-group-items">
             <button class="nav-button" data-view="branding">Game Profile</button>
+            <button class="nav-button" data-view="appearance">Appearance</button>
             <button class="nav-button" data-view="overlay">Overlay Editor</button>
             <button class="nav-button" data-view="messages">Messages</button>
           </div>
@@ -304,7 +305,7 @@ Item Three</textarea></label>
         <details class="nav-group" id="collectionsNav">
           <summary>Catalog</summary>
           <div class="nav-group-items">
-            <button class="nav-button" data-view="collections">Collections</button>
+            <button class="nav-button" data-view="collections">Main Collections</button>
             <button class="nav-button" data-view="events">Events</button>
             <button class="nav-button" data-view="boost">Featured Boost</button>
           </div>
@@ -346,10 +347,10 @@ Item Three</textarea></label>
         </div>
         <div class="top-actions">
           <input id="importFile" type="file" accept="application/json" hidden>
-          <button id="importButton" class="button secondary">Import Catalog</button>
-          <button id="exportButton" class="button secondary">Export Catalog</button>
-          <button id="reloadButton" class="button secondary" title="Reload configuration, profile, inventory analytics, roles, and backups from disk">Refresh Live Data</button>
-          <button id="saveButton" class="button primary">Save Catalog</button>
+          <button id="importButton" class="button secondary">Import</button>
+          <button id="exportButton" class="button secondary">Export</button>
+          <button id="reloadButton" class="button secondary" title="Reload everything from disk (catalog, profile, viewers, roles, backups)">Refresh</button>
+          <button id="saveButton" class="button primary">Save</button>
         </div>
       </header>
 
@@ -368,7 +369,7 @@ Item Three</textarea></label>
             <p class="profile-help">These labels change the administration experience and generated Streamer.bot code without changing stable data keys.</p>
             <div class="profile-fields">
               <label class="field"><span>Game name</span><input id="profileGameName" type="text" maxlength="80"></label>
-              <label class="field"><span>Admin name</span><input id="profileAdminName" type="text" maxlength="80"></label>
+              <label class="field"><span>Control panel nickname</span><input id="profileAdminName" type="text" maxlength="80"></label>
               <label class="field"><span>Eyebrow label</span><input id="profileBrandKicker" type="text" maxlength="80" title="Short uppercase phrase shown above panel titles, e.g. CIRCUITOS"></label>
               <label class="field"><span>Redemption name</span><input id="profileRedemptionName" type="text" maxlength="80"></label>
               <label class="field"><span>Item singular</span><input id="profileItemSingular" type="text" maxlength="80"></label>
@@ -381,11 +382,9 @@ Item Three</textarea></label>
             </div>
             <div class="subsection-title">Chat commands</div>
             <div id="profileCommands" class="command-grid"></div>
-            <div class="subsection-title">Theme colors</div>
-            <div id="profileColors" class="color-grid"></div>
             <div class="profile-actions">
               <button id="resetProfileButton" class="button secondary">Circuit Defaults</button>
-              <button id="saveProfileButton" class="button primary">Save System Profile</button>
+              <button id="saveProfileButton" class="button primary">Save Profile</button>
             </div>
           </article>
 
@@ -404,7 +403,39 @@ Item Three</textarea></label>
               <p id="previewTerminology"></p>
             </div>
             <div class="profile-preview-message" id="previewMessage"></div>
-            <p class="profile-path">Profile location:<br><code id="profilePath"></code></p>
+          </article>
+        </div>
+      </section>
+
+      <section id="appearanceView" class="view">
+        <div class="branding-layout">
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">APPEARANCE</div>
+                <h2>Theme Colors</h2>
+              </div>
+              <span id="appearanceStatus" class="metric-chip"></span>
+            </div>
+            <p class="profile-help">These colors style the control panel. They save together with your game profile.</p>
+            <div id="profileColors" class="color-grid"></div>
+            <div class="profile-actions">
+              <button id="saveAppearanceButton" class="button primary">Save Appearance</button>
+            </div>
+          </article>
+
+          <article class="panel profile-preview-panel">
+            <div class="panel-kicker">LIVE PREVIEW</div>
+            <p class="profile-help">The whole panel restyles as you pick colors.</p>
+            <div class="profile-preview-card">
+              <strong>Sample panel</strong>
+              <p>Headings, body text, and muted captions use your Text and Muted colors.</p>
+            </div>
+            <div class="profile-preview-message">@Viewer found a new item! Balance: 25.</div>
+            <div class="profile-actions">
+              <button type="button" class="button primary">Accent button</button>
+              <button type="button" class="button secondary">Secondary</button>
+            </div>
           </article>
         </div>
       </section>
@@ -451,6 +482,17 @@ Item Three</textarea></label>
 
       <section id="overviewView" class="view active">
         <div id="stats" class="stats-grid overview-stats"></div>
+
+        <article class="panel overview-action-panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-kicker">NEEDS ATTENTION</div>
+              <h2>Action Center</h2>
+            </div>
+          </div>
+          <div id="actionCenter" class="action-list"></div>
+        </article>
+
         <div class="overview-grid">
           <article class="panel">
             <div class="panel-header">
@@ -469,12 +511,12 @@ Item Three</textarea></label>
           <article class="panel">
             <div class="panel-header">
               <div>
-                <div class="panel-kicker">SYSTEM CHECK</div>
-                <h2>Configuration Health</h2>
+                <div class="panel-kicker">CATALOG REACH</div>
+                <h2 id="collectionHealthTitle">Collection Health</h2>
               </div>
-              <button id="downloadDiagnosticsButton" class="button small">Download Diagnostics</button>
+              <button id="editCollectionsButton" class="button small" data-jump-view="collections">Edit Collections</button>
             </div>
-            <div id="healthList" class="health-list"></div>
+            <div id="overviewCollections" class="health-table"></div>
           </article>
         </div>
 
@@ -512,25 +554,15 @@ Item Three</textarea></label>
             <div id="overviewLeaders" class="leader-list compact-list"></div>
           </article>
 
-          <article class="panel dashboard-wide">
+          <article id="systemCheckPanel" class="panel">
             <div class="panel-header">
               <div>
-                <div class="panel-kicker">CATALOG REACH</div>
-                <h2 id="collectionHealthTitle">Collection Health</h2>
+                <div class="panel-kicker">SYSTEM CHECK</div>
+                <h2>Configuration Health</h2>
               </div>
-              <button id="editCollectionsButton" class="button small" data-jump-view="collections">Edit Collections</button>
+              <button id="downloadDiagnosticsButton" class="button small">Download Diagnostics</button>
             </div>
-            <div id="overviewCollections" class="health-table"></div>
-          </article>
-
-          <article class="panel">
-            <div class="panel-header">
-              <div>
-                <div class="panel-kicker">ATTENTION</div>
-                <h2>Action Center</h2>
-              </div>
-            </div>
-            <div id="actionCenter" class="action-list"></div>
+            <div id="healthList" class="health-list"></div>
           </article>
         </div>
       </section>
@@ -826,6 +858,7 @@ Item Three</textarea></label>
         </div>
 
         <div class="overlay-editor-layout">
+          <div class="overlay-editor-col">
           <div class="panel overlay-preview-panel">
             <div class="panel-header">
               <div>
@@ -844,8 +877,7 @@ Item Three</textarea></label>
             </div>
           </div>
 
-          <div class="overlay-editor-panels">
-            <article class="panel obs-source-panel">
+          <article class="panel obs-source-panel">
               <div class="panel-kicker">OBS SETUP</div>
               <h2>Browser Source</h2>
               <p class="panel-note">In OBS, add a <strong>Browser Source</strong>. Enable <strong>Local file</strong> and navigate to this path:</p>
@@ -867,7 +899,9 @@ Item Three</textarea></label>
               <h2>Appearance</h2>
               <div class="overlay-field-grid" id="overlayAppearanceFields"></div>
             </article>
+          </div>
 
+          <div class="overlay-editor-col">
             <article class="panel">
               <div class="panel-kicker">TIMING</div>
               <h2>Display &amp; Animation</h2>

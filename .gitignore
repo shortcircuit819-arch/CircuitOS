@@ -17,3 +17,6 @@ appwrite.local.json
 # Local secrets — Twitch OAuth app credentials + cached tokens (NEVER commit)
 twitch.local.json
 twitch-tokens.local.json
+
+# Local dev-preview config (machine-specific absolute paths)
+.claude/launch.json

@@ -9,10 +9,11 @@ const viewTitles = {
   ratelab: "Rate Lab",
   patchnotes: "Patch Notes",
   backups: "Backup & Recovery",
-  collections: "Permanent Collections",
+  collections: "Main Collections",
   events: "Event Collections",
   boost: "Featured Boost",
   overlay: "Overlay Editor",
+  appearance: "Appearance",
   profiles: "Profiles"
 };
 
@@ -158,12 +159,12 @@ function clearNotice() {
 
 function markDirty() {
   dirty = true;
-  saveButton.textContent = "Save Catalog *";
+  saveButton.textContent = "Save *";
 }
 
 function markClean() {
   dirty = false;
-  saveButton.textContent = "Save Catalog";
+  saveButton.textContent = "Save";
 }
 
 function normalizeProfile(value) {
@@ -290,7 +291,7 @@ function applySystemProfile() {
   document.getElementById("activeProfileGame").textContent = systemProfile.gameName;
   document.getElementById("activeProfileAdmin").textContent = systemProfile.adminName;
   document.querySelector('[data-view="economy"]').textContent = `${systemProfile.currencyName} Economy`;
-  document.querySelector('[data-view="collections"]').textContent = titleCase(systemProfile.collectionPlural);
+  document.querySelector('[data-view="collections"]').textContent = `Main ${titleCase(systemProfile.collectionPlural)}`;
   document.querySelector('[data-view="events"]').textContent = `Event ${titleCase(systemProfile.collectionPlural)}`;
   const collectionsGroupSummary = document.querySelector("#collectionsNav > summary");
   if (collectionsGroupSummary) collectionsGroupSummary.textContent = titleCase(systemProfile.collectionPlural);
@@ -322,7 +323,7 @@ function titleCase(value) {
 
 function getViewTitle(view) {
   if (view === "economy") return `${systemProfile.currencyName} Economy`;
-  if (view === "collections") return `Permanent ${titleCase(systemProfile.collectionPlural)}`;
+  if (view === "collections") return `Main ${titleCase(systemProfile.collectionPlural)}`;
   if (view === "events") return `Event ${titleCase(systemProfile.collectionPlural)}`;
   return viewTitles[view] || systemProfile.adminName;
 }
@@ -402,7 +403,6 @@ function renderProfile() {
     label.append(wrapper);
     commandGrid.append(label);
   }
-  document.getElementById("profilePath").textContent = `${dataPath}\\system-profile.json`;
   renderProfilePreview();
   updateProfileStatus();
 }
@@ -420,7 +420,11 @@ function updateProfileStatus() {
   const status = document.getElementById("profileStatus");
   status.textContent = profileDirty ? "UNSAVED" : profileConfigured ? "CONFIGURED" : "USING DEFAULTS";
   status.className = `metric-chip ${profileDirty ? "warning" : profileConfigured ? "valid" : ""}`.trim();
-  document.getElementById("saveProfileButton").textContent = profileDirty ? "Save System Profile *" : "Save System Profile";
+  document.getElementById("saveProfileButton").textContent = profileDirty ? "Save Profile *" : "Save Profile";
+  const appearanceStatus = document.getElementById("appearanceStatus");
+  if (appearanceStatus) { appearanceStatus.textContent = status.textContent; appearanceStatus.className = status.className; }
+  const saveAppearance = document.getElementById("saveAppearanceButton");
+  if (saveAppearance) saveAppearance.textContent = profileDirty ? "Save Appearance *" : "Save Appearance";
 }
 
 function updateProfileFromInputs() {
@@ -503,7 +507,11 @@ function validateMessageTemplate(key, template) {
   const definition = messageDefinitions[key];
   const errors = [];
   const value = String(template || "");
-  if (!value.trim()) errors.push("Message cannot be empty.");
+  if (!value.trim()) {
+    // Optional messages (e.g. the variant-pull line) are allowed to be blank.
+    if (!definition.optional) errors.push("Message cannot be empty.");
+    return [...new Set(errors)];
+  }
   if (value.length > 450) errors.push("Message cannot exceed 450 characters.");
   for (const match of value.matchAll(/\{([a-zA-Z][a-zA-Z0-9]*)\}/g)) {
     if (!definition.placeholders.includes(match[1])) errors.push(`Unsupported placeholder ${match[0]}.`);
@@ -1098,7 +1106,7 @@ async function refreshLiveData() {
     showNotice(error.message, "error");
   } finally {
     button.disabled = false;
-    button.textContent = "Refresh Live Data";
+    button.textContent = "Refresh";
   }
 }
 
@@ -3706,9 +3714,13 @@ function scaleOverlayPreview() {
   const frame = document.getElementById("overlayPreviewFrame");
   if (!wrap || !frame) return;
   const scale = wrap.clientWidth / 1920;
-  frame.style.transform = `scale(${scale})`;
+  // The overlay is a lower-third, so most of the 1080-tall canvas is empty transparent space.
+  // Reveal only the bottom band (full width) and crop the empty area above, so the overlay fills
+  // the frame and is readable instead of a thin strip in a full 16:9 preview.
+  const visibleBand = 420; // px of the 1080 canvas to show, anchored to the bottom
   frame.style.transformOrigin = "top left";
-  wrap.style.height = `${1080 * scale}px`;
+  frame.style.transform = `translateY(${-scale * (1080 - visibleBand)}px) scale(${scale})`;
+  wrap.style.height = `${visibleBand * scale}px`;
 }
 
 async function saveOverlayConfig() {
@@ -3830,6 +3842,7 @@ for (const id of ["profileGameName", "profileAdminName", "profileBrandKicker", "
   document.getElementById(id).addEventListener("input", updateProfileFromInputs);
 }
 document.getElementById("saveProfileButton").addEventListener("click", saveSystemProfile);
+document.getElementById("saveAppearanceButton").addEventListener("click", saveSystemProfile);
 document.getElementById("resetProfileButton").addEventListener("click", resetSystemProfile);
 document.getElementById("regenerateSetupButton").addEventListener("click", () => generateStreamerBotSetup().catch(error => showNotice(error.message, "error")));
 document.getElementById("saveMessagesButton").addEventListener("click", saveSystemProfile);
