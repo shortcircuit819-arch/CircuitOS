@@ -208,6 +208,111 @@ internal sealed partial class CircuitService
         });
     }
 
+    public ServiceResult DispatchRuntimeAction(JsonObject request)
+    {
+        var action = JsonUtil.String(request, "action");
+        if (string.IsNullOrWhiteSpace(action)) return Error(["Runtime action is required."]);
+
+        var profileId = ResolveRuntimeProfileId(request);
+        if (string.IsNullOrWhiteSpace(profileId)) return Error(["No live profile is available to run this action."]);
+
+        var profile = _store.ReadProfileData(profileId, DataKeys.Profile);
+        if (profile is null) return Error([$"Profile '{profileId}' does not have a system profile."]);
+
+        var commands = JsonUtil.Object(profile, "commands") ?? new JsonObject();
+        var inventory = _store.ReadProfileData(profileId, DataKeys.Inventory) ?? new JsonObject();
+        var catalog = _store.ReadProfileData(profileId, DataKeys.Catalog);
+        var boost = _store.ReadProfileData(profileId, DataKeys.Boost) ?? new JsonObject();
+        if (catalog is null) return Error([$"Profile '{profileId}' does not have a catalog."]);
+
+        var messages = JsonUtil.Object(profile, "messages") ?? new JsonObject();
+        var ctx = new CommandContext(
+            JsonUtil.String(profile, "gameName"),
+            JsonUtil.String(profile, "itemSingular"),
+            JsonUtil.String(profile, "itemPlural"),
+            JsonUtil.String(profile, "collectionSingular"),
+            JsonUtil.String(profile, "redemptionName"),
+            JsonUtil.String(profile, "currencyName"),
+            JsonUtil.String(commands, "collection"),
+            JsonUtil.String(commands, "salvage"),
+            JsonUtil.String(messages, "noInventory"),
+            JsonUtil.String(messages, "balance"),
+            JsonUtil.String(messages, "noDuplicates"),
+            JsonUtil.String(messages, "collectionUsage"),
+            JsonUtil.String(messages, "collectionSummary"),
+            JsonUtil.String(messages, "salvageUsage"),
+            JsonUtil.String(messages, "nothingToSalvage"),
+            JsonUtil.String(messages, "salvageSuccess"));
+
+        var viewerId = JsonUtil.String(request, "viewerId");
+        var viewerName = JsonUtil.String(request, "viewerName");
+        var now = DateTimeOffset.UtcNow;
+        if (string.Equals(action, "command", StringComparison.OrdinalIgnoreCase))
+        {
+            var commandName = JsonUtil.String(request, "command");
+            if (string.IsNullOrWhiteSpace(commandName)) return Error(["Command name is required."]);
+            var targetCommand = ResolveCommandField(commands, commandName);
+            if (string.IsNullOrWhiteSpace(targetCommand)) return Error([$"Command '{commandName}' was not found in profile '{profileId}'."]);
+
+            var result = targetCommand switch
+            {
+                "inventory" => CommandEngine.Inventory(catalog, inventory, ctx, viewerId, viewerName, now),
+                "missing" => CommandEngine.Missing(catalog, inventory, ctx, viewerId, viewerName, now),
+                "duplicates" => CommandEngine.Duplicates(catalog, inventory, ctx, viewerId, viewerName, now),
+                "balance" => [CommandEngine.Balance(inventory, ctx, viewerId, viewerName)],
+                "collection" => CommandEngine.CollectionDetail(catalog, inventory, ctx, viewerId, viewerName, JsonUtil.String(request, "arg"), now),
+                "leaderboard" => CommandEngine.Leaderboard(catalog, inventory, ctx, viewerId, viewerName, JsonUtil.String(request, "arg"), now),
+                "salvage" =>
+                    [CommandEngine.Salvage(catalog, inventory, ctx, viewerId, viewerName, JsonUtil.String(request, "arg")).Message],
+                _ => ["Unsupported command."]
+            };
+            return Ok(new JsonObject
+            {
+                ["ok"] = true,
+                ["action"] = action,
+                ["profileId"] = profileId,
+                ["profileName"] = JsonUtil.String(profile, "gameName"),
+                ["command"] = commandName,
+                ["messages"] = new JsonArray(result.Select(m => JsonValue.Create(m)).ToArray())
+            });
+        }
+
+        if (string.Equals(action, "redeem", StringComparison.OrdinalIgnoreCase))
+        {
+            var rngSeed = JsonUtil.Long(request, "rngSeed");
+            var rng = rngSeed is >= 0 and <= int.MaxValue
+                ? new Random((int)rngSeed)
+                : new Random();
+            var dupProtectionTurns = JsonUtil.Long(request, "dupProtectionTurns");
+            var redemption = RedemptionEngine.ApplyRedemption(
+                catalog,
+                boost is not null ? boost : null,
+                inventory,
+                viewerId,
+                viewerName,
+                now,
+                rng,
+                dupProtectionTurns > 0 ? (int)dupProtectionTurns : 0);
+            WriteProfileData(profileId, DataKeys.Inventory, inventory);
+            return Ok(new JsonObject
+            {
+                ["ok"] = true,
+                ["action"] = action,
+                ["profileId"] = profileId,
+                ["profileName"] = JsonUtil.String(profile, "gameName"),
+                ["collectionKey"] = redemption.CollectionKey,
+                ["collectionName"] = redemption.CollectionName,
+                ["partId"] = redemption.Pull.PartId,
+                ["partName"] = redemption.Pull.DisplayPartName,
+                ["quantity"] = redemption.Quantity,
+                ["newlyCompleted"] = redemption.NewlyCompleted,
+                ["consecutivePullCount"] = redemption.ConsecutivePullCount
+            });
+        }
+
+        return Error([$"Unsupported runtime action '{action}'."]);
+    }
+
     public ServiceResult CompleteFirstRun(JsonObject request)
     {
         if (_store.Exists(DataKeys.Profile)) return Error(["First-run setup has already been completed."], 409);
@@ -471,6 +576,43 @@ internal sealed partial class CircuitService
         foreach (var value in values) array.Add(value);
         return array;
     }
+    private string? ResolveRuntimeProfileId(JsonObject request)
+    {
+        var explicitId = JsonUtil.String(request, "profileId");
+        if (!string.IsNullOrWhiteSpace(explicitId)) return explicitId;
+
+        var action = JsonUtil.String(request, "action");
+        if (string.Equals(action, "command", StringComparison.OrdinalIgnoreCase))
+        {
+            var commandName = JsonUtil.String(request, "command");
+            if (!string.IsNullOrWhiteSpace(commandName))
+            {
+                foreach (var profile in _store.ListProfiles().Where(p => p.IsLive))
+                {
+                    var data = _store.ReadProfileData(profile.Id, DataKeys.Profile);
+                    if (data is null) continue;
+                    var commands = JsonUtil.Object(data, "commands") ?? new JsonObject();
+                    if (ResolveCommandField(commands, commandName) is not null) return profile.Id;
+                }
+            }
+        }
+
+        return _store.ListProfiles().FirstOrDefault(p => p.IsLive)?.Id;
+    }
+
+    private static string? ResolveCommandField(JsonObject commands, string commandName)
+    {
+        foreach (var field in CommandFields)
+            if (string.Equals(JsonUtil.String(commands, field), commandName, StringComparison.OrdinalIgnoreCase))
+                return field;
+        return null;
+    }
+
+    private void WriteProfileData(string profileId, string key, JsonNode value)
+    {
+        _store.ImportProfileData(profileId, new Dictionary<string, JsonNode> { [key] = value });
+    }
+
     private static ServiceResult Ok(JsonObject body) => new(200, body);
     private static ServiceResult Error(IEnumerable<string> errors, int status = 400) => new(status, new JsonObject
     {

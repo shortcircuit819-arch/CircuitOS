@@ -98,6 +98,7 @@ try
     }
 
     TestActiveProfilesAndCollisions(service, store, defaultProfile);
+    TestRuntimeDispatch(service, store);
     TestPullEngine();
     TestRedemptionEngine();
     TestCommandEngine();
@@ -124,35 +125,115 @@ static void TestActiveProfilesAndCollisions(CircuitService service, IDataStore s
 {
     Require(store.ListProfiles().Any(p => p.Id == "default" && p.IsLive), "Default profile should be live after first-run.");
 
-    store.CreateProfile("second", "Second Game");
-    Require(store.ListProfiles().Any(p => p.Id == "second" && !p.IsLive), "New profiles should start inactive.");
-    store.SetProfileActive("second", true);
-    Require(store.ListProfiles().Any(p => p.Id == "second" && p.IsLive), "SetProfileActive(true) should make a profile live.");
-    store.SetProfileActive("second", false);
-    Require(store.ListProfiles().Any(p => p.Id == "second" && !p.IsLive), "SetProfileActive(false) should clear the live flag.");
+    var profileId = "second-" + Guid.NewGuid().ToString("N")[..8];
+    store.CreateProfile(profileId, "Second Game");
+    Require(store.ListProfiles().Any(p => p.Id == profileId && !p.IsLive), "New profiles should start inactive.");
+    store.SetProfileActive(profileId, true);
+    Require(store.ListProfiles().Any(p => p.Id == profileId && p.IsLive), "SetProfileActive(true) should make a profile live.");
+    store.SetProfileActive(profileId, false);
+    Require(store.ListProfiles().Any(p => p.Id == profileId && !p.IsLive), "SetProfileActive(false) should clear the live flag.");
 
-    // Collision: give 'second' the SAME commands as the live default profile, then try to activate it.
+    // Collision: give the new profile the SAME commands as the live default profile, then try to activate it.
     var colliding = JsonUtil.Clone(defaultProfile) as JsonObject ?? throw new InvalidOperationException("Profile clone failed.");
-    store.ImportProfileData("second", new Dictionary<string, JsonNode> { ["profile"] = colliding });
-    var blocked = service.InvokeProfileOperation(new JsonObject { ["operation"] = "activate", ["id"] = "second" });
+    store.ImportProfileData(profileId, new Dictionary<string, JsonNode> { ["profile"] = colliding });
+    var blocked = service.InvokeProfileOperation(new JsonObject { ["operation"] = "activate", ["id"] = profileId });
     Require(blocked.Status != 200, "Activating a profile whose commands collide with a live profile should be blocked.");
-    Require(store.ListProfiles().Any(p => p.Id == "second" && !p.IsLive), "A blocked activation must leave the profile inactive.");
+    Require(store.ListProfiles().Any(p => p.Id == profileId && !p.IsLive), "A blocked activation must leave the profile inactive.");
 
     // Unique commands → activation succeeds.
     var unique = JsonUtil.Clone(defaultProfile) as JsonObject ?? throw new InvalidOperationException("Profile clone failed.");
     var commands = (JsonObject)unique["commands"]!;
     foreach (var key in commands.Select(kv => kv.Key).ToList()) commands[key] = "z" + commands[key]!;
-    store.ImportProfileData("second", new Dictionary<string, JsonNode> { ["profile"] = unique });
-    var allowed = service.InvokeProfileOperation(new JsonObject { ["operation"] = "activate", ["id"] = "second" });
+    store.ImportProfileData(profileId, new Dictionary<string, JsonNode> { ["profile"] = unique });
+    var allowed = service.InvokeProfileOperation(new JsonObject { ["operation"] = "activate", ["id"] = profileId });
     Require(allowed.Status == 200, "Activating a profile with unique commands should succeed.");
-    Require(store.ListProfiles().Any(p => p.Id == "second" && p.IsLive), "Successful activation should make the profile live.");
+    Require(store.ListProfiles().Any(p => p.Id == profileId && p.IsLive), "Successful activation should make the profile live.");
 
-    store.SetProfileActive("second", false);
+    store.SetProfileActive(profileId, false);
     Console.WriteLine("Active profiles + collisions: live flags, activate/deactivate, and the cross-profile command guard all passed.");
 }
 
 // Verifies the shared PullEngine: tier-weighted distribution, variant rate + prefix,
 // dup protection, and equal-odds fallback. Deterministic via seeded RNGs.
+static void TestRuntimeDispatch(CircuitService service, IDataStore store)
+{
+    var profileId = "dispatch-" + Guid.NewGuid().ToString("N")[..8];
+    store.CreateProfile(profileId, "Second Game");
+
+    var defaultProfile = service.GetSystemProfile()["profile"] as JsonObject
+        ?? throw new InvalidOperationException("Default profile was unavailable for runtime-dispatch test.");
+
+    var secondProfile = JsonUtil.Clone(defaultProfile) as JsonObject
+        ?? throw new InvalidOperationException("Second profile clone failed.");
+    var commands = (JsonObject)secondProfile["commands"]!;
+    commands["inventory"] = "shop";
+    commands["missing"] = "missing2";
+    commands["duplicates"] = "dupes2";
+    commands["leaderboard"] = "board2";
+    commands["balance"] = "scrap2";
+    commands["collection"] = "collection2";
+    commands["salvage"] = "salvage2";
+    secondProfile["gameName"] = "Second Game";
+
+    var catalog = new JsonObject
+    {
+        ["collections"] = new JsonObject
+        {
+            ["starter"] = new JsonObject
+            {
+                ["displayName"] = "Starter Collection",
+                ["type"] = "permanent",
+                ["weight"] = 100,
+                ["parts"] = new JsonArray
+                {
+                    new JsonObject { ["id"] = "starter_alpha", ["name"] = "Alpha" },
+                    new JsonObject { ["id"] = "starter_beta", ["name"] = "Beta" }
+                }
+            }
+        }
+    };
+
+    var boost = new JsonObject { ["enabled"] = false, ["displayName"] = "Featured Boost", ["collectionMultipliers"] = new JsonObject() };
+    var inventory = new JsonObject();
+
+    store.ImportProfileData(profileId, new Dictionary<string, JsonNode>
+    {
+        [DataKeys.Profile] = secondProfile,
+        [DataKeys.Catalog] = catalog,
+        [DataKeys.Boost] = boost,
+        [DataKeys.Inventory] = inventory
+    });
+
+    var activate = service.InvokeProfileOperation(new JsonObject { ["operation"] = "activate", ["id"] = profileId });
+    Require(activate.Status == 200, "Second profile should activate for runtime-dispatch test.");
+
+    var commandResult = service.DispatchRuntimeAction(new JsonObject
+    {
+        ["action"] = "command",
+        ["profileId"] = profileId,
+        ["command"] = "shop",
+        ["viewerId"] = "viewer-a",
+        ["viewerName"] = "Viewer A"
+    });
+    Require(commandResult.Status == 200, "Command dispatch should succeed.");
+    Require(commandResult.Body["profileId"]?.ToString() == profileId, "Command dispatch should target the matching live profile.");
+
+    var redeemResult = service.DispatchRuntimeAction(new JsonObject
+    {
+        ["action"] = "redeem",
+        ["profileId"] = profileId,
+        ["viewerId"] = "viewer-b",
+        ["viewerName"] = "Viewer B",
+        ["rngSeed"] = 7
+    });
+    Require(redeemResult.Status == 200, "Redemption dispatch should succeed.");
+    var secondInventory = store.ReadProfileData(profileId, DataKeys.Inventory)
+        ?? throw new InvalidOperationException("Redemption dispatch should write inventory for the selected profile.");
+    Require(secondInventory["viewer-b"] is JsonObject, "Redemption dispatch should create viewer inventory inside the selected profile.");
+
+    Console.WriteLine("Runtime dispatch: command + redemption both resolve to the intended live profile and persist profile-scoped inventory.");
+}
+
 static void TestPullEngine()
 {
     var collection = new JsonObject

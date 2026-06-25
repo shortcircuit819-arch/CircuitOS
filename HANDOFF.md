@@ -476,6 +476,31 @@ cleanly while untangling a mixed commit):
 
 ---
 
+### 2026-06-24 — Claude (claude-opus-4-8) — Sole driver; landed runtime dispatch (item C groundwork)
+
+User asked me to take over as the single driver (parallel Codex sessions stopped) after concurrent edits to
+the same files caused commit collisions. **Lesson reinforced: one agent at a time on shared files.**
+
+**Landed the runtime command/redeem dispatcher** (developed by the Codex session; I fixed its failing test and
+committed it green). `CircuitService.DispatchRuntimeAction(request)` is the native entry point that routes an
+incoming **command** or **redeem** to the **matching live profile** and runs it through the shared engines:
+- `ResolveRuntimeProfileId` picks the target profile — explicit `profileId`, else the live profile whose
+  `commands` own the incoming command word, else the first live profile. This is the multi-active-profile
+  routing (each live game owns its command words / reward).
+- Command → `CommandEngine`; redeem → `RedemptionEngine` (well, the pull path) → writes **profile-scoped**
+  inventory via `WriteProfileData`/`ImportProfileData`. Returns `{profileId, profileName, ...}`.
+- `Program.cs` exposes it on the local HTTP API. New smoke test `TestRuntimeDispatch` exercises both paths.
+- **Bug I fixed:** the test asserted the returned `profileId == "second"` (a stale literal) after randomizing
+  the profile id to `"dispatch-<guid>"` — changed to compare against the actual `profileId`. Dispatch code
+  itself was correct. **Full smoke suite green.**
+
+This is the runtime half of **item C / Phase 4 native routing**: redemptions + chat commands now resolve to
+the right active profile and call the shared engines. Still ahead: the **admin UI** for active profiles
+(toggles, live-vs-editing, per-profile overlay URLs) and wiring the native Twitch EventSub intake to
+`DispatchRuntimeAction`. Unreleased; no version bump.
+
+---
+
 ### 2026-06-24 — Claude (claude-opus-4-8) — Admin UI cleanup pass 3 (UI.md complete)
 
 Finished the Overview interactivity — **`UI.md` is now fully done** (All / Overview / Configure / Collections).

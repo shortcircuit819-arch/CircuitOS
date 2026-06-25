@@ -306,6 +306,8 @@ internal static class Program
                 await SendResultAsync(context, profileResult);
                 if (profileResult.Status == 200) PublishOverlayStatics(overlayPath, overlayDataPath);
             }
+            else if (request.HttpMethod == "POST" && path == "/api/runtime/action")
+                await SendResultAsync(context, service.DispatchRuntimeAction(await ReadBodyAsync(request)));
             else if (request.HttpMethod == "POST" && path == "/api/inventory/reset-viewer")
                 await SendResultAsync(context, service.ResetViewer(await ReadBodyAsync(request)));
             else if (request.HttpMethod == "POST" && path == "/api/inventory/remove-item")
