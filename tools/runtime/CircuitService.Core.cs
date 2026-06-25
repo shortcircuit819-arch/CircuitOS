@@ -279,9 +279,11 @@ internal sealed partial class CircuitService
 
         if (string.Equals(action, "redeem", StringComparison.OrdinalIgnoreCase))
         {
-            var rngSeed = JsonUtil.Long(request, "rngSeed");
-            var rng = rngSeed is >= 0 and <= int.MaxValue
-                ? new Random((int)rngSeed)
+            // Only use a fixed seed when one is explicitly supplied (deterministic tests). A missing
+            // seed must be random — reading it as 0 and seeding Random(0) made every live pull identical.
+            var rng = request["rngSeed"] is JsonValue seedNode
+                && long.TryParse(seedNode.ToString(), out var seed) && seed is >= 0 and <= int.MaxValue
+                ? new Random((int)seed)
                 : new Random();
             var dupProtectionTurns = JsonUtil.Long(request, "dupProtectionTurns");
             var redemption = RedemptionEngine.ApplyRedemption(
