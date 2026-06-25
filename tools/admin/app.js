@@ -1443,12 +1443,33 @@ function renderOverview() {
   chart.replaceChildren();
   for (const row of rates.rows) {
     const wrapper = element("div", "rate-row");
+    wrapper.dataset.collectionKey = row.key;
     wrapper.append(element("div", "rate-name", row.name));
     const track = element("div", "rate-track");
     const fill = element("div", "rate-fill");
     fill.style.width = `${row.percent}%`;
     track.append(fill);
-    wrapper.append(track, element("div", "rate-number", `${row.percent.toFixed(2)}%`));
+    wrapper.append(track);
+    // Inline weight tuning, right on the Overview (mirrors the Rate Lab weight editor).
+    const col = collections.find(c => c.key === row.key);
+    if (col) {
+      const weightInput = document.createElement("input");
+      weightInput.type = "number";
+      weightInput.min = "0";
+      weightInput.step = "0.1";
+      weightInput.className = "weight-input";
+      weightInput.title = "Pull weight — edit to retune the odds";
+      weightInput.value = String(Math.max(0, Number(col.value.weight) || 0));
+      weightInput.addEventListener("input", () => {
+        col.value.weight = Math.max(0, Number(weightInput.value) || 0);
+        markDirty();
+        refreshOverviewRates();
+      });
+      wrapper.append(weightInput);
+    } else {
+      wrapper.append(element("div", ""));
+    }
+    wrapper.append(element("div", "rate-number", `${row.percent.toFixed(2)}%`));
     chart.append(wrapper);
   }
 
@@ -2053,6 +2074,22 @@ function refreshWeightPercentages() {
       lastSimulation = null;
       renderRatelabSimulation();
     }
+  }
+}
+
+// Updates the Overview rate bars + percentages in place (no row rebuild, so the weight
+// input keeps focus while typing).
+function refreshOverviewRates() {
+  const chart = document.getElementById("rateChart");
+  if (!chart) return;
+  const rates = effectiveRates();
+  for (const wrapper of chart.querySelectorAll(".rate-row[data-collection-key]")) {
+    const rate = rates.rows.find(r => r.key === wrapper.dataset.collectionKey);
+    const pct = rate ? rate.percent : 0;
+    const fill = wrapper.querySelector(".rate-fill");
+    const number = wrapper.querySelector(".rate-number");
+    if (fill) fill.style.width = `${pct}%`;
+    if (number) number.textContent = `${pct.toFixed(2)}%`;
   }
 }
 
@@ -3749,6 +3786,24 @@ function switchView(view) {
 
 document.querySelectorAll(".nav-button").forEach(button => button.addEventListener("click", () => switchView(button.dataset.view)));
 document.querySelectorAll("[data-jump-view]").forEach(button => button.addEventListener("click", () => switchView(button.dataset.jumpView)));
+
+// Optional: let the user hide the System Check card from the Overview (persisted locally).
+function applySystemCheckVisibility() {
+  const hidden = localStorage.getItem("circuitos.hideSystemCheck") === "1";
+  const panel = document.getElementById("systemCheckPanel");
+  const showButton = document.getElementById("showSystemCheckButton");
+  if (panel) panel.hidden = hidden;
+  if (showButton) showButton.hidden = !hidden;
+}
+document.getElementById("hideSystemCheckButton").addEventListener("click", () => {
+  localStorage.setItem("circuitos.hideSystemCheck", "1");
+  applySystemCheckVisibility();
+});
+document.getElementById("showSystemCheckButton").addEventListener("click", () => {
+  localStorage.removeItem("circuitos.hideSystemCheck");
+  applySystemCheckVisibility();
+});
+applySystemCheckVisibility();
 document.getElementById("collectionSearch").addEventListener("input", () => renderCollectionList("permanent"));
 document.getElementById("expandCollectionsButton").addEventListener("click", () => {
   for (const collection of collections.filter(item => item.value.type === "permanent")) expandedCollectionKeys.add(collection.key);

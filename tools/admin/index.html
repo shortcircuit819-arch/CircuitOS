@@ -560,11 +560,15 @@ Item Three</textarea></label>
                 <div class="panel-kicker">SYSTEM CHECK</div>
                 <h2>Configuration Health</h2>
               </div>
-              <button id="downloadDiagnosticsButton" class="button small">Download Diagnostics</button>
+              <div class="panel-header-actions">
+                <button id="downloadDiagnosticsButton" class="button small">Download Diagnostics</button>
+                <button id="hideSystemCheckButton" class="button small" type="button" title="Hide this card">Hide</button>
+              </div>
             </div>
             <div id="healthList" class="health-list"></div>
           </article>
         </div>
+        <button id="showSystemCheckButton" class="button secondary small overview-restore" type="button" hidden>Show System Check card</button>
       </section>
 
       <section id="economyView" class="view">

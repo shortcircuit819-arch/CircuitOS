@@ -474,6 +474,28 @@ cleanly while untangling a mixed commit):
 
 ---
 
+### 2026-06-24 — Claude (claude-opus-4-8) — Admin UI cleanup pass 3 (UI.md complete)
+
+Finished the Overview interactivity — **`UI.md` is now fully done** (All / Overview / Configure / Collections).
+Verified live in-browser.
+
+- **Inline pull-rate tuning on the Overview:** each Pull Rates row now has an editable weight input
+  (reuses `.weight-input`), wired to `col.value.weight` + `markDirty` + a new `refreshOverviewRates()` that
+  updates bars/percentages **in place** (no row rebuild, so focus is kept while typing). `.rate-row` grid got a
+  weight column. Shows active collections only (0-weight rows drop out on full re-render, same as the chart).
+- **Hide the System Check card:** a "Hide" button in the card header (`#hideSystemCheckButton`) persists to
+  `localStorage["circuitos.hideSystemCheck"]`; a "Show System Check card" button (`#showSystemCheckButton`,
+  below the dashboard) restores it. `applySystemCheckVisibility()` applies on load.
+
+**Verify-loop gotcha (note for next time):** the headless server **caches static files (index.html) at startup**,
+so `index.html` edits need a **preview server restart** (stop+start), not just `location.reload()` — app.js/CSS
+re-render on reload but the HTML structure won't update until restart.
+
+**Next:** the **active-profiles UI (item C)** — surface the A+B backend (active toggles, live-vs-editing,
+collision errors inline, per-profile overlay URLs, a "what's live" banner). Unreleased; no version bump.
+
+---
+
 ### 2026-06-24 — Claude (claude-opus-4-8) — Admin UI cleanup pass 2 (per UI.md)
 
 Continued the `UI.md` backlog; all verified live in-browser via the headless + preview loop. Finishes
