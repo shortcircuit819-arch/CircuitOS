@@ -294,6 +294,7 @@ internal sealed partial class CircuitService
                 rng,
                 dupProtectionTurns > 0 ? (int)dupProtectionTurns : 0);
             WriteProfileData(profileId, DataKeys.Inventory, inventory);
+            var announcements = BuildRedeemAnnouncements(messages, redemption, viewerName);
             return Ok(new JsonObject
             {
                 ["ok"] = true,
@@ -306,12 +307,55 @@ internal sealed partial class CircuitService
                 ["partName"] = redemption.Pull.DisplayPartName,
                 ["quantity"] = redemption.Quantity,
                 ["newlyCompleted"] = redemption.NewlyCompleted,
-                ["consecutivePullCount"] = redemption.ConsecutivePullCount
+                ["consecutivePullCount"] = redemption.ConsecutivePullCount,
+                ["messages"] = new JsonArray(announcements.Select(m => JsonValue.Create(m)).ToArray())
             });
         }
 
         return Error([$"Unsupported runtime action '{action}'."]);
     }
+
+    // Formats the pull result into chat announcement line(s) using the profile's message templates —
+    // the same set the Streamer.bot redemption action emits (success, rare, triple, complete, variant).
+    // Each template is skipped when blank, so streamers can turn any line off.
+    private static List<string> BuildRedeemAnnouncements(JsonObject messages, RedemptionResult result, string viewerName)
+    {
+        var lines = new List<string>();
+        var item = result.Pull.DisplayPartName;
+        var duplicateText = result.Quantity > 1 ? $" Duplicate count: x{result.Quantity}." : "";
+        if (!string.IsNullOrWhiteSpace(result.ActiveBoostName)) duplicateText += $" Featured boost: {result.ActiveBoostName}.";
+
+        var success = JsonUtil.String(messages, "redeemSuccess");
+        if (!string.IsNullOrWhiteSpace(success))
+            lines.Add(FormatTemplate(success, ("viewer", viewerName), ("item", item), ("collection", result.CollectionName),
+                ("owned", result.OwnedAfter.ToString()), ("total", result.TotalParts.ToString()), ("duplicateText", duplicateText)));
+
+        if (!string.IsNullOrWhiteSpace(result.RareLabel) && JsonUtil.String(messages, "rarePull") is { Length: > 0 } rare)
+            lines.Add(FormatTemplate(rare, ("rareLabel", result.RareLabel), ("viewer", viewerName), ("item", item),
+                ("odds", OneInOdds(result.Pull.Probability))));
+
+        if (result.ConsecutivePullCount == 3 && JsonUtil.String(messages, "triplePull") is { Length: > 0 } triple)
+            lines.Add(FormatTemplate(triple, ("viewer", viewerName), ("item", item), ("odds", OneInOdds(result.StreakSequenceProbability))));
+
+        if (result.NewlyCompleted && JsonUtil.String(messages, "collectionComplete") is { Length: > 0 } complete)
+            lines.Add(FormatTemplate(complete, ("viewer", viewerName), ("collection", result.CollectionName)));
+
+        if (result.Pull.VariantLabels.Count > 0 && JsonUtil.String(messages, "variantPull") is { Length: > 0 } variant)
+            lines.Add(FormatTemplate(variant, ("variantLabels", string.Join(" ", result.Pull.VariantLabels)),
+                ("viewer", viewerName), ("item", result.Pull.PartName), ("collection", result.CollectionName)));
+
+        return lines;
+    }
+
+    private static string FormatTemplate(string template, params (string Key, string Value)[] values)
+    {
+        var result = template;
+        foreach (var (key, value) in values) result = result.Replace("{" + key + "}", value ?? "");
+        return result;
+    }
+
+    private static string OneInOdds(double probability)
+        => probability <= 0 ? "unknown" : Math.Max(1, Math.Round(1.0 / probability)).ToString("N0");
 
     public ServiceResult CompleteFirstRun(JsonObject request)
     {

@@ -476,6 +476,26 @@ cleanly while untangling a mixed commit):
 
 ---
 
+### 2026-06-24 — Claude (claude-opus-4-8) — Phase 4 native Twitch: pull announcements in chat
+
+The redeem dispatch now also returns formatted **announcement lines** (centralized, reusable), and the Twitch
+path sends them to chat after fulfilling. Verified via smoke (`TestRuntimeDispatch` runs a redeem → the
+formatter is exercised; full suite green).
+
+- `CircuitService.BuildRedeemAnnouncements(messages, RedemptionResult, viewerName)` formats the same set the
+  Streamer.bot action emits — `redeemSuccess` (always), `rarePull` (if rareLabel), `triplePull` (streak == 3),
+  `collectionComplete` (newly completed), `variantPull` (if variants + template non-blank). Blank templates are
+  skipped. Helpers `FormatTemplate` + `OneInOdds`. The redeem `ServiceResult` now carries `["messages"]` (like
+  commands do).
+- `TwitchRuntime.HandleRedemption` sends each announcement via `SendChatMessage` after FULFILLED (try/catch,
+  bails quietly if chat scope isn't granted — same `--twitch-login` re-consent as chat commands).
+
+So a redemption now: routes to the live profile → records the pull → fulfils → **announces in chat**. Needs the
+chat-scope re-login (shared with slice 3). **Still ahead:** Twitch status in the admin UI; persist reward↔profile
+map; per-profile reward cost. Unreleased; no version bump.
+
+---
+
 ### 2026-06-24 — Claude (claude-opus-4-8) — Phase 4 native Twitch — slice 3: chat commands
 
 Built (compiles clean; deploy blocked at commit time only because the user's dev build was running and locked

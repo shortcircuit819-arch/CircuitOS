@@ -85,6 +85,18 @@ internal static class TwitchRuntime
             log(fulfilled
                 ? "  -> FULFILLED (pull recorded, inventory saved)."
                 : $"  -> CANCELED (refunded): {ResultErrors(result)}");
+
+            // Announce the pull in chat (needs user:write:chat — same re-login as chat commands).
+            if (fulfilled && result.Body?["messages"] is JsonArray lines)
+            {
+                foreach (var line in lines)
+                {
+                    var announcement = line?.ToString();
+                    if (string.IsNullOrWhiteSpace(announcement)) continue;
+                    try { helix.SendChatMessage(announcement!); }
+                    catch (Exception ex) { log($"  (chat announcement skipped — re-login for chat scopes? {ex.Message})"); break; }
+                }
+            }
         }
         catch (Exception ex)
         {
