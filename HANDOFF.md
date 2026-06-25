@@ -476,6 +476,37 @@ cleanly while untangling a mixed commit):
 
 ---
 
+### 2026-06-24 — Claude (claude-opus-4-8) — Phase 4 native Twitch — slice 1: token refresh + Helix reward
+
+**Started the native zero-config Twitch path.** Decisions (with user): **EventSub over WebSocket** (not
+webhooks) and **redemptions first** (uses existing scopes — no re-login).
+
+**⭐ Roadmap-reshaping decision — EventSub WebSocket:** the app connects *outbound* to
+`wss://eventsub.wss.twitch.tv/ws`, gets a session id, and binds subscriptions to it — **no public endpoint /
+no hosting required.** This means the native Twitch path **runs in the desktop app today**; it does NOT depend
+on the hosted Phase 5 (the old `0.7-cloud-foundation.md` design assumed webhooks → a public Function URL).
+Supersedes that transport choice for the desktop build.
+
+**Slice 1 (built; live-verify is the user's — needs their Twitch token; Helix isn't in the smoke harness):**
+- `TwitchAuth.Refresh(opts, current, dataRoot)` — exchanges the stored refresh token for a fresh access token
+  and re-saves. (No refresh existed; a 4h token would have died mid-stream.)
+- `TwitchSession` (new, `TwitchHelix.cs`) — holds tokens, auto-refreshes ~5 min before expiry, persists.
+  Shared by Helix + (coming) the EventSub socket.
+- `TwitchHelix` (new) — authed Helix wrapper (Bearer + Client-Id, refresh-once-on-401): `EnsureReward`
+  (idempotent create/update of the channel-point reward), `ListManageableRewards`, `UpdateRedemptionStatus`
+  (FULFILLED/CANCELED).
+- `--twitch-reward` diagnostic (`Program.cs`) — creates/updates the reward titled from the active profile's
+  `redemptionName` (cost placeholder 100). **Test:** run it → the reward should appear in your channel's
+  Channel Points.
+
+**Next — slice 2 (the intake):** `TwitchEventSub` WebSocket client — connect, handle welcome/keepalive/reconnect,
+create the `channel.channel_points_custom_reward_redemption.add` subscription (transport=websocket), and on a
+redemption: map reward id → live profile → `DispatchRuntimeAction(redeem)` → `UpdateRedemptionStatus(FULFILLED)`.
+Expose as `--twitch-listen`, then fold into the running app. Then slice 3: chat commands (needs added scopes →
+re-login). Reward id ↔ profile mapping persistence still TODO. Unreleased; no version bump.
+
+---
+
 ### 2026-06-24 — Claude (claude-opus-4-8) — Item C frontend: active-profiles admin UI working
 
 The active-profiles admin UI (built mostly by the Codex session) is now **functional** — verified live with

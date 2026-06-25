@@ -15,7 +15,7 @@ internal sealed record RuntimeOptions(string DataPath, string UiPath, string Act
         for (var index = 0; index < args.Length; index++)
         {
             var arg = args[index];
-            if (arg is "--headless" or "--no-browser" or "--check-appwrite" or "--appwrite-roundtrip" or "--push-to-appwrite" or "--appwrite-profiles" or "--appwrite-backups" or "--twitch-login" or "--cloud") { flags.Add(arg); continue; }
+            if (arg is "--headless" or "--no-browser" or "--check-appwrite" or "--appwrite-roundtrip" or "--push-to-appwrite" or "--appwrite-profiles" or "--appwrite-backups" or "--twitch-login" or "--twitch-reward" or "--cloud") { flags.Add(arg); continue; }
             if (arg.StartsWith("--", StringComparison.Ordinal) && index + 1 < args.Length) values[arg] = args[++index];
         }
 
@@ -104,6 +104,10 @@ internal static class Program
         // caches tokens + the user id (which becomes the cloud tenant).
         if (args.Contains("--twitch-login"))
             return TwitchLogin(options.DataPath, options.Headless);
+
+        // 0.7 Phase 4 (native Twitch): create/update the channel-point reward via Helix and exit.
+        if (args.Contains("--twitch-reward"))
+            return TwitchReward(options.DataPath, options.Headless);
 
         // The local file store is always created: it provides the active profile id and the
         // local folder used to serve the OBS overlay (overlay statics/state stay local even
@@ -732,6 +736,50 @@ internal static class Program
         else
         {
             MessageBox.Show(message, "CircuitOS — Twitch login", MessageBoxButtons.OK,
+                ok ? MessageBoxIcon.Information : MessageBoxIcon.Error);
+        }
+        return ok ? 0 : 1;
+    }
+
+    // 0.7 Phase 4 (native Twitch): create/update the channel-point reward on the logged-in
+    // streamer's channel via Helix, titled from the active profile's redemption name. Proves the
+    // Helix integration (auth + token + reward CRUD) end to end before EventSub is wired.
+    private static int TwitchReward(string dataRoot, bool headless)
+    {
+        string message;
+        var ok = false;
+        try
+        {
+            var opts = TwitchOptions.TryLoad(dataRoot)
+                ?? throw new InvalidOperationException($"No {TwitchOptions.FileName} in {dataRoot}. See docs/0.7-twitch-auth-setup.md.");
+            var tokens = TwitchTokens.TryLoad(dataRoot)
+                ?? throw new InvalidOperationException("Not logged in to Twitch — run --twitch-login first.");
+            var session = new TwitchSession(opts, tokens, dataRoot);
+            var helix = new TwitchHelix(session);
+
+            var profile = new LocalFileDataStore(dataRoot).TryRead(DataKeys.Profile);
+            var title = JsonUtil.String(profile ?? new JsonObject(), "redemptionName");
+            if (string.IsNullOrWhiteSpace(title)) title = "Circuit Component";
+
+            var reward = helix.EnsureReward(title, 100, "Redeem to pull an item with CircuitOS.");
+            ok = true;
+            message = $"Channel-point reward ready on @{session.Login}'s channel.\n\n"
+                + $"Title: {reward.Title}\nCost: {reward.Cost} points\nReward id: {reward.Id}\n\n"
+                + "Open your Twitch channel's Channel Points — you should see this reward. The cost is a "
+                + "placeholder (100) for now and will become configurable. Next slice: --twitch-listen for live redemptions.";
+        }
+        catch (Exception ex)
+        {
+            message = $"Reward setup failed:\n{ex.Message}";
+        }
+
+        if (headless)
+        {
+            if (ok) Console.Out.WriteLine(message); else Console.Error.WriteLine(message);
+        }
+        else
+        {
+            MessageBox.Show(message, "CircuitOS — Twitch reward", MessageBoxButtons.OK,
                 ok ? MessageBoxIcon.Information : MessageBoxIcon.Error);
         }
         return ok ? 0 : 1;

@@ -118,6 +118,34 @@ internal static class TwitchAuth
         return tokens;
     }
 
+    // Exchanges the stored refresh token for a fresh access token (Twitch access tokens last
+    // ~4h, so a long stream needs this). Returns updated tokens and re-saves them. Throws if
+    // the refresh token is no longer valid (the user must log in again).
+    public static TwitchTokens Refresh(TwitchOptions opts, TwitchTokens current, string dataRoot)
+    {
+        if (string.IsNullOrWhiteSpace(current.RefreshToken))
+            throw new InvalidOperationException("No Twitch refresh token on file — please log in again.");
+        var token = PostForm("https://id.twitch.tv/oauth2/token", new Dictionary<string, string>
+        {
+            ["client_id"] = opts.ClientId,
+            ["client_secret"] = opts.ClientSecret,
+            ["grant_type"] = "refresh_token",
+            ["refresh_token"] = current.RefreshToken
+        });
+        var accessToken = token["access_token"]?.ToString()
+            ?? throw new InvalidOperationException("No access_token in Twitch refresh response.");
+        var refreshToken = token["refresh_token"]?.ToString() ?? current.RefreshToken;
+        var expiresIn = int.TryParse(token["expires_in"]?.ToString(), out var e) ? e : 3600;
+        var tokens = current with
+        {
+            AccessToken = accessToken,
+            RefreshToken = refreshToken,
+            ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(expiresIn)
+        };
+        tokens.Save(dataRoot);
+        return tokens;
+    }
+
     private static (string UserId, string Login, string DisplayName) FetchIdentity(string clientId, string accessToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "https://api.twitch.tv/helix/users");
