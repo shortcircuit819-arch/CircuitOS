@@ -476,6 +476,23 @@ cleanly while untangling a mixed commit):
 
 ---
 
+### 2026-06-24 — Claude (claude-opus-4-8) — Native Twitch: cooldown + dup-protection now reflect live
+
+User report: profile settings (cooldown etc.) weren't taking effect on native redemptions. The redeem
+dispatch read the profile fresh each time, but **never used `redeemCooldownSeconds`** and read dup-protection
+from the *request* (always absent → 0). Fixed:
+- **Cooldown enforced**: per-viewer in-memory cooldown (`_lastRedeem`, keyed `profileId:viewerId`) from
+  `redeemCooldownSeconds`; within the window the redeem returns **429** and `TwitchRuntime` cancels (refunds the
+  points) and posts the cooldown message to chat. Recorded only after a successful pull. Resets on restart.
+- **Dup protection** now read from the profile (`redeemDupProtectionTurns`), not the request.
+Both reflect on the next redemption (the dispatch re-reads the profile each time). Smoke green.
+
+**Note:** the reward **title/cost** still don't live-update — `EnsureReward` runs at startup, so renaming
+`redemptionName` or changing cost needs an app restart (and cost is still the 100 placeholder). Reward
+re-sync on save + a profile cost field are the follow-ups.
+
+---
+
 ### 2026-06-24 — Claude (claude-opus-4-8) — Phase 4 native Twitch: pull announcements in chat
 
 The redeem dispatch now also returns formatted **announcement lines** (centralized, reusable), and the Twitch

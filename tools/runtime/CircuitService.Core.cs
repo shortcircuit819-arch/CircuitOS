@@ -208,6 +208,10 @@ internal sealed partial class CircuitService
         });
     }
 
+    // Per-viewer redeem cooldown, keyed "profileId:viewerId" -> last redeem time. In-memory (resets
+    // on restart) — short cooldowns don't need persistence.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTimeOffset> _lastRedeem = new();
+
     public ServiceResult DispatchRuntimeAction(JsonObject request)
     {
         var action = JsonUtil.String(request, "action");
@@ -279,13 +283,25 @@ internal sealed partial class CircuitService
 
         if (string.Equals(action, "redeem", StringComparison.OrdinalIgnoreCase))
         {
+            // Per-viewer cooldown from the profile (redeemCooldownSeconds). Returns 429 so the caller
+            // can refund the points; recorded only after a successful pull.
+            var cooldownSeconds = JsonUtil.Long(profile, "redeemCooldownSeconds");
+            var cooldownKey = $"{profileId}:{viewerId}";
+            if (cooldownSeconds > 0 && !string.IsNullOrWhiteSpace(viewerId) && _lastRedeem.TryGetValue(cooldownKey, out var last))
+            {
+                var remaining = (int)Math.Ceiling(cooldownSeconds - (now - last).TotalSeconds);
+                if (remaining > 0)
+                    return Error([$"@{viewerName} {JsonUtil.String(profile, "redemptionName")} is on cooldown — {remaining}s left."], 429);
+            }
+
             // Only use a fixed seed when one is explicitly supplied (deterministic tests). A missing
             // seed must be random — reading it as 0 and seeding Random(0) made every live pull identical.
             var rng = request["rngSeed"] is JsonValue seedNode
                 && long.TryParse(seedNode.ToString(), out var seed) && seed is >= 0 and <= int.MaxValue
                 ? new Random((int)seed)
                 : new Random();
-            var dupProtectionTurns = JsonUtil.Long(request, "dupProtectionTurns");
+            // Dup protection from the profile (redeemDupProtectionTurns), not the request.
+            var dupProtectionTurns = JsonUtil.Long(profile, "redeemDupProtectionTurns");
             var redemption = RedemptionEngine.ApplyRedemption(
                 catalog,
                 boost is not null ? boost : null,
@@ -296,6 +312,7 @@ internal sealed partial class CircuitService
                 rng,
                 dupProtectionTurns > 0 ? (int)dupProtectionTurns : 0);
             WriteProfileData(profileId, DataKeys.Inventory, inventory);
+            if (cooldownSeconds > 0 && !string.IsNullOrWhiteSpace(viewerId)) _lastRedeem[cooldownKey] = now;
             var announcements = BuildRedeemAnnouncements(messages, redemption, viewerName);
             return Ok(new JsonObject
             {

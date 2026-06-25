@@ -97,6 +97,17 @@ internal static class TwitchRuntime
                     catch (Exception ex) { log($"  (chat announcement skipped — re-login for chat scopes? {ex.Message})"); break; }
                 }
             }
+
+            // On cooldown (429) the points were refunded by the cancel above; tell the viewer in chat.
+            if (!fulfilled && result.Status == 429 && result.Body?["errors"] is JsonArray cooldownErrors && cooldownErrors.Count > 0)
+            {
+                try
+                {
+                    var notice = cooldownErrors[0]?.ToString();
+                    if (!string.IsNullOrWhiteSpace(notice)) helix.SendChatMessage(notice!);
+                }
+                catch { }
+            }
         }
         catch (Exception ex)
         {
