@@ -478,8 +478,10 @@ cleanly while untangling a mixed commit):
 
 ### 2026-06-24 — Claude (claude-opus-4-8) — Phase 4 native Twitch — slice 2: EventSub WebSocket (redemptions live)
 
-**The native redemption path is functionally complete in the desktop app** (build-clean; live-verify is the
-user's — needs the real channel). Login → reward → EventSub WebSocket → dispatch → fulfill, no hosting.
+**✅ LIVE-VERIFIED on @shortcircuit_tv (2026-06-24).** `--twitch-reward` created the "Circuit Component" reward
+on-channel; `--twitch-listen` connected, a real redemption routed to the `circuit-components` profile, the pull
+was recorded + inventory saved, and the redemption was FULFILLED. The full native path
+(login → reward → EventSub WebSocket → dispatch → fulfill) works in the desktop app, no hosting.
 
 - `TwitchEventSub` (new) — connects to `wss://eventsub.wss.twitch.tv/ws`; on `session_welcome` creates the
   `channel.channel_points_custom_reward_redemption.add` subscription (websocket transport, no public endpoint);
