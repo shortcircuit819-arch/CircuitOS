@@ -1421,19 +1421,25 @@ function renderOverview() {
   }));
   const totalUnclaimed = collectionRows.reduce((sum, row) => sum + row.currentUnclaimedScrap, 0);
   const values = [
-    ["VIEWERS", summary.viewerCount || 0, "Inventories in the system"],
-    [systemProfile.collectionPlural.toUpperCase(), collections.length, `${collections.length - eventCount} permanent / ${eventCount} event`],
-    [systemProfile.itemPlural.toUpperCase(), totalParts, `Unique catalog ${systemProfile.itemPlural}`],
-    ["ACTIVE EVENTS", activeEvents, eventCount ? `${eventCount} configured event ${systemProfile.collectionPlural}` : "No events configured"],
-    [systemProfile.currencyName.toUpperCase(), summary.totalScrap || 0, `${summary.duplicateUnits || 0} duplicate units held`],
-    ["BOOST", boost.enabled ? "ON" : "OFF", boost.enabled ? boost.displayName : "Base rates in effect"]
+    ["VIEWERS", summary.viewerCount || 0, "Inventories in the system", "viewers"],
+    [systemProfile.collectionPlural.toUpperCase(), collections.length, `${collections.length - eventCount} permanent / ${eventCount} event`, "collections"],
+    [systemProfile.itemPlural.toUpperCase(), totalParts, `Unique catalog ${systemProfile.itemPlural}`, "collections"],
+    ["ACTIVE EVENTS", activeEvents, eventCount ? `${eventCount} configured event ${systemProfile.collectionPlural}` : "No events configured", "events"],
+    [systemProfile.currencyName.toUpperCase(), summary.totalScrap || 0, `${summary.duplicateUnits || 0} duplicate units held`, "economy"],
+    ["BOOST", boost.enabled ? "ON" : "OFF", boost.enabled ? boost.displayName : "Base rates in effect", "boost"]
   ];
   stats.replaceChildren();
-  for (const [label, value, detail] of values) {
+  for (const [label, value, detail, view] of values) {
     const node = document.getElementById("statTemplate").content.cloneNode(true);
     node.querySelector(".stat-label").textContent = label;
     node.querySelector(".stat-value").textContent = value;
     node.querySelector(".stat-detail").textContent = detail;
+    const card = node.querySelector(".stat-card");
+    if (card && view) {
+      card.classList.add("clickable-card");
+      card.dataset.jumpView = view;
+      card.addEventListener("click", () => switchView(view));
+    }
     stats.appendChild(node);
   }
 
@@ -1441,33 +1447,50 @@ function renderOverview() {
   document.getElementById("rateChartTitle").textContent = boost.enabled ? "Boosted Pull Rates" : "Pull Rates";
   const chart = document.getElementById("rateChart");
   chart.replaceChildren();
+  // Shared slider scale for the draggable weight bars, with headroom above the largest weight.
+  const maxWeight = Math.max(0, ...collections.map(c => Number(c.value.weight) || 0));
+  const sliderMax = Math.max(50, Math.ceil((maxWeight * 1.5) / 10) * 10);
   for (const row of rates.rows) {
     const wrapper = element("div", "rate-row");
     wrapper.dataset.collectionKey = row.key;
     wrapper.append(element("div", "rate-name", row.name));
-    const track = element("div", "rate-track");
-    const fill = element("div", "rate-fill");
-    fill.style.width = `${row.percent}%`;
-    track.append(fill);
-    wrapper.append(track);
-    // Inline weight tuning, right on the Overview (mirrors the Rate Lab weight editor).
+    // The bar IS the slider — drag it to retune the weight; a small box allows exact entry.
     const col = collections.find(c => c.key === row.key);
     if (col) {
+      const slider = document.createElement("input");
+      slider.type = "range";
+      slider.min = "0";
+      slider.max = String(sliderMax);
+      slider.step = "1";
+      slider.className = "rate-slider";
+      slider.title = "Drag to set the pull weight";
+      slider.value = String(Math.max(0, Number(col.value.weight) || 0));
       const weightInput = document.createElement("input");
       weightInput.type = "number";
       weightInput.min = "0";
       weightInput.step = "0.1";
       weightInput.className = "weight-input";
-      weightInput.title = "Pull weight — edit to retune the odds";
-      weightInput.value = String(Math.max(0, Number(col.value.weight) || 0));
-      weightInput.addEventListener("input", () => {
-        col.value.weight = Math.max(0, Number(weightInput.value) || 0);
+      weightInput.title = "Pull weight";
+      weightInput.value = slider.value;
+      const paintSlider = () => {
+        const filled = sliderMax > 0 ? Math.min(100, (Number(slider.value) / sliderMax) * 100) : 0;
+        slider.style.background = `linear-gradient(90deg, var(--red) ${filled}%, #03111e ${filled}%)`;
+      };
+      paintSlider();
+      const applyWeight = (raw, syncSlider, syncNumber) => {
+        const weight = Math.max(0, Number(raw) || 0);
+        col.value.weight = weight;
+        if (syncSlider) slider.value = String(Math.min(weight, sliderMax));
+        if (syncNumber) weightInput.value = String(weight);
+        paintSlider();
         markDirty();
         refreshOverviewRates();
-      });
-      wrapper.append(weightInput);
+      };
+      slider.addEventListener("input", () => applyWeight(slider.value, false, true));
+      weightInput.addEventListener("input", () => applyWeight(weightInput.value, true, false));
+      wrapper.append(slider, weightInput);
     } else {
-      wrapper.append(element("div", ""));
+      wrapper.append(element("div", ""), element("div", ""));
     }
     wrapper.append(element("div", "rate-number", `${row.percent.toFixed(2)}%`));
     chart.append(wrapper);
@@ -2086,9 +2109,7 @@ function refreshOverviewRates() {
   for (const wrapper of chart.querySelectorAll(".rate-row[data-collection-key]")) {
     const rate = rates.rows.find(r => r.key === wrapper.dataset.collectionKey);
     const pct = rate ? rate.percent : 0;
-    const fill = wrapper.querySelector(".rate-fill");
     const number = wrapper.querySelector(".rate-number");
-    if (fill) fill.style.width = `${pct}%`;
     if (number) number.textContent = `${pct.toFixed(2)}%`;
   }
 }

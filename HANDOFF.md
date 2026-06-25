@@ -487,6 +487,13 @@ Verified live in-browser.
   `localStorage["circuitos.hideSystemCheck"]`; a "Show System Check card" button (`#showSystemCheckButton`,
   below the dashboard) restores it. `applySystemCheckVisibility()` applies on load.
 
+**Overview refinements (user feedback on pass 3):** the Pull Rates "bar" is now a **draggable range
+slider** (`.rate-slider`, painted with a gradient fill up to the thumb) with a small number box for exact
+entry — both sync, shared dynamic `sliderMax` with headroom above the largest weight; row spacing increased.
+The six **stat cards are now clickable** (jump to their section; listeners attached per-render since stats
+re-render). Fixed the **Hide button overflowing** the narrow System Check card by letting `.panel-header`
+wrap (`flex-wrap`).
+
 **Verify-loop gotcha (note for next time):** the headless server **caches static files (index.html) at startup**,
 so `index.html` edits need a **preview server restart** (stop+start), not just `location.reload()` — app.js/CSS
 re-render on reload but the HTML structure won't update until restart.
