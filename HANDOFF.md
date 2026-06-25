@@ -351,6 +351,8 @@ Get approval on both before writing a line of 0.5 code.
 
 ### 0.7 development status (read first for a cold start)
 
+**Current focus:** the recent work stream has been the admin UI polish backlog from `UI.md` — primarily the Overview / Configure / Collections / Messages experience in `tools/admin`, verified live in-browser. The cloud/runtime pieces are still present and validated, but the active iteration has been UI polish rather than backend expansion.
+
 **⚠️ FIRST TASK: live-verify the row-addressing fix.** The bug (re-push "verified 0") is **fixed in
 source** (2026-06-24, see Session Log) but not yet re-verified against live cloud — run
 `--push-to-appwrite` (expect 6/6) → `--cloud`. Then optionally a `local-dev → Twitch-id` migration so
@@ -371,7 +373,7 @@ dotnet "tools/runtime/bin/Release/net9.0-windows/CircuitOS.dll" --cloud \
 `--appwrite-profiles`, `--appwrite-backups`, `--twitch-login`. Local app: drop `--cloud`.
 
 **New 0.7 source files:** `tools/runtime/{IDataStore.cs (ILocalDataStore split), LocalFileDataStore.cs,
-AppwriteDataStore.cs, AppwriteOptions.cs, PullEngine.cs, TwitchOptions.cs, TwitchAuth.cs}`,
+AppwriteDataStore.cs, AppwriteOptions.cs, PullEngine.cs, RedemptionEngine.cs, CommandEngine.cs, TwitchOptions.cs, TwitchAuth.cs}`,
 `tools/runtime/CircuitOS.Runtime.csproj` (+Appwrite 5.1.0). `CircuitService` now takes `IDataStore`.
 
 **Config files (gitignored, in Data root; user holds the secrets — assistant must NOT read them):**
@@ -382,7 +384,7 @@ Appwrite: nyc region, project `6a3b1af3002de5ef906b`, db `6a3b1b19000359f605af`,
 
 **Setup docs:** `docs/0.7-cloud-foundation.md`, `0.7-appwrite-dev-setup.md`, `0.7-twitch-auth-setup.md`.
 
-**Remaining 0.7:** live-verify the row-addressing fix → Phase 4 (EventSub function + reward creation via `PullEngine`,
+**Remaining 0.7:** live-verify the row-addressing fix → Phase 4 (EventSub function + reward creation via the shared engines,
 the native zero-config path) → Phase 5 (hosted admin + cloud overlay + Storage bucket + Auth0). Then
 fold `--cloud` into config and cut the 0.7 release.
 
@@ -488,11 +490,15 @@ Verified live in-browser.
   below the dashboard) restores it. `applySystemCheckVisibility()` applies on load.
 
 **Overview refinements (user feedback on pass 3):** the Pull Rates "bar" is now a **draggable range
-slider** (`.rate-slider`, painted with a gradient fill up to the thumb) with a small number box for exact
-entry — both sync, shared dynamic `sliderMax` with headroom above the largest weight; row spacing increased.
-The six **stat cards are now clickable** (jump to their section; listeners attached per-render since stats
-re-render). Fixed the **Hide button overflowing** the narrow System Check card by letting `.panel-header`
-wrap (`flex-wrap`).
+slider** (`.rate-slider`, painted with a gradient fill up to the thumb), shared dynamic `sliderMax` with
+headroom above the largest weight; row spacing increased. The six **stat cards are now clickable** (jump to
+their section; listeners attached per-render since stats re-render). Fixed the **Hide button overflowing**
+the narrow System Check card by letting `.panel-header` wrap (`flex-wrap`). **Follow-up (user):** removed the
+redundant numeric weight box in **both** the Overview Pull Rates and the Rate Lab weight editor — the slider
+bar is the sole control now (`buildWeightRow` + the overview row both render only `.rate-slider` + the %
+label; `refreshWeightPercentages` no longer paints a separate mini-bar). Slim rectangular slider thumb
+instead of the round one (user wasn't sold on the circle — may revisit). No way to type an exact weight now;
+re-add a compact input if precision is needed.
 
 **Verify-loop gotcha (note for next time):** the headless server **caches static files (index.html) at startup**,
 so `index.html` edits need a **preview server restart** (stop+start), not just `location.reload()` — app.js/CSS

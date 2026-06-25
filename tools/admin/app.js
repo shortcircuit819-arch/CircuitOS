@@ -1217,8 +1217,28 @@ async function loadProfiles() {
   if (!response.ok) return;
   profilesData = await response.json();
   const activeView = document.querySelector(".view.active")?.id?.replace(/View$/, "") || "overview";
-  if (activeView === "profiles") renderProfiles();
+  if (activeView === "profiles") {
+    renderProfilesSummary();
+    renderProfiles();
+  }
   renderProfileSwitcher();
+}
+
+function renderProfilesSummary() {
+  const panel = document.getElementById("profilesSummary");
+  if (!panel) return;
+  const profiles = profilesData.profiles || [];
+  const editing = profiles.find(profile => profile.isActive) || null;
+  const live = profiles.filter(profile => profile.isLive);
+  panel.replaceChildren();
+  const card = element("div", "profile-summary-card");
+  const title = element("div", "profile-summary-title", editing ? `${editing.name} is the profile you're editing` : "No profile is currently selected for editing");
+  const detail = element("div", "profile-summary-detail", live.length
+    ? `Live now: ${live.map(profile => profile.name).join(", ")}`
+    : "No profiles are live right now.");
+  const badge = element("div", `profile-summary-badge${live.length ? " is-live" : ""}`, live.length ? `${live.length} live` : "Not live");
+  card.append(badge, title, detail);
+  panel.append(card);
 }
 
 function renderProfiles() {
@@ -1226,26 +1246,38 @@ function renderProfiles() {
   grid.replaceChildren();
   for (const profile of profilesData.profiles || []) {
     const isActive = profile.id === profilesData.activeProfileId;
-    const card = element("div", `profile-card${isActive ? " is-active" : ""}`);
+    const card = element("div", `profile-card${isActive ? " is-active" : ""}${profile.isLive ? " is-live" : ""}`);
     if (isActive) {
-      card.append(element("div", "pc-badge", "ACTIVE"));
+      card.append(element("div", "pc-badge", "EDITING"));
+    }
+    if (profile.isLive) {
+      card.append(element("div", "pc-badge pc-badge-live", "LIVE"));
     }
     card.append(element("div", "pc-name", profile.name));
+    const statusText = isActive ? (profile.isLive ? "Editing + live" : "Editing only") : (profile.isLive ? "Live now" : "Ready to go live");
+    card.append(element("div", "pc-status", statusText));
     card.append(element("div", "pc-meta", `Created ${new Date(profile.createdAt).toLocaleDateString()}`));
+    const actions = element("div", "pc-actions");
+    const liveBtn = element("button", `button ${profile.isLive ? "secondary" : "primary"} small`, profile.isLive ? "Stop Live" : "Go Live");
+    liveBtn.type = "button";
+    liveBtn.addEventListener("click", () => toggleProfileLive(profile.id, profile.name, !profile.isLive));
+    actions.append(liveBtn);
     if (!isActive) {
-      const actions = element("div", "pc-actions");
-      const switchBtn = element("button", "button primary small", "Switch");
+      const switchBtn = element("button", "button secondary small", "Switch");
       switchBtn.type = "button";
       switchBtn.addEventListener("click", () => openProfileSwitchConfirm(profile.id, profile.name));
-      const renameBtn = element("button", "button secondary small", "Rename");
-      renameBtn.type = "button";
-      renameBtn.addEventListener("click", () => promptRenameProfile(profile.id, profile.name));
+    }
+    const renameBtn = element("button", "button secondary small", "Rename");
+    renameBtn.type = "button";
+    renameBtn.addEventListener("click", () => promptRenameProfile(profile.id, profile.name));
+    actions.append(renameBtn);
+    if (!isActive) {
       const deleteBtn = element("button", "button danger small", "Delete");
       deleteBtn.type = "button";
       deleteBtn.addEventListener("click", () => deleteProfile(profile.id, profile.name));
-      actions.append(switchBtn, renameBtn, deleteBtn);
-      card.append(actions);
+      actions.append(deleteBtn);
     }
+    card.append(actions);
     grid.append(card);
   }
 }
@@ -1312,6 +1344,22 @@ async function confirmProfileSwitch() {
     if (!response.ok || !result.ok) throw new Error((result.errors || ["Switch failed."]).join(" "));
     await loadConfiguration(true);
     showNotice(`Profile switched. All data reloaded.`, "success");
+  } catch (error) {
+    showNotice(error.message, "error");
+  }
+}
+
+async function toggleProfileLive(id, name, live) {
+  try {
+    const response = await fetch("/api/profiles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ operation: live ? "activate" : "deactivate", id })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error((result.errors || [live ? "Could not activate profile." : "Could not deactivate profile."]).join(" "));
+    await loadProfiles();
+    showNotice(live ? `Profile "${name}" is now live.` : `Profile "${name}" is no longer live.`, "success");
   } catch (error) {
     showNotice(error.message, "error");
   }
@@ -1465,32 +1513,20 @@ function renderOverview() {
       slider.className = "rate-slider";
       slider.title = "Drag to set the pull weight";
       slider.value = String(Math.max(0, Number(col.value.weight) || 0));
-      const weightInput = document.createElement("input");
-      weightInput.type = "number";
-      weightInput.min = "0";
-      weightInput.step = "0.1";
-      weightInput.className = "weight-input";
-      weightInput.title = "Pull weight";
-      weightInput.value = slider.value;
       const paintSlider = () => {
         const filled = sliderMax > 0 ? Math.min(100, (Number(slider.value) / sliderMax) * 100) : 0;
         slider.style.background = `linear-gradient(90deg, var(--red) ${filled}%, #03111e ${filled}%)`;
       };
       paintSlider();
-      const applyWeight = (raw, syncSlider, syncNumber) => {
-        const weight = Math.max(0, Number(raw) || 0);
-        col.value.weight = weight;
-        if (syncSlider) slider.value = String(Math.min(weight, sliderMax));
-        if (syncNumber) weightInput.value = String(weight);
+      slider.addEventListener("input", () => {
+        col.value.weight = Math.max(0, Number(slider.value) || 0);
         paintSlider();
         markDirty();
         refreshOverviewRates();
-      };
-      slider.addEventListener("input", () => applyWeight(slider.value, false, true));
-      weightInput.addEventListener("input", () => applyWeight(weightInput.value, true, false));
-      wrapper.append(slider, weightInput);
+      });
+      wrapper.append(slider);
     } else {
-      wrapper.append(element("div", ""), element("div", ""));
+      wrapper.append(element("div", ""));
     }
     wrapper.append(element("div", "rate-number", `${row.percent.toFixed(2)}%`));
     chart.append(wrapper);
@@ -2056,25 +2092,31 @@ function buildWeightRow(col, container) {
     nameWrap.append(element("span", `event-status ${state.className}`, state.label));
   }
 
-  const input = document.createElement("input");
-  input.type = "number";
-  input.min = "0";
-  input.step = "0.1";
-  input.value = String(Math.max(0, Number(col.value.weight) || 0));
-  input.className = "weight-input";
-  input.addEventListener("input", () => {
-    col.value.weight = Math.max(0, Number(input.value) || 0);
+  const maxWeight = Math.max(0, ...collections.map(c => Number(c.value.weight) || 0));
+  const sliderMax = Math.max(50, Math.ceil((maxWeight * 1.5) / 10) * 10);
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.min = "0";
+  slider.max = String(sliderMax);
+  slider.step = "1";
+  slider.className = "rate-slider";
+  slider.title = "Drag to set the pull weight";
+  slider.value = String(Math.max(0, Number(col.value.weight) || 0));
+  const paintSlider = () => {
+    const filled = sliderMax > 0 ? Math.min(100, (Number(slider.value) / sliderMax) * 100) : 0;
+    slider.style.background = `linear-gradient(90deg, var(--red) ${filled}%, #03111e ${filled}%)`;
+  };
+  paintSlider();
+  slider.addEventListener("input", () => {
+    col.value.weight = Math.max(0, Number(slider.value) || 0);
+    paintSlider();
     markDirty();
     refreshWeightPercentages();
   });
 
-  const bar = element("div", "weight-mini-bar");
-  const fill = element("div", "weight-mini-fill");
-  bar.append(fill);
-
   const pctLabel = element("span", "weight-pct", "0%");
 
-  row.append(nameWrap, input, bar, pctLabel);
+  row.append(nameWrap, slider, pctLabel);
   container.append(row);
 }
 
@@ -2087,9 +2129,7 @@ function refreshWeightPercentages() {
     const rate = rates.rows.find(r => r.key === key);
     const pct = rate ? rate.percent : 0;
     const pctLabel = row.querySelector(".weight-pct");
-    const fill = row.querySelector(".weight-mini-fill");
     if (pctLabel) pctLabel.textContent = `${pct.toFixed(1)}%`;
-    if (fill) fill.style.width = `${pct}%`;
   }
   if (lastSimulation) {
     const model = simulationModel();

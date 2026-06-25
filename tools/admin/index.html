@@ -366,10 +366,10 @@ Item Three</textarea></label>
               </div>
               <span id="profileStatus" class="metric-chip"></span>
             </div>
-            <p class="profile-help">These labels change the administration experience and generated Streamer.bot code without changing stable data keys.</p>
+            <p class="profile-help">These choices shape the names, chat commands, and generated Streamer.bot setup for your experience.</p>
             <div class="profile-fields">
               <label class="field"><span>Game name</span><input id="profileGameName" type="text" maxlength="80"></label>
-              <label class="field"><span>Control panel nickname</span><input id="profileAdminName" type="text" maxlength="80"></label>
+              <label class="field"><span>Panel nickname</span><input id="profileAdminName" type="text" maxlength="80"></label>
               <label class="field"><span>Eyebrow label</span><input id="profileBrandKicker" type="text" maxlength="80" title="Short uppercase phrase shown above panel titles, e.g. CIRCUITOS"></label>
               <label class="field"><span>Redemption name</span><input id="profileRedemptionName" type="text" maxlength="80"></label>
               <label class="field"><span>Item singular</span><input id="profileItemSingular" type="text" maxlength="80"></label>
@@ -377,14 +377,14 @@ Item Three</textarea></label>
               <label class="field"><span>Collection singular</span><input id="profileCollectionSingular" type="text" maxlength="80"></label>
               <label class="field"><span>Collection plural</span><input id="profileCollectionPlural" type="text" maxlength="80"></label>
               <label class="field"><span>Currency name</span><input id="profileCurrencyName" type="text" maxlength="80"></label>
-              <label class="field"><span>Redeem cooldown (sec)</span><input id="profileCooldown" type="number" min="0" max="3600" step="1" title="Seconds between pulls per viewer. 0 = no cooldown. Applies when you regenerate Streamer.bot actions."></label>
-              <label class="field"><span>Dupe protection (pulls)</span><input id="profileDupProtection" type="number" min="0" max="20" step="1" title="After a duplicate pull, the next N pulls for that viewer are guaranteed to land on items they don't own yet. 0 = disabled. Applies when you regenerate Streamer.bot actions."></label>
+              <label class="field"><span>Cooldown between redeems (sec)</span><input id="profileCooldown" type="number" min="0" max="3600" step="1" title="Seconds between pulls per viewer. 0 = no cooldown. Applies when you regenerate Streamer.bot actions."></label>
+              <label class="field"><span>Duplicate protection (pulls)</span><input id="profileDupProtection" type="number" min="0" max="20" step="1" title="After a duplicate pull, the next N pulls for that viewer are guaranteed to land on items they don't own yet. 0 = disabled. Applies when you regenerate Streamer.bot actions."></label>
             </div>
             <div class="subsection-title">Chat commands</div>
             <div id="profileCommands" class="command-grid"></div>
             <div class="profile-actions">
-              <button id="resetProfileButton" class="button secondary">Circuit Defaults</button>
-              <button id="saveProfileButton" class="button primary">Save Profile</button>
+              <button id="resetProfileButton" class="button secondary">Reset to defaults</button>
+              <button id="saveProfileButton" class="button primary">Save</button>
             </div>
           </article>
 
@@ -417,10 +417,10 @@ Item Three</textarea></label>
               </div>
               <span id="appearanceStatus" class="metric-chip"></span>
             </div>
-            <p class="profile-help">These colors style the control panel. They save together with your game profile.</p>
+            <p class="profile-help">These colors change the look of the control panel and save with your game profile.</p>
             <div id="profileColors" class="color-grid"></div>
             <div class="profile-actions">
-              <button id="saveAppearanceButton" class="button primary">Save Appearance</button>
+              <button id="saveAppearanceButton" class="button primary">Save</button>
             </div>
           </article>
 
@@ -652,7 +652,7 @@ Item Three</textarea></label>
           <div>
             <div class="panel-kicker">PULL ODDS</div>
             <h2>Rate Lab</h2>
-            <p>Tune collection weights and verify distribution. Weight changes use the main Save Catalog flow.</p>
+            <p>Adjust collection odds and review how the pulls should land.</p>
           </div>
           <div class="ratelab-toolbar-controls">
             <label class="simulation-count">
@@ -670,10 +670,10 @@ Item Three</textarea></label>
           <article class="panel">
             <div class="panel-header">
               <div>
-                <div class="panel-kicker">WEIGHT EDITOR</div>
-                <h2>Collection Weights</h2>
+                <div class="panel-kicker">ODDS</div>
+                <h2>Collection Odds</h2>
               </div>
-              <button class="help-tip" type="button" data-tip="Each collection's weight is a relative number — higher weight means a higher pull chance. The % shown is that collection's share of all active weight. Changes are saved with Save Catalog.">?</button>
+              <button class="help-tip" type="button" data-tip="Higher weights make a collection show up more often. The percent shown is its share of all active pull weight. Changes save with the main Save action.">?</button>
             </div>
             <div id="ratelabWeightEditor" class="weight-editor"></div>
           </article>
@@ -938,6 +938,7 @@ Item Three</textarea></label>
             <button id="createProfileButton" class="button primary" type="button">New Profile</button>
           </div>
         </div>
+        <div id="profilesSummary" class="profile-summary"></div>
         <div id="profileGrid" class="profile-grid"></div>
       </section>
     </main>
