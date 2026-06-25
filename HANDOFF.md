@@ -476,6 +476,31 @@ cleanly while untangling a mixed commit):
 
 ---
 
+### 2026-06-24 — Claude (claude-opus-4-8) — Item C frontend: active-profiles admin UI working
+
+The active-profiles admin UI (built mostly by the Codex session) is now **functional** — verified live with
+two profiles live at once. Fixed two bugs in it:
+- `renderViewOnDemand("profiles")` only called `renderProfiles()`, never `renderProfilesSummary()`, so the
+  **"what's live" banner never rendered** (it's only re-called from `loadProfiles`, which skips it unless you're
+  already on the view — chicken-and-egg). Now calls both.
+- The per-card **"Switch" button was created but never appended** (`actions.append(switchBtn)` was missing), so
+  non-editing profiles had no Switch action. Fixed.
+
+**What works now (Profiles view):** a summary banner ("N live" + which profile you're editing + which are live);
+per-profile cards with EDITING / LIVE badges, status ("Editing + live" / "Editing only" / "Live now" / "Ready to
+go live"), and **Go Live / Stop Live** (→ `activate`/`deactivate` ops), Switch, Rename, Delete. Activation
+collisions surface via the top notice (the service-level guard is smoke-tested). Verified: created a 2nd profile,
+took it live → "2 live", both cards correct.
+
+**Deferred (the one remaining item C piece): per-profile overlay URLs.** Can't be added cleanly yet because the
+runtime only **publishes overlay statics into the *active* profile's folder** at startup (`Program.cs` →
+`PublishOverlayStatics(overlayDataPath = active profile)`). A live-but-not-editing profile's `overlay/index.html`
+doesn't exist, so a per-profile overlay path would 404 in OBS. **To do it right:** publish overlay statics to
+**every live** profile's folder on startup (iterate `ListProfiles().Where(IsLive)`), then show/copy each profile's
+path on its card. Pairs naturally with the Phase-5 hosted overlay work. Unreleased; no version bump.
+
+---
+
 ### 2026-06-24 — Claude (claude-opus-4-8) — Sole driver; landed runtime dispatch (item C groundwork)
 
 User asked me to take over as the single driver (parallel Codex sessions stopped) after concurrent edits to

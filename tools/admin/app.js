@@ -1208,7 +1208,7 @@ function renderViewOnDemand(view) {
   if (view === "collections") renderCollectionList("permanent");
   if (view === "events") renderCollectionList("event");
   if (view === "overlay") { renderOverlayEditor(); scaleOverlayPreview(); }
-  if (view === "profiles") renderProfiles();
+  if (view === "profiles") { renderProfilesSummary(); renderProfiles(); }
   if (view === "ratelab") renderRateLab();
 }
 
@@ -1266,6 +1266,7 @@ function renderProfiles() {
       const switchBtn = element("button", "button secondary small", "Switch");
       switchBtn.type = "button";
       switchBtn.addEventListener("click", () => openProfileSwitchConfirm(profile.id, profile.name));
+      actions.append(switchBtn);
     }
     const renameBtn = element("button", "button secondary small", "Rename");
     renameBtn.type = "button";
