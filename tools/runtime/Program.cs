@@ -165,6 +165,10 @@ internal static class Program
             using var cancellation = new CancellationTokenSource();
             var serverTask = RunServerAsync(listener, service, options.UiPath, options.OverlayPath, overlayDataPath, cancellation.Token);
 
+            // Native Twitch: if logged in, listen for channel-point redemptions in the background
+            // (no-op when Twitch isn't configured). Cancelled when the app exits.
+            _ = TwitchRuntime.TryStart(store, service, options.DataPath, Console.WriteLine, cancellation.Token);
+
             if (options.Headless)
             {
                 serverTask.GetAwaiter().GetResult();
@@ -798,67 +802,19 @@ internal static class Program
     {
         try
         {
-            var opts = TwitchOptions.TryLoad(dataRoot)
-                ?? throw new InvalidOperationException($"No {TwitchOptions.FileName} in {dataRoot}. See docs/0.7-twitch-auth-setup.md.");
-            var tokens = TwitchTokens.TryLoad(dataRoot)
-                ?? throw new InvalidOperationException("Not logged in to Twitch — run --twitch-login first.");
-            var session = new TwitchSession(opts, tokens, dataRoot);
-            var helix = new TwitchHelix(session);
-            var localStore = new LocalFileDataStore(dataRoot);
-            var service = new CircuitService(localStore, actionPath);
-
-            // Ensure each live profile's reward exists, and map reward id -> profile id.
-            var rewardToProfile = new Dictionary<string, string>(StringComparer.Ordinal);
-            foreach (var profile in localStore.ListProfiles().Where(p => p.IsLive))
-            {
-                var data = localStore.ReadProfileData(profile.Id, DataKeys.Profile);
-                var title = JsonUtil.String(data ?? new JsonObject(), "redemptionName");
-                if (string.IsNullOrWhiteSpace(title)) continue;
-                var reward = helix.EnsureReward(title, 100, "Redeem to pull an item with CircuitOS.");
-                rewardToProfile[reward.Id] = profile.Id;
-                Console.WriteLine($"Reward '{reward.Title}' ({reward.Id}) -> profile '{profile.Id}'.");
-            }
-            if (rewardToProfile.Count == 0)
-            {
-                Console.Error.WriteLine("No live profile has a redemption name. Take a profile live (Go Live) first.");
-                return 1;
-            }
-
+            var store = new LocalFileDataStore(dataRoot);
+            var service = new CircuitService(store, actionPath);
             using var cts = new CancellationTokenSource();
             Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
-            void OnRedemption(RedemptionEvent redemption)
+            var task = TwitchRuntime.TryStart(store, service, dataRoot, Console.WriteLine, cts.Token);
+            if (task is null)
             {
-                if (!rewardToProfile.TryGetValue(redemption.RewardId, out var profileId))
-                {
-                    Console.WriteLine($"  (ignored redemption for unmanaged reward '{redemption.RewardTitle}')");
-                    return;
-                }
-                Console.WriteLine($"Redemption: {redemption.UserName} -> '{redemption.RewardTitle}'  [profile {profileId}]");
-                try
-                {
-                    var result = service.DispatchRuntimeAction(new JsonObject
-                    {
-                        ["action"] = "redeem",
-                        ["profileId"] = profileId,
-                        ["viewerId"] = redemption.UserId,
-                        ["viewerName"] = redemption.UserName
-                    });
-                    var fulfilled = result.Status == 200;
-                    helix.UpdateRedemptionStatus(redemption.RewardId, redemption.RedemptionId, fulfilled);
-                    Console.WriteLine(fulfilled
-                        ? "  -> pull recorded, inventory saved, redemption FULFILLED."
-                        : $"  -> dispatch failed; redemption CANCELED (refunded). {ResultErrors(result)}");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"  -> error handling redemption: {ex.Message}");
-                }
+                Console.Error.WriteLine("Twitch isn't configured — run --twitch-login first.");
+                return 1;
             }
-
-            var eventSub = new TwitchEventSub(session, helix, OnRedemption, Console.WriteLine);
-            Console.WriteLine($"CircuitOS native Twitch — connecting as @{session.Login}. Press Ctrl+C to stop.");
-            eventSub.RunAsync(cts.Token).GetAwaiter().GetResult();
+            Console.WriteLine("CircuitOS native Twitch — press Ctrl+C to stop.");
+            task.GetAwaiter().GetResult();
             Console.WriteLine("Stopped listening.");
             return 0;
         }
@@ -868,9 +824,6 @@ internal static class Program
             return 1;
         }
     }
-
-    private static string ResultErrors(ServiceResult result)
-        => result.Body?["errors"] is JsonArray errors ? string.Join("; ", errors.Select(e => e?.ToString())) : "";
 
     // Copies overlay statics and a normalized overlay-config.json into the active
     // profile's overlay folder so OBS local-file mode needs no cross-directory fetches.

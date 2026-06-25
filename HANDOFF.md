@@ -476,6 +476,25 @@ cleanly while untangling a mixed commit):
 
 ---
 
+### 2026-06-24 — Claude (claude-opus-4-8) — Phase 4 native Twitch: folded the listener into the running app
+
+`TwitchRuntime.TryStart(store, service, dataRoot, log, cancel)` (new) encapsulates the listen flow (ensure
+rewards → map reward→profile → EventSub → on redemption dispatch + fulfil). The **running app now auto-starts
+it on a background task** (`Program.cs`, right after the server task, cancelled on exit) — no separate console
+needed. It returns null / no-ops cleanly when Twitch isn't configured or no profile is live. The
+`--twitch-listen` diagnostic was slimmed to call the same `TryStart` (DRY). Builds clean; smoke green.
+
+**Dev build:** run the full windowed app and native Twitch comes along —
+`dotnet …\bin\Release\net9.0-windows\CircuitOS.dll --data <DataRoot> --ui tools\admin --actions
+streamerbot-actions --overlay overlays\lower-quarter`. Redemptions update inventory (visible in the panel) and
+fulfil on Twitch. (Twitch log lines go to the console if launched from one; the panel's inventory is the
+windowed-mode proof.) Created a double-click launcher at `Documents\CircuitOS\run-circuitos-dev.cmd` (not in repo).
+
+**Still ahead:** surface Twitch status in the UI/health; persist reward↔profile map; per-profile cost; slice 3
+chat commands (needs re-login for chat scopes). Unreleased; no version bump.
+
+---
+
 ### 2026-06-24 — Claude (claude-opus-4-8) — Phase 4 native Twitch — slice 2: EventSub WebSocket (redemptions live)
 
 **✅ LIVE-VERIFIED on @shortcircuit_tv (2026-06-24).** `--twitch-reward` created the "Circuit Component" reward
