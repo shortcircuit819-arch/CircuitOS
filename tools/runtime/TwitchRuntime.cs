@@ -29,7 +29,9 @@ internal static class TwitchRuntime
                     return;
                 }
                 var eventSub = new TwitchEventSub(session, helix,
-                    redemption => HandleRedemption(redemption, rewardToProfile, service, helix, log), log);
+                    redemption => HandleRedemption(redemption, rewardToProfile, service, helix, log),
+                    chat => HandleChat(chat, service, helix, log),
+                    log);
                 await eventSub.RunAsync(cancel);
             }
             catch (OperationCanceledException) { }
@@ -87,6 +89,40 @@ internal static class TwitchRuntime
         catch (Exception ex)
         {
             log($"  -> error handling redemption: {ex.Message}");
+        }
+    }
+
+    // A chat message starting with '!' is treated as a command: resolves the live profile that owns
+    // the word (via the shared dispatch) and sends each reply line back to chat. Non-commands and
+    // words no live profile owns are silently ignored.
+    public static void HandleChat(ChatMessage message, CircuitService service, TwitchHelix helix, Action<string> log)
+    {
+        var text = message.Text.TrimStart();
+        if (text.Length < 2 || text[0] != '!') return;
+        var parts = text[1..].Split(' ', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return;
+
+        try
+        {
+            var result = service.DispatchRuntimeAction(new JsonObject
+            {
+                ["action"] = "command",
+                ["command"] = parts[0],
+                ["arg"] = parts.Length > 1 ? parts[1] : "",
+                ["viewerId"] = message.UserId,
+                ["viewerName"] = message.UserName
+            });
+            if (result.Status != 200) return;                       // not one of our commands → ignore
+            if (result.Body?["messages"] is not JsonArray lines) return;
+            foreach (var line in lines)
+            {
+                var reply = line?.ToString();
+                if (!string.IsNullOrWhiteSpace(reply)) helix.SendChatMessage(reply!);
+            }
+        }
+        catch (Exception ex)
+        {
+            log($"Chat command error: {ex.Message}");
         }
     }
 

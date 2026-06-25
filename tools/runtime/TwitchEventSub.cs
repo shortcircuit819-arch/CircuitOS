@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 namespace CircuitOS.Runtime;
 
 internal sealed record RedemptionEvent(string RewardId, string RewardTitle, string RedemptionId, string UserId, string UserName);
+internal sealed record ChatMessage(string UserId, string UserName, string Text);
 
 // Twitch EventSub over WebSocket — the native, hosting-free intake. Connects outbound to
 // wss://eventsub.wss.twitch.tv/ws, and on the session_welcome creates a channel-point redemption
@@ -18,13 +19,15 @@ internal sealed class TwitchEventSub
     private readonly TwitchSession _session;
     private readonly TwitchHelix _helix;
     private readonly Action<RedemptionEvent> _onRedemption;
+    private readonly Action<ChatMessage>? _onChat;
     private readonly Action<string> _log;
 
-    public TwitchEventSub(TwitchSession session, TwitchHelix helix, Action<RedemptionEvent> onRedemption, Action<string> log)
+    public TwitchEventSub(TwitchSession session, TwitchHelix helix, Action<RedemptionEvent> onRedemption, Action<ChatMessage>? onChat, Action<string> log)
     {
         _session = session;
         _helix = helix;
         _onRedemption = onRedemption;
+        _onChat = onChat;
         _log = log;
     }
 
@@ -98,7 +101,7 @@ internal sealed class TwitchEventSub
                 _log("EventSub subscription was revoked by Twitch (token/scope change?). Re-login may be needed.");
                 break;
             case "notification":
-                HandleNotification(payload);
+                HandleNotification(message["metadata"]?["subscription_type"]?.ToString(), payload);
                 break;
             // session_keepalive: nothing to do; the socket staying open is the signal.
         }
@@ -119,11 +122,36 @@ internal sealed class TwitchEventSub
         {
             _log($"Failed to create the redemption subscription: {ex.Message}");
         }
+
+        if (_onChat is not null)
+        {
+            try
+            {
+                _helix.CreateEventSubSubscription(
+                    "channel.chat.message", "1",
+                    new JsonObject { ["broadcaster_user_id"] = _session.UserId, ["user_id"] = _session.UserId },
+                    sessionId);
+                _log("Listening for chat commands too.");
+            }
+            catch (Exception ex)
+            {
+                _log($"Chat commands unavailable — re-login to grant chat scopes. ({ex.Message})");
+            }
+        }
     }
 
-    private void HandleNotification(JsonObject? payload)
+    private void HandleNotification(string? subscriptionType, JsonObject? payload)
     {
-        if ((payload?["event"]) is not JsonObject ev) return;
+        if (payload?["event"] is not JsonObject ev) return;
+        if (subscriptionType == "channel.chat.message")
+        {
+            var text = (ev["message"] as JsonObject)?["text"]?.ToString() ?? "";
+            _onChat?.Invoke(new ChatMessage(
+                ev["chatter_user_id"]?.ToString() ?? "",
+                ev["chatter_user_name"]?.ToString() ?? ev["chatter_user_login"]?.ToString() ?? "",
+                text));
+            return;
+        }
         var reward = ev["reward"] as JsonObject;
         _onRedemption(new RedemptionEvent(
             reward?["id"]?.ToString() ?? "",

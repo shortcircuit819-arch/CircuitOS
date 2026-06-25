@@ -89,6 +89,17 @@ internal sealed class TwitchHelix
         Send(HttpMethod.Patch, url, new JsonObject { ["status"] = fulfilled ? "FULFILLED" : "CANCELED" });
     }
 
+    // Sends a chat message to the broadcaster's channel as the logged-in user (needs user:write:chat).
+    public void SendChatMessage(string text)
+    {
+        Send(HttpMethod.Post, "https://api.twitch.tv/helix/chat/messages", new JsonObject
+        {
+            ["broadcaster_id"] = _session.UserId,
+            ["sender_id"] = _session.UserId,
+            ["message"] = text
+        });
+    }
+
     // Registers an EventSub subscription bound to an open WebSocket session (no public endpoint
     // needed). Used to subscribe to channel-point redemptions on the WebSocket transport.
     public void CreateEventSubSubscription(string type, string version, JsonObject condition, string sessionId)

@@ -60,7 +60,11 @@ internal sealed record TwitchTokens(
 // and fetches the user's identity from Helix. See docs/0.7-twitch-auth-setup.md.
 internal static class TwitchAuth
 {
-    private static readonly string[] Scopes = ["channel:read:redemptions", "channel:manage:redemptions"];
+    private static readonly string[] Scopes =
+    [
+        "channel:read:redemptions", "channel:manage:redemptions",
+        "user:read:chat", "user:write:chat"   // chat commands + replies (slice 3)
+    ];
     private static readonly HttpClient Http = new();
 
     public static TwitchTokens Login(TwitchOptions opts, string dataRoot)

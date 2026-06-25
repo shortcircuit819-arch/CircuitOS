@@ -476,6 +476,30 @@ cleanly while untangling a mixed commit):
 
 ---
 
+### 2026-06-24 — Claude (claude-opus-4-8) — Phase 4 native Twitch — slice 3: chat commands
+
+Built (compiles clean; deploy blocked at commit time only because the user's dev build was running and locked
+the DLL — close it + rebuild to deploy). **Requires a one-time re-login** for the new scopes.
+
+- **Scopes** (`TwitchAuth`): added `user:read:chat` + `user:write:chat`. ⚠️ Existing tokens lack these → the
+  chat subscription fails gracefully (logged) until the user re-runs `--twitch-login` to re-consent.
+- `TwitchHelix.SendChatMessage(text)` — POST `/helix/chat/messages` as the broadcaster.
+- `TwitchEventSub` — now also subscribes to `channel.chat.message` (when an `onChat` handler is supplied) and
+  routes notifications by `subscription_type`; added the `ChatMessage` record.
+- `TwitchRuntime.HandleChat` — a `!`-prefixed chat message → `DispatchRuntimeAction(command)` (resolves the
+  live profile that owns the word, returns reply lines in `Body["messages"]`) → `SendChatMessage` each line.
+  Non-commands / unowned words are ignored silently. Wired into `TwitchRuntime.TryStart` (so the running app
+  gets chat too).
+
+**To use:** close the running app → `dotnet build …` → `--twitch-login` (re-consent) → relaunch the dev build →
+type e.g. `!components` in chat → bot replies. Redemptions keep working without the re-login.
+
+**Still ahead:** pull announcements in chat (the redeem path returns structured data, not a formatted message —
+would format `redeemSuccess`/`rarePull`/etc. and send); Twitch status in the admin UI; persist reward↔profile
+map; per-profile cost. Unreleased; no version bump.
+
+---
+
 ### 2026-06-24 — Claude (claude-opus-4-8) — Phase 4 native Twitch: folded the listener into the running app
 
 `TwitchRuntime.TryStart(store, service, dataRoot, log, cancel)` (new) encapsulates the listen flow (ensure
