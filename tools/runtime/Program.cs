@@ -15,7 +15,7 @@ internal sealed record RuntimeOptions(string DataPath, string UiPath, string Act
         for (var index = 0; index < args.Length; index++)
         {
             var arg = args[index];
-            if (arg is "--headless" or "--no-browser" or "--check-appwrite" or "--appwrite-roundtrip" or "--push-to-appwrite" or "--appwrite-profiles" or "--appwrite-backups" or "--twitch-login" or "--twitch-reward" or "--cloud") { flags.Add(arg); continue; }
+            if (arg is "--headless" or "--no-browser" or "--check-appwrite" or "--appwrite-roundtrip" or "--push-to-appwrite" or "--appwrite-profiles" or "--appwrite-backups" or "--twitch-login" or "--twitch-reward" or "--twitch-listen" or "--cloud") { flags.Add(arg); continue; }
             if (arg.StartsWith("--", StringComparison.Ordinal) && index + 1 < args.Length) values[arg] = args[++index];
         }
 
@@ -108,6 +108,11 @@ internal static class Program
         // 0.7 Phase 4 (native Twitch): create/update the channel-point reward via Helix and exit.
         if (args.Contains("--twitch-reward"))
             return TwitchReward(options.DataPath, options.Headless);
+
+        // 0.7 Phase 4 (native Twitch): open the EventSub WebSocket and process live channel-point
+        // redemptions until Ctrl+C. The zero-config native path. Run from a terminal.
+        if (args.Contains("--twitch-listen"))
+            return TwitchListen(options.DataPath, options.ActionPath);
 
         // The local file store is always created: it provides the active profile id and the
         // local folder used to serve the OBS overlay (overlay statics/state stay local even
@@ -784,6 +789,88 @@ internal static class Program
         }
         return ok ? 0 : 1;
     }
+
+    // 0.7 Phase 4 (native Twitch): the live redemption loop. Ensures each live profile's reward
+    // exists, maps reward id -> profile, opens the EventSub WebSocket, and on each redemption runs
+    // the shared dispatch (pull + inventory) then fulfils (or cancels/refunds on failure). Blocks
+    // until Ctrl+C. Console mode — run from a terminal.
+    private static int TwitchListen(string dataRoot, string actionPath)
+    {
+        try
+        {
+            var opts = TwitchOptions.TryLoad(dataRoot)
+                ?? throw new InvalidOperationException($"No {TwitchOptions.FileName} in {dataRoot}. See docs/0.7-twitch-auth-setup.md.");
+            var tokens = TwitchTokens.TryLoad(dataRoot)
+                ?? throw new InvalidOperationException("Not logged in to Twitch — run --twitch-login first.");
+            var session = new TwitchSession(opts, tokens, dataRoot);
+            var helix = new TwitchHelix(session);
+            var localStore = new LocalFileDataStore(dataRoot);
+            var service = new CircuitService(localStore, actionPath);
+
+            // Ensure each live profile's reward exists, and map reward id -> profile id.
+            var rewardToProfile = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var profile in localStore.ListProfiles().Where(p => p.IsLive))
+            {
+                var data = localStore.ReadProfileData(profile.Id, DataKeys.Profile);
+                var title = JsonUtil.String(data ?? new JsonObject(), "redemptionName");
+                if (string.IsNullOrWhiteSpace(title)) continue;
+                var reward = helix.EnsureReward(title, 100, "Redeem to pull an item with CircuitOS.");
+                rewardToProfile[reward.Id] = profile.Id;
+                Console.WriteLine($"Reward '{reward.Title}' ({reward.Id}) -> profile '{profile.Id}'.");
+            }
+            if (rewardToProfile.Count == 0)
+            {
+                Console.Error.WriteLine("No live profile has a redemption name. Take a profile live (Go Live) first.");
+                return 1;
+            }
+
+            using var cts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+
+            void OnRedemption(RedemptionEvent redemption)
+            {
+                if (!rewardToProfile.TryGetValue(redemption.RewardId, out var profileId))
+                {
+                    Console.WriteLine($"  (ignored redemption for unmanaged reward '{redemption.RewardTitle}')");
+                    return;
+                }
+                Console.WriteLine($"Redemption: {redemption.UserName} -> '{redemption.RewardTitle}'  [profile {profileId}]");
+                try
+                {
+                    var result = service.DispatchRuntimeAction(new JsonObject
+                    {
+                        ["action"] = "redeem",
+                        ["profileId"] = profileId,
+                        ["viewerId"] = redemption.UserId,
+                        ["viewerName"] = redemption.UserName
+                    });
+                    var fulfilled = result.Status == 200;
+                    helix.UpdateRedemptionStatus(redemption.RewardId, redemption.RedemptionId, fulfilled);
+                    Console.WriteLine(fulfilled
+                        ? "  -> pull recorded, inventory saved, redemption FULFILLED."
+                        : $"  -> dispatch failed; redemption CANCELED (refunded). {ResultErrors(result)}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"  -> error handling redemption: {ex.Message}");
+                }
+            }
+
+            var eventSub = new TwitchEventSub(session, helix, OnRedemption, Console.WriteLine);
+            Console.WriteLine($"CircuitOS native Twitch — connecting as @{session.Login}. Press Ctrl+C to stop.");
+            eventSub.RunAsync(cts.Token).GetAwaiter().GetResult();
+            Console.WriteLine("Stopped listening.");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Listen failed: {ex.Message}");
+            return 1;
+        }
+    }
+
+    private static string ResultErrors(ServiceResult result)
+        => result.Body?["errors"] is JsonArray errors ? string.Join("; ", errors.Select(e => e?.ToString())) : "";
 
     // Copies overlay statics and a normalized overlay-config.json into the active
     // profile's overlay folder so OBS local-file mode needs no cross-directory fetches.

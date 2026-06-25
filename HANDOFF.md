@@ -476,6 +476,32 @@ cleanly while untangling a mixed commit):
 
 ---
 
+### 2026-06-24 — Claude (claude-opus-4-8) — Phase 4 native Twitch — slice 2: EventSub WebSocket (redemptions live)
+
+**The native redemption path is functionally complete in the desktop app** (build-clean; live-verify is the
+user's — needs the real channel). Login → reward → EventSub WebSocket → dispatch → fulfill, no hosting.
+
+- `TwitchEventSub` (new) — connects to `wss://eventsub.wss.twitch.tv/ws`; on `session_welcome` creates the
+  `channel.channel_points_custom_reward_redemption.add` subscription (websocket transport, no public endpoint);
+  parses `notification` events → `RedemptionEvent`; handles `session_reconnect` + reconnect-with-backoff;
+  keepalive is a no-op.
+- `TwitchHelix.CreateEventSubSubscription` added.
+- `--twitch-listen` run mode (`Program.cs`): ensures each **live** profile's reward exists, maps
+  reward id → profile id, opens the socket, and on each redemption: `DispatchRuntimeAction(redeem)` →
+  `UpdateRedemptionStatus(FULFILLED)` on success / `CANCELED` (refund) on failure. Console mode, Ctrl+C to stop.
+
+**Live test (user):** `--twitch-login` (once) → take a profile live in the admin UI → run `--twitch-listen`
+from a terminal → redeem the channel-point reward on Twitch → expect "FULFILLED" + inventory updated, and the
+points refunded if the pull fails.
+
+**Still ahead:** fold `--twitch-listen` into the running app (background task on launch when profiles are live)
+instead of a separate console mode; persist the reward id ↔ profile map; per-profile cost (currently 100
+placeholder); keepalive-timeout reconnect; **slice 3 = chat commands** (`channel.chat.message` + Helix
+send-chat → needs `user:read:chat`/`user:write:chat` scopes → re-login). Edge: two live profiles with the same
+`redemptionName` collide on one reward (no guard yet). Unreleased; no version bump.
+
+---
+
 ### 2026-06-24 — Claude (claude-opus-4-8) — Phase 4 native Twitch — slice 1: token refresh + Helix reward
 
 **Started the native zero-config Twitch path.** Decisions (with user): **EventSub over WebSocket** (not

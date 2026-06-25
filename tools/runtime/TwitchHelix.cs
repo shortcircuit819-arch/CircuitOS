@@ -89,6 +89,19 @@ internal sealed class TwitchHelix
         Send(HttpMethod.Patch, url, new JsonObject { ["status"] = fulfilled ? "FULFILLED" : "CANCELED" });
     }
 
+    // Registers an EventSub subscription bound to an open WebSocket session (no public endpoint
+    // needed). Used to subscribe to channel-point redemptions on the WebSocket transport.
+    public void CreateEventSubSubscription(string type, string version, JsonObject condition, string sessionId)
+    {
+        Send(HttpMethod.Post, "https://api.twitch.tv/helix/eventsub/subscriptions", new JsonObject
+        {
+            ["type"] = type,
+            ["version"] = version,
+            ["condition"] = condition,
+            ["transport"] = new JsonObject { ["method"] = "websocket", ["session_id"] = sessionId }
+        });
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────────
 
     private static List<CustomReward> ParseRewards(JsonObject response)
