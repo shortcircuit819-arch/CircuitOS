@@ -103,23 +103,22 @@ must be updated together when cutting a release: `CircuitOS.Runtime.csproj`
 - Backward-compatible catalog rules — `variants` and `tiers` are optional and
   absent collections behave exactly as before ✓
 
-### 0.7 - Cloud Platform + Twitch Integration *(in progress — cloud data + Twitch auth working in a desktop bridge)*
+### 0.7 - Cloud Platform + Twitch Integration *(in progress — unreleased desktop bridge)*
 
 *CircuitOS transitions from a local Windows app to a hosted web platform in this release.*
 
-**Progress (unreleased; default behavior remains local and unchanged):** the data layer now runs
-on Appwrite behind a `--cloud` switch — the app reads/writes its catalog, profile, and inventory
-from the cloud, with cloud profile management and a backup recovery point. Twitch OAuth login/logout
-works in-app, keying the data to the streamer's real Twitch account. The shared pull engine for the
-native EventSub path is built and tested. Still to come: native EventSub redemptions + reward
-creation, hosted admin/overlay, and folding the cloud switch into a shipped release. See
-`docs/0.7-cloud-foundation.md`.
+**Progress (unreleased; default behavior remains local and unchanged):** the source now has a
+desktop-on-cloud bridge behind a `--cloud` switch. Appwrite stores catalog/profile/boost/inventory
+data, cloud profile management works, and cloud saves create a recovery point. Direct Twitch OAuth
+login/logout works in-app and keys cloud data to the streamer's Twitch user id. Native Twitch work has also moved into the admin bridge: the Twitch Settings page can create/sync channel-point rewards, list and attach existing Twitch rewards, edit managed reward title/cost, persist reward ids per live profile, delete synced CircuitOS-managed rewards, run EventSub WebSocket redemption intake, send chat announcements, and use shared pull/redemption/command engines covered by smoke tests. The current pre-release focus is live Twitch verification, UI polish from `UI.md`, hosted admin/overlay planning, and folding cloud mode into a shipped 0.7 release. See `docs/0.7-cloud-foundation.md` and `docs/patch-notes/0.7-dev-progress.md`.
 
-- Data migrates from local JSON files to Appwrite (database, file storage, auth)
-- Streamers log in with Twitch OAuth — no local app install required
+- Data migrates from local JSON files to Appwrite (database now; file storage still planned for
+  cloud overlay/background assets)
+- Streamers log in with Twitch OAuth; the desktop bridge uses direct Twitch OAuth today, while the
+  future hosted version may revisit Auth0 or another account layer
 - **Native Twitch is the one-stop shop: zero-config, no code to paste.** CircuitOS
   creates and manages the channel-point reward via the Twitch API and handles
-  redemptions through EventSub webhooks — the streamer just logs in
+  redemptions through EventSub. The desktop bridge currently uses EventSub WebSocket and admin-driven reward list/attach/sync/edit/delete with in-page permission guidance; hosted webhook/function architecture remains a later deployment option.
 - Streamer.bot remains supported as an *optional* alternative (MixItUp planned for
   0.8); they forward to the same shared pull logic and are never required
 - Admin panel accessible from any browser on any device
@@ -158,6 +157,7 @@ creation, hosted admin/overlay, and folding the cloud switch into a shipped rele
 - `data/system-profile.template.json`: portable branding profile template
 - `streamerbot-actions/`: paste-ready Streamer.bot C# source
 - `tools/admin/`: administration interface and local runtime
+- `tools/dev-ui-bench/`: dev-only UI planning workbench for exporting wiring tickets
 - `tools/runtime/`: .NET application source
 - `tools/package/`: repeatable release, update, and signing scripts
 - `dist/CircuitOS-Release/`: inspectable fresh-install package
@@ -167,7 +167,8 @@ creation, hosted admin/overlay, and folding the cloud switch into a shipped rele
 - `docs/`: setup, operation, safety, and feature documentation
 
 For a safe manual UI and patch-fix workflow, see
-`docs/maintainer-quick-fixes.md`.
+`docs/maintainer-quick-fixes.md`. For the dev-only UI planning workbench, see
+`docs/dev-ui-bench.md`.
 
 ## Safety Principles
 
@@ -182,3 +183,9 @@ For a safe manual UI and patch-fix workflow, see
 
 See `docs/distribution-and-streamerbot-setup.md` for installation and update
 instructions, and `docs/release-signing.md` for the signing workflow.
+
+
+
+
+
+

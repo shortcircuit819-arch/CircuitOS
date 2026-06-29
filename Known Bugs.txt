@@ -1,0 +1,8 @@
+##Known Bugs
+
+-[FIXED IN SOURCE 0.7] Creating a new profile / first-run draft was blocked by live-profile command collisions, which prevented saving the new profile/catalog and made the next startup look like a new instance. First-run now saves drafts without command-collision blocking; collisions are still enforced when making the profile live.
+-[FIXED + LIVE VERIFIED IN SOURCE 0.7] Native multi-profile routing works with multiple live rewards. Managed rewards fulfill normally; attach-only rewards now record/chat without attempting Twitch fulfillment/cancel, avoiding the 403 for rewards not created by this app.
+-[FIXED IN SOURCE 0.7] Variants could pull twice with duplicate-looking labels, creating messages like "shiny shiny". Runtime and paste-ready Streamer.bot redeem code now trim variant labels and dedupe them case-insensitively before building the display name.
+-Dupe protection isn't working in current stable .6.0.8 patch
+-[DEFERRED VISUAL BUG IN SOURCE 0.7] Overview Pull Rates slider fill can still visually drift from the handle in the admin app. User chose to skip for now and continue with the next 0.7 item.
+

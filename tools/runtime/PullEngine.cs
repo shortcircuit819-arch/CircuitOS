@@ -141,15 +141,20 @@ internal static class PullEngine
     private static List<string> RollVariants(JsonArray? variants, Random rng)
     {
         var labels = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (variants is null) return labels;
         foreach (var node in variants)
         {
             if (labels.Count >= 2) break;
             if (node is not JsonObject variant) continue;
-            var label = variant["label"]?.ToString() ?? "";
+            var label = (variant["label"]?.ToString() ?? "").Trim();
             var chance = ToDouble(variant["chance"]);
             if (string.IsNullOrWhiteSpace(label) || chance <= 0) continue;
-            if (!labels.Contains(label) && rng.NextDouble() < chance) labels.Add(label);
+            if (!seen.Contains(label) && rng.NextDouble() < chance)
+            {
+                seen.Add(label);
+                labels.Add(label);
+            }
         }
         return labels;
     }
@@ -159,3 +164,4 @@ internal static class PullEngine
             ? value
             : 0;
 }
+

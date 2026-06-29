@@ -27,6 +27,11 @@ const defaultOverlayConfig = {
   typography: { fontFamily: "Segoe UI", viewerNameSize: 38, partNameSize: 34, labelSize: 14 },
   content: { showCollection: true, showProgress: true, showCircuitOSBranding: true },
   animation: { style: "slide" },
+  stateColors: {
+    rare: { accentColor: "", labelColor: "", barColor: "" },
+    complete: { accentColor: "", labelColor: "", barColor: "" },
+    duplicate: { accentColor: "", labelColor: "", barColor: "" }
+  },
   labels: {
     eyebrow: "CIRCUIT SCAN", componentAcquired: "COMPONENT ACQUIRED",
     collectionProgress: "COLLECTION PROGRESS", newItem: "NEW COMPONENT",
@@ -64,12 +69,21 @@ function validColor(value, fallback) {
   return /^#[0-9a-f]{6}$/i.test(String(value || "")) ? value : fallback;
 }
 
+function normalizeStateColor(sc) {
+  return {
+    accentColor: validColor(sc?.accentColor, ""),
+    labelColor: validColor(sc?.labelColor, ""),
+    barColor: validColor(sc?.barColor, "")
+  };
+}
+
 function normalizeOverlayConfig(value = {}) {
   const source = value && typeof value === "object" ? value : {};
   const layout = source.layout || {};
   const timing = source.timing || {};
   const appearance = source.appearance || {};
   const content = source.content || {};
+  const stateColors = source.stateColors || {};
   const positions = ["bottom-center", "bottom-left", "bottom-right", "top-left", "top-right"];
   return {
     schemaVersion: 1,
@@ -110,6 +124,11 @@ function normalizeOverlayConfig(value = {}) {
       showCircuitOSBranding: content.showCircuitOSBranding !== false
     },
     animation: { style: ["slide", "fade", "none"].includes(source.animation?.style) ? source.animation.style : "slide" },
+    stateColors: {
+      rare: normalizeStateColor(stateColors.rare),
+      complete: normalizeStateColor(stateColors.complete),
+      duplicate: normalizeStateColor(stateColors.duplicate)
+    },
     labels: {
       eyebrow: String(source.labels?.eyebrow || "CIRCUIT SCAN").slice(0, 60).toUpperCase(),
       componentAcquired: String(source.labels?.componentAcquired || "COMPONENT ACQUIRED").slice(0, 60).toUpperCase(),
@@ -126,6 +145,21 @@ function cssUrl(value) {
   return safe ? `url("${safe}")` : "none";
 }
 
+function applyColorSet(root, accentColor, labelColor, barColor) {
+  root.style.setProperty("--signal", accentColor);
+
+  const labelRgb = hexToRgb(labelColor);
+  root.style.setProperty("--label-color", labelColor);
+  root.style.setProperty("--label-border", labelRgb ? `rgba(${labelRgb}, 0.62)` : "rgba(255, 59, 67, 0.62)");
+  root.style.setProperty("--label-bg", labelRgb ? `rgba(${labelRgb}, 0.1)` : "rgba(255, 59, 67, 0.1)");
+  root.style.setProperty("--label-glow", labelRgb ? `rgba(${labelRgb}, 0.35)` : "rgba(255, 59, 67, 0.35)");
+
+  const barRgb = hexToRgb(barColor);
+  root.style.setProperty("--bar-color", barColor);
+  root.style.setProperty("--bar-glow", barRgb ? `rgba(${barRgb}, 0.7)` : "rgba(255, 24, 33, 0.7)");
+  root.style.setProperty("--bar-track-border", barRgb ? `rgba(${barRgb}, 0.22)` : "rgba(255, 24, 33, 0.22)");
+}
+
 function applyOverlayConfig(config) {
   const root = document.documentElement;
   root.style.setProperty("--overlay-width", `${config.layout.width}px`);
@@ -133,7 +167,6 @@ function applyOverlayConfig(config) {
   root.style.setProperty("--offset-x", `${config.layout.offsetX}px`);
   root.style.setProperty("--offset-y", `${config.layout.offsetY}px`);
   root.style.setProperty("--bar-height", `${config.layout.barHeight}px`);
-  root.style.setProperty("--signal", config.appearance.accentColor);
   root.style.setProperty("--navy-950", config.appearance.backgroundColor);
   root.style.setProperty("--navy-800", config.appearance.panelColor);
   root.style.setProperty("--ink", config.appearance.textColor);
@@ -147,16 +180,7 @@ function applyOverlayConfig(config) {
   root.style.setProperty("--part-name-size", `${config.typography.partNameSize}px`);
   root.style.setProperty("--label-size", `${config.typography.labelSize}px`);
 
-  const labelRgb = hexToRgb(config.appearance.labelColor);
-  root.style.setProperty("--label-color", config.appearance.labelColor);
-  root.style.setProperty("--label-border", labelRgb ? `rgba(${labelRgb}, 0.62)` : "rgba(255, 59, 67, 0.62)");
-  root.style.setProperty("--label-bg", labelRgb ? `rgba(${labelRgb}, 0.1)` : "rgba(255, 59, 67, 0.1)");
-  root.style.setProperty("--label-glow", labelRgb ? `rgba(${labelRgb}, 0.35)` : "rgba(255, 59, 67, 0.35)");
-
-  const barRgb = hexToRgb(config.appearance.barColor);
-  root.style.setProperty("--bar-color", config.appearance.barColor);
-  root.style.setProperty("--bar-glow", barRgb ? `rgba(${barRgb}, 0.7)` : "rgba(255, 24, 33, 0.7)");
-  root.style.setProperty("--bar-track-border", barRgb ? `rgba(${barRgb}, 0.22)` : "rgba(255, 24, 33, 0.22)");
+  applyColorSet(root, config.appearance.accentColor, config.appearance.labelColor, config.appearance.barColor);
 
   document.body.className = `position-${config.layout.position}`;
   document.body.dataset.animation = config.animation.style;
@@ -170,6 +194,17 @@ function applyOverlayConfig(config) {
   document.querySelector(".progress-copy").hidden = !config.content.showProgress;
   document.querySelector(".progress-track").hidden = !config.content.showProgress;
   document.querySelector(".circuit-mark").hidden = !config.content.showCircuitOSBranding;
+}
+
+function applyStateColors(stateName, config) {
+  if (stateName === "normal") return;
+  const sc = config.stateColors?.[stateName];
+  if (!sc) return;
+  const root = document.documentElement;
+  const accentColor = validColor(sc.accentColor, "") || config.appearance.accentColor;
+  const labelColor = validColor(sc.labelColor, "") || config.appearance.labelColor;
+  const barColor = validColor(sc.barColor, "") || config.appearance.barColor;
+  applyColorSet(root, accentColor, labelColor, barColor);
 }
 
 async function loadOverlayConfig() {
@@ -262,6 +297,9 @@ function renderState(state) {
   if (state.featuredBoost) addTag(String(state.featuredBoost).toUpperCase());
   if (isDuplicate && (isRare || isComplete)) addTag(`DUPLICATE x${quantity}`);
 
+  const activeStateName = isRare ? "rare" : isComplete ? "complete" : isDuplicate ? "duplicate" : "normal";
+  applyStateColors(activeStateName, overlayConfig || defaultOverlayConfig);
+
   progressBar.style.width = "0%";
   tracker.classList.remove("hiding");
   void tracker.offsetWidth;
@@ -305,7 +343,7 @@ window.addEventListener("message", event => {
     applyOverlayConfig(overlayConfig);
     if (overlayConfig.enabled === false) {
       hideTracker();
-    } else if (!tracker.classList.contains("visible")) {
+    } else {
       renderState(makeDummyState(activePreviewState));
     }
   } else if (event.data.type === "overlayPreviewState") {

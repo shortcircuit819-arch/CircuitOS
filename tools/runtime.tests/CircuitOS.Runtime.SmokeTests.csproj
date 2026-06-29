@@ -16,9 +16,14 @@
     <Compile Include="..\runtime\CommandEngine.cs" Link="CommandEngine.cs" />
     <Compile Include="..\runtime\AppwriteOptions.cs" Link="AppwriteOptions.cs" />
     <Compile Include="..\runtime\TwitchOptions.cs" Link="TwitchOptions.cs" />
+    <Compile Include="..\runtime\TwitchAuth.cs" Link="TwitchAuth.cs" />
+    <Compile Include="..\runtime\TwitchHelix.cs" Link="TwitchHelix.cs" />
+    <Compile Include="..\runtime\TwitchEventSub.cs" Link="TwitchEventSub.cs" />
+    <Compile Include="..\runtime\TwitchRuntime.cs" Link="TwitchRuntime.cs" />
     <Compile Include="..\runtime\CircuitService.Core.cs" Link="CircuitService.Core.cs" />
     <Compile Include="..\runtime\CircuitService.Profiles.cs" Link="CircuitService.Profiles.cs" />
     <Compile Include="..\runtime\CircuitService.Backups.cs" Link="CircuitService.Backups.cs" />
     <Compile Include="..\runtime\CircuitService.AnalyticsRoles.cs" Link="CircuitService.AnalyticsRoles.cs" />
   </ItemGroup>
 </Project>
+

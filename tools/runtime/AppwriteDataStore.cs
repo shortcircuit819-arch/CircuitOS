@@ -297,6 +297,10 @@ internal sealed class AppwriteDataStore : IDataStore
         return row is null ? null : ParseJsonColumn(row, key);
     }
 
+    public void WriteProfileData(string profileId, string key, JsonNode value)
+    {
+        UpsertJson(profileId, key, value.ToJsonString(JsonUtil.IndentedOptions));
+    }
     private void WriteProfileMeta(string profileId, string name)
     {
         // Preserve createdAt + active across rename/create.
@@ -400,3 +404,4 @@ internal sealed class AppwriteDataStore : IDataStore
 
     private static T Run<T>(Task<T> task) => task.GetAwaiter().GetResult();
 }
+

@@ -12,7 +12,7 @@ internal sealed partial class CircuitService
         {
             ["ok"] = true,
             ["activeProfileId"] = _store.ActiveProfileId,
-            ["profiles"] = new JsonArray(profiles.Select(p => ProfileObject(p)).ToArray())
+            ["profiles"] = new JsonArray(profiles.Select(p => ProfileObject(p, _store.ReadProfileData(p.Id, DataKeys.TwitchRewards))).ToArray())
         };
     }
 
@@ -73,7 +73,7 @@ internal sealed partial class CircuitService
                 if (string.IsNullOrWhiteSpace(id)) return Error(["Profile id is required."]);
                 // A profile can only go live if its commands don't collide with another live profile.
                 var target = _store.ReadProfileData(id, DataKeys.Profile);
-                List<string> collisions = target is null ? [] : CommandCollisions(target, id);
+                List<string> collisions = target is null ? [] : LiveProfileCollisions(target, id);
                 if (collisions.Count > 0) return Error(collisions);
                 try { _store.SetProfileActive(id, true); }
                 catch (Exception ex) { return Error([ex.Message]); }
@@ -108,6 +108,13 @@ internal sealed partial class CircuitService
 
     private bool IsProfileLive(string id) => _store.ListProfiles().Any(p => p.Id == id && p.IsLive);
 
+    private List<string> LiveProfileCollisions(JsonObject profile, string selfProfileId)
+    {
+        var errors = CommandCollisions(profile, selfProfileId);
+        errors.AddRange(RedemptionCollisions(profile, selfProfileId));
+        return errors;
+    }
+
     // Returns one error per incoming command word that another LIVE profile already uses, so
     // two simultaneously-active games can't both own (e.g.) !inventory. Excludes selfProfileId.
     private List<string> CommandCollisions(JsonObject profile, string selfProfileId)
@@ -140,12 +147,43 @@ internal sealed partial class CircuitService
         return errors;
     }
 
-    private static JsonObject ProfileObject(ProfileInfo p) => new()
+    // The native Twitch path maps channel-point reward id -> profile. If two live profiles share
+    // the same redemption title, Twitch reward sync can collapse them onto the same reward id.
+    private List<string> RedemptionCollisions(JsonObject profile, string selfProfileId)
     {
-        ["id"] = p.Id,
-        ["name"] = p.Name,
-        ["createdAt"] = p.CreatedAt.ToString("O"),
-        ["isActive"] = p.IsActive,
-        ["isLive"] = p.IsLive
-    };
+        var errors = new List<string>();
+        var title = JsonUtil.String(profile, "redemptionName").Trim();
+        if (string.IsNullOrWhiteSpace(title)) return errors;
+
+        foreach (var other in _store.ListProfiles())
+        {
+            if (!other.IsLive || other.Id == selfProfileId) continue;
+            var otherProfile = _store.ReadProfileData(other.Id, DataKeys.Profile);
+            var otherTitle = JsonUtil.String(otherProfile, "redemptionName").Trim();
+            if (string.Equals(title, otherTitle, StringComparison.OrdinalIgnoreCase))
+            {
+                errors.Add($"Redemption '{title}' is already used by the active profile '{other.Name}'. Rename it before saving or going live.");
+                break;
+            }
+        }
+        return errors;
+    }
+
+    private static JsonObject ProfileObject(ProfileInfo p, JsonObject? twitchRewards = null)
+    {
+        var profile = new JsonObject
+        {
+            ["id"] = p.Id,
+            ["name"] = p.Name,
+            ["createdAt"] = p.CreatedAt.ToString("O"),
+            ["isActive"] = p.IsActive,
+            ["isLive"] = p.IsLive
+        };
+        var rewards = JsonUtil.Object(twitchRewards, "rewards");
+        if (JsonUtil.Object(rewards, "channelPoints") is { } channelPoints)
+        {
+            profile["twitchReward"] = JsonUtil.Clone(channelPoints);
+        }
+        return profile;
+    }
 }

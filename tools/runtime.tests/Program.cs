@@ -76,6 +76,8 @@ try
     var second = service.CompleteFirstRun(request);
     Require(second.Status == 409, "A second completion should be rejected.");
 
+    TestFirstRunAllowsDraftCommandCollisions(store, service, profile, components, boost);
+
     var setup = service.GetStreamerBotSetup(profile);
     Require(setup.Status == 200, "Streamer.bot action generation should succeed.");
     var actions = setup.Body["actions"] as JsonArray
@@ -98,6 +100,7 @@ try
     }
 
     TestActiveProfilesAndCollisions(service, store, defaultProfile);
+    TestTwitchRewardPersistence(service, store);
     TestRuntimeDispatch(service, store);
     TestPullEngine();
     TestRedemptionEngine();
@@ -121,6 +124,36 @@ static void Require(bool condition, string message)
 // Verifies the active-set model (A) and command-collision guard (B): the default profile is live
 // after first-run, new profiles start inactive, activate/deactivate flips the live flag, and a
 // profile whose commands collide with a live profile is blocked from activating until renamed.
+// First-run initializes the editing draft. It should not be blocked just because another live
+// profile already owns the same command words; that guard belongs to activation/go-live.
+static void TestFirstRunAllowsDraftCommandCollisions(LocalFileDataStore store, CircuitService service, JsonObject profile, JsonObject components, JsonObject boost)
+{
+    store.CreateProfile("draft-collision", "Draft Collision");
+    store.SwitchProfile("draft-collision");
+    try
+    {
+        var result = service.CompleteFirstRun(new JsonObject
+        {
+            ["profile"] = JsonUtil.Clone(profile),
+            ["configuration"] = new JsonObject
+            {
+                ["components"] = JsonUtil.Clone(components),
+                ["boost"] = JsonUtil.Clone(boost)
+            }
+        });
+        Require(result.Status == 200, "First-run should initialize a draft even when its commands collide with another live profile.");
+        Require(store.ReadProfileData("draft-collision", DataKeys.Profile) is not null, "Draft first-run should save the profile.");
+        Require(store.ListProfiles().Any(p => p.Id == "draft-collision" && !p.IsLive), "Draft first-run should not automatically make the profile live.");
+        var blocked = service.InvokeProfileOperation(new JsonObject { ["operation"] = "activate", ["id"] = "draft-collision" });
+        Require(blocked.Status != 200, "Activating the colliding draft should still be blocked until commands are renamed.");
+    }
+    finally
+    {
+        store.SwitchProfile("default");
+    }
+
+    Console.WriteLine("First-run drafts: command collisions are allowed while initializing, then blocked at go-live.");
+}
 static void TestActiveProfilesAndCollisions(CircuitService service, IDataStore store, JsonObject defaultProfile)
 {
     Require(store.ListProfiles().Any(p => p.Id == "default" && p.IsLive), "Default profile should be live after first-run.");
@@ -140,17 +173,28 @@ static void TestActiveProfilesAndCollisions(CircuitService service, IDataStore s
     Require(blocked.Status != 200, "Activating a profile whose commands collide with a live profile should be blocked.");
     Require(store.ListProfiles().Any(p => p.Id == profileId && !p.IsLive), "A blocked activation must leave the profile inactive.");
 
-    // Unique commands → activation succeeds.
+    // Unique commands but same redemption title -> activation is still blocked, because native
+    // Twitch reward sync would otherwise collapse both profiles onto one channel-point reward.
+    var rewardCollision = JsonUtil.Clone(defaultProfile) as JsonObject ?? throw new InvalidOperationException("Profile clone failed.");
+    var rewardCommands = (JsonObject)rewardCollision["commands"]!;
+    foreach (var key in rewardCommands.Select(kv => kv.Key).ToList()) rewardCommands[key] = "r" + rewardCommands[key]!;
+    store.ImportProfileData(profileId, new Dictionary<string, JsonNode> { ["profile"] = rewardCollision });
+    var rewardBlocked = service.InvokeProfileOperation(new JsonObject { ["operation"] = "activate", ["id"] = profileId });
+    Require(rewardBlocked.Status != 200, "Activating a profile whose redemption title collides with a live profile should be blocked.");
+    Require(store.ListProfiles().Any(p => p.Id == profileId && !p.IsLive), "A blocked reward-title activation must leave the profile inactive.");
+
+    // Unique commands + unique redemption title -> activation succeeds.
     var unique = JsonUtil.Clone(defaultProfile) as JsonObject ?? throw new InvalidOperationException("Profile clone failed.");
     var commands = (JsonObject)unique["commands"]!;
     foreach (var key in commands.Select(kv => kv.Key).ToList()) commands[key] = "z" + commands[key]!;
+    unique["redemptionName"] = "Second Game Reward";
     store.ImportProfileData(profileId, new Dictionary<string, JsonNode> { ["profile"] = unique });
     var allowed = service.InvokeProfileOperation(new JsonObject { ["operation"] = "activate", ["id"] = profileId });
-    Require(allowed.Status == 200, "Activating a profile with unique commands should succeed.");
+    Require(allowed.Status == 200, "Activating a profile with unique commands and a unique redemption title should succeed.");
     Require(store.ListProfiles().Any(p => p.Id == profileId && p.IsLive), "Successful activation should make the profile live.");
 
     store.SetProfileActive(profileId, false);
-    Console.WriteLine("Active profiles + collisions: live flags, activate/deactivate, and the cross-profile command guard all passed.");
+    Console.WriteLine("Active profiles + collisions: live flags, activate/deactivate, command guard, and redemption-title guard all passed.");
 }
 
 // Verifies the shared PullEngine: tier-weighted distribution, variant rate + prefix,
@@ -174,6 +218,7 @@ static void TestRuntimeDispatch(CircuitService service, IDataStore store)
     commands["collection"] = "collection2";
     commands["salvage"] = "salvage2";
     secondProfile["gameName"] = "Second Game";
+    secondProfile["redemptionName"] = "Second Game Reward";
 
     var catalog = new JsonObject
     {
@@ -234,6 +279,95 @@ static void TestRuntimeDispatch(CircuitService service, IDataStore store)
     Console.WriteLine("Runtime dispatch: command + redemption both resolve to the intended live profile and persist profile-scoped inventory.");
 }
 
+static void TestTwitchRewardPersistence(CircuitService service, IDataStore store)
+{
+    var map = TwitchRuntime.BuildRewardMap(store,
+        (title, cost, prompt) => new CustomReward("reward-circuit-component", title, cost),
+        _ => { });
+    Require(map.TryGetValue("reward-circuit-component", out var profileId) && profileId == "default",
+        "Twitch reward map should route the persisted reward id to the live profile.");
+
+    var state = store.ReadProfileData("default", DataKeys.TwitchRewards)
+        ?? throw new InvalidOperationException("Twitch reward state should be written to the live profile.");
+    var reward = (JsonObject)((JsonObject)state["rewards"]!)["channelPoints"]!;
+    Require(reward["rewardId"]?.ToString() == "reward-circuit-component", "Stored Twitch reward id should match the created reward.");
+    Require(reward["title"]?.ToString() == "Circuit Component", "Stored Twitch reward title should match the profile redemption name.");
+
+    var profiles = (JsonArray)service.GetProfiles()["profiles"]!;
+    var defaultProfile = profiles.OfType<JsonObject>().First(p => p["id"]?.ToString() == "default");
+    var surfaced = defaultProfile["twitchReward"] as JsonObject
+        ?? throw new InvalidOperationException("Profiles API should surface the Twitch reward summary.");
+    Require(surfaced["rewardId"]?.ToString() == "reward-circuit-component", "Profiles API should expose the stored reward id.");
+
+    var updateCalls = new List<string>();
+    var updated = TwitchRuntime.UpdateRewardForProfile(store, "default", "Updated Circuit Reward", 250,
+        (rewardId, title, cost, prompt) =>
+        {
+            updateCalls.Add($"{rewardId}|{title}|{cost}");
+            return new CustomReward(rewardId, title, cost, Manageable: true);
+        }, _ => { });
+    Require(updated.Title == "Updated Circuit Reward" && updated.Cost == 250, "Twitch reward edit should return the updated title and cost.");
+    Require(updateCalls.SequenceEqual(new[] { "reward-circuit-component|Updated Circuit Reward|250" }), "Twitch reward edit should call the provider with the stored reward id, title, and cost.");
+    var profileData = store.ReadProfileData("default", DataKeys.Profile)
+        ?? throw new InvalidOperationException("Profile data should remain readable after Twitch reward edit.");
+    Require(profileData["redemptionName"]?.ToString() == "Updated Circuit Reward", "Editing a managed Twitch reward should keep the profile redemption name in sync.");
+    var updatedState = store.ReadProfileData("default", DataKeys.TwitchRewards)
+        ?? throw new InvalidOperationException("Twitch reward state should remain readable after edit.");
+    var updatedReward = (JsonObject)((JsonObject)updatedState["rewards"]!)["channelPoints"]!;
+    Require(updatedReward["title"]?.ToString() == "Updated Circuit Reward", "Stored Twitch reward title should update after edit.");
+    Require(updatedReward["cost"]?.GetValue<int>() == 250, "Stored Twitch reward cost should update after edit.");
+
+    var deletedIds = new List<string>();
+    var deleted = TwitchRuntime.DeleteRewardForProfile(store, "default", deletedIds.Add, _ => { });
+    Require(deleted.Id == "reward-circuit-component", "Deleted Twitch reward should match the stored reward id.");
+    Require(deletedIds.SequenceEqual(new[] { "reward-circuit-component" }), "Twitch reward delete should call the provider with the stored reward id.");
+    var afterDelete = store.ReadProfileData("default", DataKeys.TwitchRewards)
+        ?? throw new InvalidOperationException("Twitch reward state should remain readable after delete.");
+    var afterRewards = (JsonObject)afterDelete["rewards"]!;
+    Require(!afterRewards.ContainsKey("channelPoints"), "Deleting a Twitch reward should clear the stored channel-point mapping.");
+    var profilesAfterDelete = (JsonArray)service.GetProfiles()["profiles"]!;
+    var defaultAfterDelete = profilesAfterDelete.OfType<JsonObject>().First(p => p["id"]?.ToString() == "default");
+    Require(defaultAfterDelete["twitchReward"] is null, "Profiles API should stop surfacing a deleted Twitch reward.");
+
+    var attached = TwitchRuntime.AttachRewardForProfile(store, "default", new CustomReward("manual-reward", "Manual Reward", 250, Manageable: false), _ => { });
+    Require(attached.Id == "manual-reward", "Attached Twitch reward should return the selected reward id.");
+    var profilesAfterAttach = (JsonArray)service.GetProfiles()["profiles"]!;
+    var defaultAfterAttach = profilesAfterAttach.OfType<JsonObject>().First(p => p["id"]?.ToString() == "default");
+    var attachedSummary = defaultAfterAttach["twitchReward"] as JsonObject
+        ?? throw new InvalidOperationException("Profiles API should surface an attached Twitch reward.");
+    Require(attachedSummary["rewardId"]?.ToString() == "manual-reward", "Profiles API should expose the attached reward id.");
+    Require(attachedSummary["manageable"]?.GetValue<bool>() == false, "Attached non-manageable rewards should be marked attach-only.");
+    var attachedMap = TwitchRuntime.BuildRewardMap(store,
+        (title, cost, prompt) => throw new InvalidOperationException("Stored attached rewards should not create a new reward."),
+        _ => { });
+    Require(attachedMap.TryGetValue("manual-reward", out var attachedProfileId) && attachedProfileId == "default",
+        "Stored attached Twitch reward should route to the live profile.");
+    var attachedRoutes = TwitchRuntime.BuildRewardRoutes(store,
+        (title, cost, prompt) => throw new InvalidOperationException("Stored attached rewards should not create a new reward."),
+        _ => { });
+    Require(attachedRoutes.TryGetValue("manual-reward", out var attachedRoute) && attachedRoute.ProfileId == "default" && !attachedRoute.Manageable,
+        "Native Twitch route map should preserve attach-only reward status so fulfillment is skipped.");
+
+    var duplicateRewardProfile = "twitch-duplicate-" + Guid.NewGuid().ToString("N")[..8];
+    store.CreateProfile(duplicateRewardProfile, "Duplicate Reward Profile");
+    store.SetProfileActive(duplicateRewardProfile, true);
+    try
+    {
+        RequireThrows<InvalidDataException>(() => TwitchRuntime.AttachRewardForProfile(store, duplicateRewardProfile, new CustomReward("manual-reward", "Manual Reward", 250, Manageable: false), _ => { }),
+            "A live profile should not be allowed to attach a Twitch reward id already mapped to another live profile.");
+    }
+    finally
+    {
+        store.SetProfileActive(duplicateRewardProfile, false);
+    }
+
+    var deleteAttempts = new List<string>();
+    RequireThrows<InvalidDataException>(() => TwitchRuntime.DeleteRewardForProfile(store, "default", deleteAttempts.Add, _ => { }),
+        "Attach-only Twitch rewards should not be deleted through CircuitOS.");
+    Require(deleteAttempts.Count == 0, "Attach-only Twitch reward delete should not call the provider.");
+
+    Console.WriteLine("Twitch rewards: reward id persistence, edit, attach existing, profile summary exposure, and delete cleanup passed.");
+}
 static void TestPullEngine()
 {
     var collection = new JsonObject
@@ -294,6 +428,23 @@ static void TestPullEngine()
             ?? throw new InvalidOperationException("PullEngine returned null under dup protection.");
         Require(outcome.PartId == "c2", $"Dup protection should pick the only unowned item (got '{outcome.PartId}').");
     }
+
+    var duplicateVariantCollection = new JsonObject
+    {
+        ["variants"] = new JsonArray
+        {
+            new JsonObject { ["id"] = "shiny_a", ["label"] = "SHINY", ["chance"] = 1.0 },
+            new JsonObject { ["id"] = "shiny_b", ["label"] = " shiny ", ["chance"] = 1.0 },
+            new JsonObject { ["id"] = "large", ["label"] = "LARGE", ["chance"] = 1.0 }
+        },
+        ["parts"] = new JsonArray { new JsonObject { ["id"] = "dup_variant", ["name"] = "Variant Test" } }
+    };
+    var duplicateVariantOutcome = PullEngine.Roll(duplicateVariantCollection, 1.0, empty, 0, 0, new Random(2))
+        ?? throw new InvalidOperationException("PullEngine returned null for duplicate variant labels.");
+    Require(duplicateVariantOutcome.VariantLabels.SequenceEqual(new[] { "SHINY", "LARGE" }),
+        "Variant labels should be trimmed, deduped case-insensitively, and still allow a second unique label.");
+    Require(!duplicateVariantOutcome.DisplayPartName.Contains("SHINY SHINY", StringComparison.OrdinalIgnoreCase),
+        "Variant display name should not repeat duplicate-looking labels.");
 
     // No tiers: equal odds, per-item probability = collectionProb / partCount.
     var flat = new JsonObject

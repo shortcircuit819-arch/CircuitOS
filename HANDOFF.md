@@ -12,8 +12,8 @@ the end of every working session before stopping.
 |-------|-------|
 | Project | CircuitOS — configurable Twitch collection-game platform |
 | Default game | Circuit Components (electronics-themed) |
-| Current version | **0.6.0.8** (installed/packaged); 0.7 Phase 1 refactor in source, not yet packaged |
-| Phase | 0.6 complete and validated on stream. **0.7 Phase 2 + 2b COMPLETE for the desktop-on-cloud bridge** (all verified live via `--cloud`): app reads/writes game data from Appwrite, profile management works, every cloud save snapshots a recovery point. Done: host-agnostic `CircuitService`; `AppwriteDataStore` (core + profiles + backups, all in `profile_data`); `PullEngine` (tested); revived smoke harness; config loader + diagnostics. Deferred to Phase 5: overlay-background Storage bucket. Next: **Phase 3 — Twitch OAuth via Auth0** (real tenant id; account-gated), then Phase 4 (EventSub + `PullEngine` = native zero-config Twitch). No release cut (default-local preserved; installed 0.6.0.8 untouched). |
+| Current version | **0.6.0.8** (installed/packaged); 0.7 desktop-on-cloud/native Twitch work exists in source, not yet packaged |
+| Phase | 0.6 complete and validated on stream. **0.7 source is active and UNRELEASED**: local mode is preserved; cloud mode behind `--cloud` reads/writes Appwrite `profile_data`; cloud profile management and rolling recovery backups exist; direct Twitch OAuth is implemented; native Twitch desktop bridge work has begun (Helix reward creation, EventSub WebSocket redemption intake, chat announcements, chat commands, auto-start listener); shared `PullEngine`, `RedemptionEngine`, and `CommandEngine` are smoke-tested. Current focus: verification + the manually updated `UI.md` 0.7 launch punch list. Twitch Settings now has admin-driven reward list/attach/create/sync/edit/delete. Still ahead: live Twitch verification, reward-status polish, per-profile overlay URLs/cloud overlay assets, hosted deployment decisions, and packaging a real 0.7 release. |
 | Repo root | `C:\Dev\CircuitStreamSystem` |
 | Live data path | `C:\Users\nicho\Documents\CircuitOS\Data` (profiles under `Data\profiles\<id>`; active profile `circuit-components`) |
 
@@ -29,6 +29,11 @@ CircuitStreamSystem/
 │   ├── CircuitService.AnalyticsRoles.cs
 │   ├── CircuitService.Backups.cs
 │   ├── CircuitService.Overlay.cs
+│   ├── CircuitService.Profiles.cs
+│   ├── CircuitService.Modules.cs
+│   ├── IDataStore.cs, LocalFileDataStore.cs, AppwriteDataStore.cs
+│   ├── PullEngine.cs, RedemptionEngine.cs, CommandEngine.cs
+│   ├── TwitchAuth.cs, TwitchHelix.cs, TwitchEventSub.cs, TwitchRuntime.cs
 │   ├── CircuitWindow.cs    Windows Forms shell (WebView2)
 │   └── CircuitOS.Runtime.csproj
 │
@@ -37,6 +42,8 @@ CircuitStreamSystem/
 │   ├── app.js              ~3,800 lines — all rendering, API calls, state
 │   ├── styles.css
 │   └── runtime/CircuitOS.exe   Published binary (copy here after dotnet publish)
+│
+├── tools/dev-ui-bench/     Dev-only static UI planner; exports wiring tickets
 │
 ├── streamerbot-actions/    Paste-ready C# for Streamer.bot (plain .txt files)
 │   ├── StreamerbotReedeem.txt       Main pull + inventory write
@@ -53,15 +60,23 @@ CircuitStreamSystem/
 ```
 
 **Key API endpoints (all local, 127.0.0.1:8787):**
-- `GET /api/health` → version string, data path
+- `GET /api/health` → version string, data path, mode, Twitch session info
 - `GET /api/config` → components catalog + boost config
 - `GET /api/profile` → branding, commands, colors, messages
 - `GET /api/analytics` → inventory stats
 - `GET /api/backups` → backup history
+- `GET /api/profiles` → profile list, editing profile, live profile set
 - `GET /api/overlay-config` → overlay config JSON (falls back to template)
+- `POST /api/twitch/login` / `POST /api/twitch/logout` → desktop Twitch OAuth session controls
+- `GET /api/twitch/rewards` → list current Twitch channel-point rewards for attach/reuse
+- `POST /api/twitch/reward-sync` → create/update or attach and persist a live profile channel-point reward
+- `POST /api/twitch/reward-delete` → delete a synced CircuitOS-managed reward and clear profile mapping
+- `POST /api/twitch/reward-update` → update managed reward title/cost and sync the profile redemption name
 - `POST /api/save` → save config changes
 - `POST /api/setup` → generate Streamer.bot C# actions
 - `POST /api/overlay-config` → save overlay config
+- `POST /api/profiles` → create/switch/rename/delete/activate/deactivate profiles
+- `POST /api/runtime/action` → native runtime dispatch for redeem/command actions
 - `GET /overlay-config.json` → raw overlay config file (used by overlay.js)
 - `GET /overlay/{index.html|styles.css|overlay.js|overlay-state.json}` → overlay static/state files
 
@@ -107,7 +122,7 @@ powershell -ExecutionPolicy Bypass -File tools\package\Build-CircuitOSPackage.ps
 
 The packaging script creates:
 - `dist/CircuitOS-Windows-x64.zip` — fresh install
-- `dist/CircuitOS-Update-{prev} to {new}/` — data-free update package
+- `dist/CircuitOS-Update-{version}.zip` — data-free update package
 
 ---
 
@@ -191,18 +206,19 @@ so the 0.7 cloud switch is surgical rather than a rewrite.
 |-------------|--------------|
 | .NET Windows Forms + HttpListener | Hosted web backend |
 | JSON files on disk | Appwrite (DB, auth, file storage) |
-| Streamer.bot C# actions | Twitch EventSub webhooks (Streamer.bot becomes optional) |
+| Streamer.bot C# actions | Native Twitch EventSub (desktop bridge uses WebSocket; Streamer.bot becomes optional) |
 | Admin panel via localhost | Admin panel via browser, any device |
 | OBS overlay at `localhost:8787` | OBS overlay at cloud URL |
-| No auth | Twitch OAuth via Auth0 |
+| No auth | Twitch OAuth; desktop bridge currently uses direct Twitch OAuth |
 | Local backups | Cloud-managed, per-streamer |
 
-### Chosen cloud stack (planned)
+### Chosen cloud stack / auth direction
 
 - **Appwrite** — backend (database, file storage, functions). Open source, self-hostable
   during development. MCP plugin already installed with 13 skills.
-- **Auth0** — Twitch OAuth for streamer authentication. MCP plugin already installed with
-  44 skills.
+- **Direct Twitch OAuth for the desktop bridge** — already implemented with a loopback redirect and
+  cached local tokens. Auth0 may be revisited for hosted multi-user deployment, but it is not the
+  current desktop bridge path.
 - **Discord** — patch note posting, role award notifications. MCP plugin already installed
   with 2 skills.
 
@@ -345,35 +361,43 @@ Get approval on both before writing a line of 0.5 code.
 | Field | Value |
 |-------|-------|
 | Released version | **0.6.0.8** (shipped, validated on stream; installed app is this) |
-| In development | **0.7 — Cloud Platform + Twitch** (Phases 1–3 done, UNRELEASED; default-local preserved, no version bump, EXE not repackaged) |
+| In development | **0.7 — Cloud Platform + Twitch** (desktop-on-cloud + native Twitch source active, UNRELEASED; default-local preserved, no version bump, EXE not repackaged) |
 | Active profile data path | `C:\Users\nicho\Documents\CircuitOS\Data\profiles\circuit-components` |
 | Data root | `C:\Users\nicho\Documents\CircuitOS\Data` (holds `appwrite.local.json`, `twitch.local.json`, `twitch-tokens.local.json`) |
 
 ### 0.7 development status (read first for a cold start)
 
-**Current focus:** the recent work stream has been the admin UI polish backlog from `UI.md` — primarily the Overview / Configure / Collections / Messages experience in `tools/admin`, verified live in-browser. The cloud/runtime pieces are still present and validated, but the active iteration has been UI polish rather than backend expansion.
+**Current focus:** work from the older `UI.md` list was completed, then the user manually updated
+`UI.md` with a new 0.7 launch punch list. Treat `UI.md` as active product direction now: sidebar
+theme coverage, Overview layout/rate editing, Game Profile save flow, overlay state customization,
+commands layout, clearer Backups UX, and Twitch settings/login treatment.
 
-**⚠️ FIRST TASK: live-verify the row-addressing fix.** The bug (re-push "verified 0") is **fixed in
-source** (2026-06-24, see Session Log) but not yet re-verified against live cloud — run
-`--push-to-appwrite` (expect 6/6) → `--cloud`. Then optionally a `local-dev → Twitch-id` migration so
-login/logout doesn't strand data, and clean up any pre-fix `local-dev` rows in the console.
+**Verification status (2026-06-27):** local Release build passes with 0 warnings/errors, and the
+smoke harness passes against `data` + `streamerbot-actions`. This verifies first-run safety, generated
+Streamer.bot structure, active profile collision guards, runtime dispatch, pull/redemption/command
+engines, and Appwrite/Twitch config loader behavior. Live cloud/Twitch checks still require the user's
+credentials/session.
 
 **What's built and verified live (all behind `--cloud`; local mode 100% unchanged):**
 - Data layer swapped to Appwrite: app reads/writes catalog/profile/boost/inventory from `profile_data`
 - Profile management + a rolling backup recovery point (both inside `profile_data`)
 - Twitch OAuth login/logout in-app (footer session panel) + CLI `--twitch-login`; tenant = Twitch user id
-- Shared `PullEngine` (the roll logic for Phase 4), revived smoke harness
+- Native Twitch desktop bridge slices: Helix reward creation, EventSub WebSocket redemption intake,
+  fulfillment/cancel path, chat announcements, chat commands, and listener auto-start
+- Shared `PullEngine`, `RedemptionEngine`, and `CommandEngine`; revived smoke harness
 
 **Run cloud mode (from the build output — pass --ui/--actions since there's no `App` folder there):**
 ```
 dotnet "tools/runtime/bin/Release/net9.0-windows/CircuitOS.dll" --cloud \
   --data "<DataRoot>" --ui "tools/admin" --actions "streamerbot-actions"
 ```
-**Diagnostics (all open a dialog):** `--check-appwrite`, `--appwrite-roundtrip`, `--push-to-appwrite`,
-`--appwrite-profiles`, `--appwrite-backups`, `--twitch-login`. Local app: drop `--cloud`.
+**Diagnostics (most open a dialog unless headless):** `--check-appwrite`, `--appwrite-roundtrip`,
+`--push-to-appwrite`, `--appwrite-profiles`, `--appwrite-backups`, `--twitch-login`,
+`--twitch-reward`, `--twitch-listen`. Local app: drop `--cloud`.
 
 **New 0.7 source files:** `tools/runtime/{IDataStore.cs (ILocalDataStore split), LocalFileDataStore.cs,
-AppwriteDataStore.cs, AppwriteOptions.cs, PullEngine.cs, RedemptionEngine.cs, CommandEngine.cs, TwitchOptions.cs, TwitchAuth.cs}`,
+AppwriteDataStore.cs, AppwriteOptions.cs, PullEngine.cs, RedemptionEngine.cs, CommandEngine.cs,
+TwitchOptions.cs, TwitchAuth.cs, TwitchHelix.cs, TwitchEventSub.cs, TwitchRuntime.cs}`,
 `tools/runtime/CircuitOS.Runtime.csproj` (+Appwrite 5.1.0). `CircuitService` now takes `IDataStore`.
 
 **Config files (gitignored, in Data root; user holds the secrets — assistant must NOT read them):**
@@ -384,9 +408,17 @@ Appwrite: nyc region, project `6a3b1af3002de5ef906b`, db `6a3b1b19000359f605af`,
 
 **Setup docs:** `docs/0.7-cloud-foundation.md`, `0.7-appwrite-dev-setup.md`, `0.7-twitch-auth-setup.md`.
 
-**Remaining 0.7:** live-verify the row-addressing fix → Phase 4 (EventSub function + reward creation via the shared engines,
-the native zero-config path) → Phase 5 (hosted admin + cloud overlay + Storage bucket + Auth0). Then
-fold `--cloud` into config and cut the 0.7 release.
+**Dev UI planning:** `tools/dev-ui-bench/` is a static, proposal-only visual editor. It can import/paste
+current `tools/admin/index.html` layout scaffolds into an editable canvas for app screens and first-run
+welcome steps, supports direct selection, label edits, hide/show intent, size presets, and drag reorder
+intent, and can import/paste the full `tools/admin/styles.css` into an isolated canvas so screens use the
+real app grid/panel/table styling. Overview runtime containers are hydrated with fake data for visual
+accuracy. It does not edit production source or user/profile data.
+
+**Remaining 0.7:** live-verify cloud/Twitch with the user's credentials as needed; complete the active
+`UI.md` launch punch list; add Twitch settings/status UX; persist reward-id ↔ profile mapping; decide
+hosted auth/deployment shape; add cloud overlay/background storage; fold `--cloud` into config; cut the
+0.7 release.
 
 ### 0.6 (released)
 0.6 — Item Variants + Tiers — feature complete and validated on stream (0.6.0.8). Variants, rarity tiers,
@@ -435,6 +467,132 @@ DataPath/
 ---
 
 ## Session Log
+
+### 2026-06-29 — Claude (claude-sonnet-4-6) — C4: per-state overlay color overrides
+
+**Goal:** Complete the last remaining item on the 0.7 UI.md punch list — overlay editor state customization.
+The Overlay Editor previously applied a single global color set to all pull states; the Rare/Complete/Duplicate
+preview tabs switched the dummy state but did not expose any per-state styling controls.
+
+**Changes:**
+
+| File | Change |
+|------|--------|
+| `overlays/lower-quarter/overlay.js` | Added `stateColors` to `defaultOverlayConfig` and `normalizeOverlayConfig()`. Extracted `applyColorSet(root, accentColor, labelColor, barColor)` helper. Added `applyStateColors(stateName, config)` — picks from `config.stateColors[state]`, falls back to global appearance colors if the override field is empty. Called from `renderState()` after state class assignment. `normalizeStateColor()` validates each override field. |
+| `tools/admin/app.js` | Added `activeOverlayPreviewState = "normal"` variable. Added `renderStateColorFields()` — shows instructional note when Normal; renders 3 color pickers (Accent, Label, Bar Fill) pre-populated from the state override or global fallback when Rare/Complete/Duplicate is active. Called from `renderOverlayEditor()` and the `[data-preview-state]` click handler. |
+| `tools/admin/index.html` | Added "State Overrides" panel (`STATE COLORS` kicker) with `#overlayStateColorsNote` and `#overlayStateColorsFields`. |
+| `UI.md` | Marked C4 Done. All 0.7 punch list items are now Done/Verified. |
+
+**Verified (preview server):** State Overrides panel visible below Appearance with instructional note on
+Normal. Clicking Rare renders three color pickers pre-filled with global defaults. No console errors.
+
+**UI.md punch list is COMPLETE.** Next step: cut the 0.7 release or live-test Twitch reward flow.
+
+---
+
+### 2026-06-27 — Codex — Verification + documentation realignment
+
+**Goal:** Verify the current `C:\Dev\CircuitStreamSystem` source and clean up stale docs/notes before
+new work. User clarified that `UI.md` was manually updated with new asks, so any older "UI.md complete"
+notes refer to the previous list, not the current one.
+
+**Verification:**
+- `dotnet build tools/runtime/CircuitOS.Runtime.csproj -c Release` passed with 0 warnings/errors.
+- `dotnet run --project tools/runtime.tests/CircuitOS.Runtime.SmokeTests.csproj -c Release -- data streamerbot-actions`
+  passed. Coverage includes first-run safety, generated Streamer.bot structure, active-profile collision
+  guards, runtime dispatch, pull/redemption/command engines, and Appwrite/Twitch config loaders.
+
+**Docs cleaned:**
+- `AGENTS.md` — current version/status updated from stale 0.6.0.6 text to 0.6.0.8 shipped + 0.7 unreleased.
+- `README.md` — 0.7 progress updated to reflect direct Twitch OAuth, native desktop bridge slices, and the
+  current UI/verification focus.
+- `UI.md` — normalized into the active 0.7 launch punch list.
+- `docs/patch-notes/0.7-dev-progress.md` — updated with native Twitch bridge progress, verification results,
+  and current remaining work.
+- `docs/0.7-cloud-foundation.md` — added a supersession note: desktop bridge uses direct Twitch OAuth +
+  EventSub WebSocket today; hosted Auth0/webhook design is future deployment territory, not current prerequisite.
+- `docs/0.7-twitch-auth-setup.md` — added chat scopes and re-login note.
+- `docs/0.7-appwrite-dev-setup.md` — clarified that Auth0 is not required for the current desktop bridge.
+- `HANDOFF.md` — current-state summary updated so the top of the file matches later session entries/source.
+
+**Next best step:** work through `UI.md` in small verified slices, starting with global/sidebar theme coverage
+and the Overview card/rate-editing issues because they are visible, low-risk, and directly affect first-run trust.
+
+---
+
+### 2026-06-27 — Codex — CircuitOS UI Bench dev tool scaffold
+
+**Goal:** Create a dev-only standalone UI planning tool so the user can stay productive during
+Claude/Codex usage limits by designing UI changes and exporting wiring tickets. This is not a
+user-facing feature and does not edit user data or production source.
+
+**Added:**
+- `docs/dev-ui-bench.md` — purpose, non-goals, safe boundaries, workflow, and ticket format.
+- `tools/dev-ui-bench/README.md` — quick local usage and boundaries.
+- `tools/dev-ui-bench/index.html` — static browser shell.
+- `tools/dev-ui-bench/styles.css` — CircuitOS-like mock UI styling.
+- `tools/dev-ui-bench/app.js` — screen selector, component palette, property editor, localStorage draft
+  save, live mock preview, copy/download Markdown wiring ticket.
+
+**Validation:** `node --check tools/dev-ui-bench/app.js` passed using the bundled Codex Node runtime.
+
+**Boundary:** Proposal-only. No CircuitOS APIs, no Appwrite/Twitch/Streamer.bot calls, no production
+source mutation, no profile/inventory data access.
+
+**Next best step:** use UI Bench to create a ticket for the first `UI.md` item, then wire that item
+in the real app as a small verified slice.
+
+---
+
+### 2026-06-27 — Codex — UI Bench style import
+
+**Goal:** Let the dev-only UI Bench import the current CircuitOS look so mockups can be edited against
+the real theme instead of only the default bench palette.
+
+**Changes made:**
+- Added Style Import controls to `tools/dev-ui-bench/index.html`: CSS file import, paste box, reset,
+  status line, and theme variable editor.
+- Added browser-only CSS variable parsing/editing in `tools/dev-ui-bench/app.js`; known `:root`
+  variables repaint the preview live, save to localStorage, and export into the Markdown wiring ticket.
+- Added compact sidebar styling in `tools/dev-ui-bench/styles.css`.
+- Updated `docs/dev-ui-bench.md` and `tools/dev-ui-bench/README.md` with the safe import workflow.
+
+**Boundary:** still proposal-only. Import reads a user-selected/pasted CSS blob in the browser; it does
+not write back to `tools/admin/styles.css`, user data, secrets, Twitch, Appwrite, or runtime APIs.
+
+**Validation:** JavaScript syntax passed with bundled Node.
+
+---
+
+### 2026-06-27 — Codex — UI Bench visual canvas import
+
+**Goal:** Make UI Bench usable as an actual visual editor, not only a component-list planner: import the
+current app/welcome screen, click elements directly, resize/hide/reorder proposal blocks, and export a
+wiring ticket.
+
+**Changes made:**
+- Added Current Layout Import controls to `tools/dev-ui-bench/index.html`: `index.html` file import,
+  paste fallback, blank mockup reset, and status output.
+- Added screen-to-view mapping in `tools/dev-ui-bench/app.js` for current admin screens plus first-run
+  welcome wizard steps.
+- Added browser-only visual canvas rendering from imported HTML; selected static panels, toolbars,
+  buttons, fields, and toggles can be clicked directly.
+- Imported full `styles.css` is stored and injected into an isolated canvas instead of only parsing color
+  variables, so the editor preview can match the current app more closely.
+- Overview runtime containers such as Pull Rates, Collection Health, Event Timeline, Economy Pulse, and
+  Top Collectors are hydrated with fake rows when the imported static HTML is empty.
+- Added proposal controls for label edits, hidden state, size presets, move up/down, and drag reorder.
+- Exported wiring tickets now include `Layout source`, source selector, hidden state, and canvas size.
+- Updated `docs/dev-ui-bench.md` and `tools/dev-ui-bench/README.md` with the layout-import workflow.
+
+**Boundary:** still proposal-only. The importer reads user-selected/pasted HTML in the browser and
+stores drafts in localStorage. It does not execute `tools/admin/app.js`, call APIs, mutate production
+source, or touch user/profile data. Runtime-generated controls may still need to be added manually.
+
+**Validation:** JavaScript syntax passed with bundled Node; browser smoke verified isolated full-CSS canvas
+rendering, fake Overview runtime rows, full-width canvas behavior, and zero console warnings/errors.
+
+---
 
 ### FIXED 2026-06-24 — AppwriteDataStore row addressing desync (was "verified 0")
 
@@ -1894,3 +2052,172 @@ DataPath/profiles/<id>/overlay/
 **Next steps:**
 - Distribute `dist/CircuitOS-Update-0.4.5.zip`
 - Move to **0.5 — Profiles and Modules**
+
+### 2026-06-27 — Codex — 0.7 Twitch Settings UI closeout slice
+
+**Goal:** Start finishing the 0.7 launch punch list from the active `C:\Dev\CircuitStreamSystem` repo copy, focusing on Twitch settings/status UX without packaging a release yet.
+
+**Changes made:**
+
+| File | Change |
+|------|--------|
+| `tools/admin/index.html` | Added a dedicated `twitchView` and sidebar nav entry before Streamer.bot. |
+| `tools/admin/app.js` | Added `twitch` view title and `renderTwitchSettings()`; the page reflects current session mode, Twitch login, token freshness, live profiles, and reward-name readiness. Login/logout reuse existing `/api/twitch/login` and `/api/twitch/logout`. |
+| `tools/admin/styles.css` | Added Twitch settings layout, Twitch-purple login treatment, readiness/reward rows, and responsive stacking. |
+| `UI.md` | Marked the Twitch settings/login UI ask as initial-pass done and called out reward persistence as the next step. |
+| `docs/patch-notes/0.7-dev-progress.md` | Recorded the Twitch Settings page and narrowed remaining Twitch UI work to reward-id persistence, live sync controls, and scope/config guidance. |
+
+**Validation:** `node --check tools/admin/app.js` passed using the bundled Codex Node runtime.
+
+**Still ahead for 0.7:** persist reward-id ↔ profile mapping, turn the Twitch page into real reward selection/sync controls, add scope/re-login guidance, then verify in cloud/Twitch mode with live credentials before packaging.
+
+### 2026-06-28 — Codex — 0.7 Twitch reward management: create/sync + delete cleanup
+
+**Goal:** Continue the 0.7 native Twitch path while preserving the product decision that CircuitOS stays local-first by default, with cloud optional and Twitch capabilities available from the local desktop bridge.
+
+**Changes made:**
+
+| File | Change |
+|------|--------|
+| `tools/runtime/TwitchRuntime.cs` | Added reusable `SyncRewardForProfile` and `DeleteRewardForProfile` helpers. Sync validates live profile + redemption name, persists reward id/title/cost to `twitch-rewards.json`; delete calls the provider and clears the stored `rewards.channelPoints` mapping. |
+| `tools/runtime/TwitchHelix.cs` | Added `DeleteReward(rewardId)` for app-manageable channel-point rewards. |
+| `tools/runtime/Program.cs` | Added `/api/twitch/reward-sync` and `/api/twitch/reward-delete` local runtime endpoints. Both use cached Twitch login, work in local or cloud-backed mode, and return refreshed profiles. |
+| `tools/admin/app.js` | Wired Twitch Settings `Create/Sync` to the sync endpoint and enabled guarded `Delete` for already-synced rewards. `Edit` remains staged. |
+| `tools/runtime.tests/Program.cs` | Expanded Twitch reward smoke coverage to verify persistence, profile summary exposure, delete provider call, and local mapping cleanup. |
+| `README.md`, `docs/patch-notes/0.7-dev-progress.md`, `docs/0.7-cloud-foundation.md`, `HANDOFF.md` | Updated 0.7 status around local-first/cloud-optional Twitch capabilities and reward-management progress. |
+
+**Validation:**
+
+- `node --check tools/admin/app.js` passed.
+- `dotnet build tools/runtime/CircuitOS.Runtime.csproj -c Release` passed with 0 warnings/errors.
+- `dotnet run --project tools/runtime.tests/CircuitOS.Runtime.SmokeTests.csproj -c Release -- data streamerbot-actions` passed, including Twitch reward delete cleanup.
+
+**Still ahead for 0.7:** Twitch reward edit/cost controls, scope/re-login guidance in the Twitch page, live verification with the user's Twitch credentials after restarting the dev runtime, then continue the UI launch punch list and packaging path.
+
+### 2026-06-28 — Codex — 0.7 Twitch reward dropdown / attach existing rewards
+
+**Goal:** Let users reuse a Twitch channel-point reward they already created instead of forcing CircuitOS to create a new one.
+
+**Changes made:**
+
+| File | Change |
+|------|--------|
+| `tools/runtime/TwitchHelix.cs` | Added `ListRewards()` for current channel rewards and extended `CustomReward` with `Manageable` so the UI can distinguish CircuitOS-manageable rewards from attach-only rewards. |
+| `tools/runtime/TwitchRuntime.cs` | Added `AttachRewardForProfile`; stored reward mappings are now reused by the listener instead of auto-creating a new reward on restart. Stored mappings include `manageable`. Delete refuses attach-only rewards before calling Twitch. |
+| `tools/runtime/Program.cs` | Added `GET /api/twitch/rewards`; `/api/twitch/reward-sync` now accepts an optional `rewardId` to attach an existing reward. |
+| `tools/admin/app.js` | Twitch Settings now loads current Twitch rewards, shows them in a dropdown per live profile, and sends the selected reward id during sync. Non-manageable rewards are labelled attach-only and cannot be deleted from CircuitOS. |
+| `tools/admin/styles.css` | Added compact reward-cell/select styling. |
+| `tools/runtime.tests/Program.cs` | Smoke coverage now verifies attach-existing reward mapping, listener routing from stored mapping, profile summary exposure, and delete guard for attach-only rewards. |
+| `README.md`, `docs/patch-notes/0.7-dev-progress.md`, `HANDOFF.md` | Updated 0.7 status and continuity notes. |
+
+**Validation:**
+
+- `node --check tools/admin/app.js` passed.
+- `dotnet build tools/runtime/CircuitOS.Runtime.csproj -c Release` passed with 0 warnings/errors.
+- `dotnet run --project tools/runtime.tests/CircuitOS.Runtime.SmokeTests.csproj -c Release -- data streamerbot-actions` passed, including attach-existing reward coverage.
+
+**Still ahead for 0.7:** live UI verification with the user's Twitch account after restarting the dev runtime, then reward edit/cost controls and clearer scope/re-login guidance.
+
+### 2026-06-28 — Codex — 0.7 Twitch reward edit/cost controls
+
+**Goal:** Finish the first functional reward-management loop by making the Twitch Settings `Edit` action update managed channel-point reward title/cost instead of leaving it staged.
+
+**Changes made:**
+
+| File | Change |
+|------|--------|
+| `tools/runtime/TwitchHelix.cs` | Added `UpdateReward(rewardId, title, cost, prompt)` for Twitch-manageable rewards. |
+| `tools/runtime/TwitchRuntime.cs` | Added `UpdateRewardForProfile`; validates stored reward ownership, updates Twitch, persists title/cost/managed state, and updates the profile `redemptionName` so CircuitOS and Twitch do not drift. |
+| `tools/runtime/Program.cs` | Added `/api/twitch/reward-update` endpoint. |
+| `tools/admin/app.js` | Enabled `Edit` for managed synced rewards. It prompts for title and cost, posts to the runtime endpoint, refreshes profile/reward state, and keeps attach-only rewards protected. |
+| `tools/runtime.tests/Program.cs` | Smoke coverage verifies managed reward edit provider call, stored title/cost update, and profile redemption-name sync. |
+| `README.md`, `docs/patch-notes/0.7-dev-progress.md`, `HANDOFF.md` | Updated 0.7 status and continuity notes. |
+
+**Validation:**
+
+- `node --check tools/admin/app.js` passed.
+- `dotnet build tools/runtime/CircuitOS.Runtime.csproj -c Release` passed with 0 warnings/errors.
+- `dotnet run --project tools/runtime.tests/CircuitOS.Runtime.SmokeTests.csproj -c Release -- data streamerbot-actions` passed, including reward edit/attach/delete coverage.
+
+**Still ahead for 0.7:** restart and live-test the Twitch Settings reward list/attach/edit/delete loop with the Twitch account, then continue UI launch polish and packaging prep.
+
+
+### 2026-06-28 — Codex — 0.7 Twitch permissions guidance
+
+**Goal:** Make the Twitch Settings page self-explanatory when tokens are expired or permissions are stale after native Twitch feature updates.
+
+**Changes made:**
+
+| File | Change |
+|------|--------|
+| `tools/admin/app.js` | Added a Twitch permissions card listing reward management, redemption intake, and chat reply permissions. The card shows a refresh/login action and highlights expired tokens. Added an attach-only explanation card so users know why some existing rewards cannot be edited/deleted by CircuitOS. |
+| `tools/admin/styles.css` | Added compact scope-list styling and warning border treatment. |
+| `README.md`, `docs/patch-notes/0.7-dev-progress.md`, `HANDOFF.md` | Updated 0.7 status and continuity notes. |
+
+**Validation:**
+
+- `node --check tools/admin/app.js` passed.
+- `dotnet build tools/runtime/CircuitOS.Runtime.csproj -c Release` passed with 0 warnings/errors.
+- `dotnet run --project tools/runtime.tests/CircuitOS.Runtime.SmokeTests.csproj -c Release -- data streamerbot-actions` passed, including reward edit/attach/delete coverage.
+
+**Still ahead for 0.7:** restart and live-test the Twitch Settings reward list/attach/edit/delete loop with the Twitch account, then continue UI launch polish and packaging prep.
+
+
+
+### 2026-06-28 — Codex — Known bug fix: first-run draft command collisions
+
+**Goal:** Fix the bug shown in the user screenshot: creating a blank/new profile from first-run failed because default command names collided with existing live profiles, so the profile/catalog did not save cleanly.
+
+**Root cause:** `CompleteFirstRun()` validated normally, then called `SaveSystemProfile()`. `SaveSystemProfile()` correctly blocks command collisions when the active profile is live, but first-run is initializing an editing draft. That made draft creation inherit the go-live collision guard too early.
+
+**Changes made:**
+
+| File | Change |
+|------|--------|
+| `tools/runtime/CircuitService.Core.cs` | `CompleteFirstRun()` now saves the profile directly with the same atomic/backup path after configuration saves, bypassing live command-collision checks for draft initialization. Activation still enforces collisions. |
+| `tools/runtime.tests/Program.cs` | Added regression coverage: a draft profile can first-run with commands already used by another live profile, remains inactive, and is still blocked when activated until commands are renamed. |
+| `Known Bugs.txt` | Marked the new-profile/first-run collision bug fixed in source. |
+
+**Validation:**
+
+- `node --check tools/admin/app.js` passed.
+- `dotnet build tools/runtime/CircuitOS.Runtime.csproj -c Release` passed with 0 warnings/errors.
+- `dotnet run --project tools/runtime.tests/CircuitOS.Runtime.SmokeTests.csproj -c Release -- data streamerbot-actions` passed, including the new first-run draft collision regression.
+
+**Still open from `Known Bugs.txt`:** stable 0.6.0.8 native multi-profile limitation, duplicate variant labels such as `shiny shiny`, and stable 0.6.0.8 duplicate-protection behavior.
+
+### 2026-06-28 — Codex — Known bug fix: duplicate-looking variant labels
+- Fixed the "shiny shiny" class of variant display bug in source 0.7.
+- `PullEngine.RollVariants` now trims labels and tracks seen labels case-insensitively; the paste-ready Streamer.bot redeem source now mirrors that behavior.
+- Added a smoke-test regression that forces `SHINY`, ` shiny `, and `LARGE` at 100% chance and confirms the display stays `SHINY LARGE ...`, not `SHINY SHINY ...`.
+- Validation passed: `dotnet build tools/runtime/CircuitOS.Runtime.csproj -c Release`, `dotnet run --project tools/runtime.tests/CircuitOS.Runtime.SmokeTests.csproj -c Release -- data streamerbot-actions`, and `node --check tools/admin/app.js`.
+### 2026-06-28 — Codex — Known bug hardening: native multi-profile routing
+- Addressed the source-side cause of the native multi-profile pain point. The dispatcher already supported reward-id/profile-id and command-word routing; the missing pieces were stale listener lifecycle and collision guards around Twitch rewards.
+- Added live-profile validation for duplicate `redemptionName` values. Two live profiles can no longer share the same channel-point reward title, because Twitch reward sync can collapse same-title rewards onto one reward id.
+- Added Twitch reward-id safety in `TwitchRuntime`: sync/attach now rejects a reward id already attached to another live profile, and reward-map construction skips/logs duplicate ids instead of silently letting the last profile win.
+- The running native Twitch listener now refreshes after Twitch login/logout, profile live-state changes, and reward sync/edit/delete, so it rebuilds reward-id -> profile routing without requiring an app restart.
+- Smoke tests now cover command collisions, redemption-title collisions, duplicate reward-id attach blocking, and multi-profile runtime dispatch with unique commands/reward title.
+- Validation passed: `dotnet build tools/runtime/CircuitOS.Runtime.csproj -c Release`, `dotnet run --project tools/runtime.tests/CircuitOS.Runtime.SmokeTests.csproj -c Release -- data streamerbot-actions`, and `node --check tools/admin/app.js`.
+- Still needs live Twitch verification with two live profiles and two distinct channel-point rewards before the Known Bugs note can be marked fully verified.
+### 2026-06-28 — Codex — Attach-only Twitch reward fulfillment fix
+- User live-tested native multi-profile redemptions with two live rewards: `Catch a Pokemon` routed to profile `default`; `Circuit Component` routed to `circuit-components` and fulfilled successfully.
+- The remaining failure was not profile routing. It was Twitch fulfillment for an attach-only reward: Twitch returned 403 because the reward was not created by this Twitch Client-ID.
+- Fixed `TwitchRuntime` so the live EventSub route map carries `Manageable`. Managed rewards still call `UpdateRedemptionStatus`; attach-only rewards record the pull and send chat, but skip Twitch fulfillment/cancel and log `RECORDED (attach-only reward; Twitch fulfillment skipped)`.
+- Added smoke coverage that stored attach-only rewards preserve `Manageable=false` in the native route map.
+- Validation passed: `dotnet build tools/runtime/CircuitOS.Runtime.csproj -c Release`, `dotnet run --project tools/runtime.tests/CircuitOS.Runtime.SmokeTests.csproj -c Release -- data streamerbot-actions`, and `node --check tools/admin/app.js`.
+- Next live check: rebuild/run dev build, redeem `Catch a Pokemon` again, expect no 403 and a `RECORDED (attach-only reward...)` log plus normal chat output.
+### 2026-06-28 — Codex — Sidebar theme coverage source fix
+- User confirmed the attach-only Twitch reward retest worked, so the native multi-profile known bug is now fixed/live-verified in source 0.7.
+- Patched Appearance theme application so sidebar/topbar chrome receives derived variables from the selected profile colors: `--accent`, `--red-border`, `--sidebar-bg`, `--sidebar-card`, `--sidebar-card-hover`, and `--chrome-bg`.
+- Updated sidebar/topbar CSS to use those variables instead of hard-coded dark/red rgba values.
+- Updated `Known Bugs.txt`, `UI.md`, and `docs/patch-notes/0.7-dev-progress.md` to reflect the verified Twitch fix and the sidebar theme source fix.
+- Validation passed: `node --check tools/admin/app.js`, `dotnet build tools/runtime/CircuitOS.Runtime.csproj -c Release`, and `dotnet run --project tools/runtime.tests/CircuitOS.Runtime.SmokeTests.csproj -c Release -- data streamerbot-actions`.
+- Still needs a quick visual check in the running admin app: change Appearance colors and confirm the sidebar/nav/footer/topbar follow the theme.
+### 2026-06-28 — Codex — Overview Pull Rates source fix
+- User visually confirmed the sidebar/topbar theme fix looked better; `UI.md` global theme item is now marked verified.
+- Patched the Overview Pull Rates panel so the panel itself is no longer a `data-jump-view="ratelab"` clickable card. The `Tune in Rate Lab` button remains the navigation control and was corrected after user feedback.
+- Hardened the global `data-jump-view` click handler to ignore clicks that begin inside form controls/buttons/links, reducing accidental navigation from embedded controls.
+- Updated Overview range sliders to drive a simple raw `--fill` percentage. Removed the thumb-width compensation after visual testing showed it could overshoot past the handle; CSS keeps the themed border/thumb.
+- During validation, repaired accidental JavaScript newline literal splits in `showNotice`, wizard item parsing, patch-note generation, and CSV row parsing; `node --check tools/admin/app.js` is clean.
+- Validation passed: `node --check tools/admin/app.js`, `dotnet build tools/runtime/CircuitOS.Runtime.csproj -c Release`, and `dotnet run --project tools/runtime.tests/CircuitOS.Runtime.SmokeTests.csproj -c Release -- data streamerbot-actions`.
+- Still needs a quick visual check in the running admin app: drag Pull Rates on Overview and confirm the fill/handle stay together; click Tune in Rate Lab and confirm it navigates; check Action Center spacing.

@@ -35,6 +35,7 @@ internal interface IDataStore
     // of ImportProfileData) — used for cross-profile command-collision checks.
     void SetProfileActive(string id, bool active);
     JsonObject? ReadProfileData(string profileId, string key);
+    void WriteProfileData(string profileId, string key, JsonNode value);
 }
 
 // Local-filesystem extension of IDataStore. The .NET host (WinForms/HttpListener)
@@ -57,6 +58,7 @@ internal static class DataKeys
     public const string Roles = "roles";
     public const string Profile = "profile";
     public const string OverlayConfig = "overlay-config";
+    public const string TwitchRewards = "twitch-rewards";
 }
 
 internal sealed record DataFileInfo(long Size, DateTimeOffset ModifiedAt);

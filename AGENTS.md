@@ -18,9 +18,10 @@ continuously updated source of truth is **`HANDOFF.md`** — read it first.
 
 ## Current State
 
-- Application version: **0.6.0.6**
-- Current milestone: **0.6 — Item Variants and Rarity Tiers** (complete)
-- Next milestone: **0.7 — Cloud Platform + Twitch Integration**
+- Released application version: **0.6.0.8**
+- Current source milestone: **0.7 — Cloud Platform + Twitch Integration** (unreleased)
+- Current working focus: verify/polish the desktop-on-cloud bridge, native Twitch flow,
+  and the manually updated `UI.md` launch punch list before packaging a 0.7 build.
 
 See `README.md` for the feature list and full roadmap, and `docs/versioning.md`
 for the versioning scheme.

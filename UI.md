@@ -1,31 +1,35 @@
-# UI
+# CircuitOS 0.7 Launch Punch List
 
-## All
-- Simplify wording and verbiage, less jargon and more easy to use wording to help along users
-- little to no behind the scenes jargon in UI
-- Save Catalog button can be saved to just "Save" 
-- buttons can be simplified as well
+This is the manually updated UI/UX ask list for the 0.7 launch path. Treat this
+file as active product direction, not as a completed historical checklist.
 
-## Overview Screen
+## Global
 
-- Clickable cards, info is currently view only
-- pull rates should be tunable in overview as well as in rate lab
-- system check card might not be useful anymore and can be hidden in a setting
-- attention (action center) should be at top of page to be more noticeable. 
-- collection health doesn't make sense at the bottom of overview and cna live next to pull rates
-- viewer activity doesn't make sense in current spot either.
+- [Verified] Theme customization now feeds sidebar/topbar chrome variables and visually recolors the navigation shell.
+
+
+## Overview
+
+- [Verified] Action Center now has explicit spacing below it before Pull Rates and Catalog Reach.
+- [Verified] Pull Rates slider is editable without card-level redirect; Tune in Rate Lab button still navigates.
+- [Verified] Pull Rates slider fill now uses the raw range percentage without thumb-width compensation, preventing colored-fill overshoot past the handle.
 
 ## Configure
 
-- Game Profile and theme colors should be separate settings, and theme color should be placed elsewhere
-- Live preview is fine, except that there should be no need for a profile location description, maybe replace with username? 
-- Admin name customize option will be stale, should maybe change that to twitch username or nickname if they choose to have one.
-- Overlay editor area is too big, making changes and previewing changes shouldn't take scrolling down or up
-- too much scrolling in messages area, aside from that, no notes.
+- Game Profile Circuit Components redemption name can be replaced with a dropdown from the user's redemptions or given the option to create a new one.
+- [Done] Save Profile now also saves the catalog in the same click if catalog changes are pending. No more two-step save.
+- [Done] Eyebrow label removed (was orphaned — only appeared in the Game Profile live preview, wired to nothing). Panel nickname kept (wired to sidebar profile widget + view title fallback).
+- [Done] Overlay editor now has a State Overrides panel: switching to Rare/Complete/Duplicate preview tabs reveals per-state Accent, Label, and Bar Fill color pickers that override the global colors for that state only.
+- [Done] Commands redesigned as a clean vertical label-row list. No more 4-column grid.
 
 
 
-## Collections
+## Backups
 
-- in collections can hide the ID since we don't require it anymore and it auto populates. that will give more room for display name, tier, variants
-- We should have an option to delete collections, maybe change the name to "main collections, or something viewer friendly"
+- [Done] Backups section labels clarified ("What's covered" / "Available backups"), guide card copy simplified, empty state explains what to do.
+
+## Twitch
+
+- [Done in source + live-tested] Twitch settings has account status, reward dropdown attach/create/sync/edit/delete, persisted reward IDs, and native multi-profile routing.
+- [Done in source] Login/logout, scope/re-login guidance, and attach-only reward explanation are present on the Twitch page.
+

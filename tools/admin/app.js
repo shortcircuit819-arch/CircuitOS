@@ -2,6 +2,7 @@ const viewTitles = {
   overview: "System Overview",
   branding: "Game Profile",
   messages: "Message Templates",
+  twitch: "Twitch Settings",
   setup: "Streamer.bot Setup",
   economy: "Scrap Economy",
   viewers: "Viewer Inventory",
@@ -135,6 +136,7 @@ let collectionImportPreview = null;
 let eventImportPreview = null;
 let overlayConfig = null;
 let overlayDirty = false;
+let activeOverlayPreviewState = "normal";
 let profilesData = { activeProfileId: "", profiles: [] };
 let pendingSwitchId = "";
 const expandedCollectionKeys = new Set();
@@ -187,6 +189,7 @@ function hexToRgba(hex, alpha) {
 }
 
 let lastSession = { mode: "local", twitch: null, dataPath: "" };
+let twitchRewardCatalog = { loaded: false, loading: false, error: "", items: [] };
 
 function renderSessionMode(mode, twitch, location) {
   lastSession = { mode, twitch, dataPath: location || "" };
@@ -203,6 +206,7 @@ function renderSessionMode(mode, twitch, location) {
   element.onclick = toggleSessionPanel;
   const panel = document.getElementById("sessionPanel");
   if (panel && !panel.hidden) renderSessionPanel();
+  renderTwitchSettings();
 }
 
 function toggleSessionPanel() {
@@ -217,27 +221,24 @@ function renderSessionPanel() {
   if (!panel) return;
   const esc = value => String(value).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const { mode, twitch, dataPath } = lastSession;
-  const rows = [];
-  if (twitch) {
-    rows.push(["Twitch", `${twitch.displayName} (@${twitch.login})`]);
-    rows.push(["User ID", twitch.userId]);
-    if (twitch.expiresAt) {
-      const expires = new Date(twitch.expiresAt);
-      const valid = expires.getTime() > Date.now();
-      rows.push(["Token", valid ? `Valid until ${expires.toLocaleString()}` : "Expired — log in again"]);
-    }
-  } else {
-    rows.push(["Twitch", "Not signed in"]);
-  }
-  rows.push(["Backend", mode === "cloud" ? "Cloud (Appwrite)" : "Local data folder"]);
-  if (dataPath) rows.push(["Location", dataPath]);
+  const cloud = mode === "cloud";
+  const expired = twitch?.expiresAt ? new Date(twitch.expiresAt).getTime() <= Date.now() : false;
   panel.innerHTML = `
-    <div class="session-panel-title">Session</div>
-    ${rows.map(([key, value]) => `<div class="session-row"><span>${esc(key)}</span><strong>${esc(value)}</strong></div>`).join("")}
-    <p class="session-note">Twitch tokens are stored only on this PC (never committed). Logging out clears them from this machine.</p>
-    ${twitch
-      ? `<button type="button" class="button danger small" id="twitchLogoutButton">Log out of Twitch</button>`
-      : `<button type="button" class="button small" id="twitchLoginButton">Log in with Twitch</button>`}
+    <div class="session-panel-title">Twitch</div>
+    <div class="session-summary ${twitch ? "connected" : ""}">
+      <strong>${twitch ? `@${esc(twitch.login || twitch.displayName)}` : "Not signed in"}</strong>
+      <span>${twitch ? (expired ? "Refresh your login when you are ready to go live." : "Connected on this PC.") : "Connect Twitch when you want native rewards."}</span>
+    </div>
+    <div class="session-actions">
+      ${twitch
+        ? `<button type="button" class="button danger small" id="twitchLogoutButton">Log out</button>`
+        : `<button type="button" class="button twitch-button primary small" id="twitchLoginButton">Log in with Twitch</button>`}
+    </div>
+    <details class="session-advanced">
+      <summary>Advanced details</summary>
+      <div class="session-row"><span>Mode</span><strong>${cloud ? "Cloud" : "Local"}</strong></div>
+      ${dataPath ? `<div class="session-row"><span>Data folder</span><strong>${esc(dataPath)}</strong></div>` : ""}
+    </details>
   `;
   const logoutButton = document.getElementById("twitchLogoutButton");
   if (logoutButton) logoutButton.addEventListener("click", logoutTwitch);
@@ -255,7 +256,9 @@ async function loginTwitch() {
     if (!response.ok || !result.ok) throw new Error(result.error || "Twitch login failed.");
     const health = await (await fetch("/api/health", { cache: "no-store" })).json();
     renderSessionMode(health.mode || lastSession.mode, health.twitch || null, lastSession.dataPath);
+    twitchRewardCatalog = { loaded: false, loading: false, error: "", items: [] };
     renderSessionPanel();
+    renderTwitchSettings();
     showNotice(`Logged in to Twitch as ${result.displayName}. Restart in cloud mode to key your data to this account.`, "success");
   } catch (error) {
     showNotice(error.message, "error");
@@ -269,7 +272,9 @@ async function logoutTwitch() {
     const response = await fetch("/api/twitch/logout", { method: "POST" });
     if (!response.ok) throw new Error("Logout failed.");
     renderSessionMode(lastSession.mode, null, lastSession.dataPath);
+    twitchRewardCatalog = { loaded: false, loading: false, error: "", items: [] };
     renderSessionPanel();
+    renderTwitchSettings();
     showNotice("Logged out of Twitch — cached tokens cleared from this PC.", "success");
   } catch (error) {
     showNotice(error.message, "error");
@@ -284,7 +289,13 @@ function applySystemProfile() {
   root.style.setProperty("--panel-2", colors.panelAlt);
   root.style.setProperty("--line", colors.line);
   root.style.setProperty("--red", colors.accent);
+  root.style.setProperty("--accent", colors.accent);
   root.style.setProperty("--red-soft", hexToRgba(colors.accent, 0.13));
+  root.style.setProperty("--red-border", hexToRgba(colors.accent, 0.28));
+  root.style.setProperty("--sidebar-bg", hexToRgba(colors.background, 0.93));
+  root.style.setProperty("--sidebar-card", hexToRgba(colors.panel, 0.52));
+  root.style.setProperty("--sidebar-card-hover", hexToRgba(colors.panelAlt, 0.72));
+  root.style.setProperty("--chrome-bg", hexToRgba(colors.background, 0.96));
   root.style.setProperty("--text", colors.text);
   root.style.setProperty("--muted", colors.muted);
   document.title = `${platformName} | ${systemProfile.gameName}`;
@@ -332,7 +343,6 @@ function renderProfile() {
   const fields = {
     profileGameName: "gameName",
     profileAdminName: "adminName",
-    profileBrandKicker: "brandKicker",
     profileRedemptionName: "redemptionName",
     profileItemSingular: "itemSingular",
     profileItemPlural: "itemPlural",
@@ -382,8 +392,8 @@ function renderProfile() {
   const commandGrid = document.getElementById("profileCommands");
   commandGrid.replaceChildren();
   for (const [key, labelText] of Object.entries(commandNames)) {
-    const label = element("label", "command-field");
-    label.append(element("span", "", labelText));
+    const row = element("label", "command-row");
+    row.append(element("span", "command-row-label", labelText));
     const wrapper = element("div", "command-input");
     wrapper.append(element("strong", "", "!"));
     const input = document.createElement("input");
@@ -400,15 +410,14 @@ function renderProfile() {
       renderStreamerBotSetup();
     });
     wrapper.append(input);
-    label.append(wrapper);
-    commandGrid.append(label);
+    row.append(wrapper);
+    commandGrid.append(row);
   }
   renderProfilePreview();
   updateProfileStatus();
 }
 
 function renderProfilePreview() {
-  document.getElementById("previewBrandKicker").textContent = systemProfile.brandKicker;
   document.getElementById("previewAdminName").textContent = systemProfile.adminName;
   document.getElementById("previewGameName").textContent = systemProfile.gameName;
   document.getElementById("previewRedemptionName").textContent = systemProfile.redemptionName;
@@ -431,7 +440,6 @@ function updateProfileFromInputs() {
   const fields = {
     profileGameName: "gameName",
     profileAdminName: "adminName",
-    profileBrandKicker: "brandKicker",
     profileRedemptionName: "redemptionName",
     profileItemSingular: "itemSingular",
     profileItemPlural: "itemPlural",
@@ -452,7 +460,7 @@ function updateProfileFromInputs() {
 
 function validateProfileClient() {
   const errors = [];
-  for (const key of ["gameName", "adminName", "brandKicker", "redemptionName", "itemSingular", "itemPlural", "collectionSingular", "collectionPlural", "currencyName"]) {
+  for (const key of ["gameName", "adminName", "redemptionName", "itemSingular", "itemPlural", "collectionSingular", "collectionPlural", "currencyName"]) {
     if (!String(systemProfile[key] || "").trim()) errors.push(`${key} cannot be empty.`);
   }
   for (const [key, value] of Object.entries(systemProfile.colors || {})) {
@@ -488,7 +496,12 @@ async function saveSystemProfile() {
     renderAll();
     updateProfileStatus();
     await Promise.all([refreshBackupIndex(false), generateStreamerBotSetup()]);
-    showNotice("System profile saved. Generated Streamer.bot actions now use these settings.", "success");
+    if (dirty) {
+      const backupCount = await _saveCatalogData();
+      showNotice(`Profile and catalog saved. ${backupCount} backup files created.`, "success");
+    } else {
+      showNotice("Game profile saved. Streamer.bot actions updated.", "success");
+    }
   } catch (error) {
     showNotice(error.message, "error");
   }
@@ -670,6 +683,282 @@ async function generateStreamerBotSetup() {
   return result;
 }
 
+
+function renderTwitchSettings() {
+  const status = document.getElementById("twitchStatusChip");
+  const account = document.getElementById("twitchAccountCard");
+  const utilities = document.getElementById("twitchUtilityList");
+  const rewards = document.getElementById("twitchRewardList");
+  if (!status || !account || !utilities || !rewards) return;
+
+  const { mode, twitch } = lastSession;
+  const cloud = mode === "cloud";
+  const liveProfiles = (profilesData.profiles || []).filter(profile => profile.isLive || profile.active);
+  const configuredReward = String(systemProfile.redemptionName || "").trim();
+  const tokenExpired = twitch?.expiresAt ? new Date(twitch.expiresAt).getTime() <= Date.now() : false;
+
+  status.textContent = twitch ? "CONNECTED" : "CONNECT TWITCH";
+  status.className = `metric-chip ${twitch ? "valid" : "warning"}`;
+
+  account.replaceChildren();
+  const accountCopy = element("div", "twitch-account-copy");
+  accountCopy.append(
+    element("span", "", "TWITCH ACCOUNT"),
+    element("strong", "", twitch ? `@${twitch.login || twitch.displayName}` : "Connect Twitch"),
+    element("small", "", twitch
+      ? (tokenExpired ? "Refresh login before using native rewards." : "Connected and ready for Twitch setup.")
+      : "Sign in when you want CircuitOS to manage rewards directly.")
+  );
+  const accountActions = element("div", "twitch-actions");
+  const primary = element("button", `button twitch-button ${twitch ? "secondary" : "primary"}`, twitch ? "Refresh Login" : "Log in with Twitch");
+  primary.type = "button";
+  primary.addEventListener("click", loginTwitch);
+  accountActions.append(primary);
+  if (twitch) {
+    const logout = element("button", "button danger", "Log out");
+    logout.type = "button";
+    logout.addEventListener("click", logoutTwitch);
+    accountActions.append(logout);
+  }
+  account.append(accountCopy, accountActions);
+
+  utilities.replaceChildren();
+  const utilityCards = [
+    { title: "Channel Rewards", detail: liveProfiles.length ? "Manage rewards below." : "Mark a profile Live first." },
+    { title: "Native Mode", detail: cloud ? "Cloud bridge is active." : "Local preview. Launch cloud mode to go live." },
+    { title: "Streamer.bot", detail: "Fallback setup remains available whenever you need pasted actions." }
+  ];
+  for (const card of utilityCards) {
+    const item = element("div", "twitch-utility-card");
+    item.append(element("strong", "", card.title), element("span", "", card.detail));
+    utilities.append(item);
+  }
+  const permissionsCard = element("div", `twitch-utility-card twitch-scope-card${tokenExpired ? " warning" : ""}`);
+  const permissionsList = element("ul", "twitch-scope-list");
+  for (const item of ["Channel-point reward read/manage", "Redemption intake", "Chat command read/replies"]) {
+    permissionsList.append(element("li", "", item));
+  }
+  const permissionAction = element("button", "button small secondary", twitch ? "Refresh Login" : "Log in with Twitch");
+  permissionAction.type = "button";
+  permissionAction.addEventListener("click", loginTwitch);
+  permissionsCard.append(
+    element("strong", "", tokenExpired ? "Permissions Need Refresh" : "Permissions"),
+    element("span", "", tokenExpired ? "Your token looks expired. Refresh login before syncing rewards or listening for chat." : "If reward sync, redemptions, or chat replies fail after an update, refresh login so Twitch can grant the newest scopes."),
+    permissionsList,
+    permissionAction
+  );
+  utilities.append(permissionsCard);
+  const attachCard = element("div", "twitch-utility-card");
+  attachCard.append(
+    element("strong", "", "Attach-Only Rewards"),
+    element("span", "", "Rewards not created by CircuitOS can be attached for routing, but edit/delete stays in Twitch unless CircuitOS can manage them.")
+  );
+  utilities.append(attachCard);
+  if (twitch) {
+    const refreshCard = element("div", "twitch-utility-card");
+    const refreshButton = element("button", "button small secondary", twitchRewardCatalog.loading ? "Loading rewards..." : "Refresh Rewards");
+    refreshButton.type = "button";
+    refreshButton.disabled = twitchRewardCatalog.loading || tokenExpired;
+    refreshButton.addEventListener("click", () => loadTwitchRewards(true));
+    refreshCard.append(element("strong", "", "Existing Rewards"), element("span", "", twitchRewardCatalog.loaded ? `${twitchRewardCatalog.items.length} Twitch rewards loaded.` : "Load current channel-point rewards for attach/reuse."), refreshButton);
+    utilities.append(refreshCard);
+    if (!twitchRewardCatalog.loaded && !twitchRewardCatalog.loading && !twitchRewardCatalog.error && !tokenExpired) loadTwitchRewards();
+  }
+
+  rewards.replaceChildren();
+  if (!liveProfiles.length) {
+    const empty = element("div", "twitch-empty-state");
+    empty.append(
+      element("strong", "", "Choose a live profile first"),
+      element("span", "", "Open Profiles and mark the game you want Twitch to run as Live.")
+    );
+    rewards.append(empty);
+    return;
+  }
+  for (const profile of liveProfiles) {
+    const reward = profile.twitchReward || null;
+    const row = element("div", "twitch-reward-row");
+    const actions = element("div", "twitch-reward-actions");
+    const rewardCell = element("div", "twitch-reward-cell");
+    rewardCell.append(element("span", "", reward?.title || configuredReward || "Reward not named"));
+    const picker = element("select", "twitch-reward-select");
+    picker.append(new Option("Create/sync from profile name", ""));
+    for (const existing of twitchRewardCatalog.items) {
+      const option = new Option(`${existing.title} (${existing.cost || 0} pts)${existing.manageable ? "" : " • attach only"}`, existing.rewardId);
+      if (reward?.rewardId && existing.rewardId === reward.rewardId) option.selected = true;
+      picker.append(option);
+    }
+    picker.disabled = !twitch || tokenExpired || twitchRewardCatalog.loading;
+    picker.title = "Choose an existing Twitch reward to attach, or leave blank to create/sync from this profile.";
+    rewardCell.append(picker);
+    if (twitchRewardCatalog.loading) rewardCell.append(element("small", "", "Loading Twitch rewards..."));
+    if (twitchRewardCatalog.error) rewardCell.append(element("small", "", twitchRewardCatalog.error));
+
+    const syncLabel = reward?.rewardId ? "Sync" : "Create";
+    const syncButton = element("button", "button small secondary", syncLabel);
+    syncButton.type = "button";
+    syncButton.disabled = !twitch || tokenExpired;
+    syncButton.title = twitch ? "Create/update from the profile name, or attach the selected existing Twitch reward." : "Log in to Twitch before syncing rewards.";
+    syncButton.addEventListener("click", () => syncTwitchReward(profile.id, syncButton, picker.value));
+    actions.append(syncButton);
+    const editButton = element("button", "button small secondary", "Edit");
+    editButton.type = "button";
+    editButton.disabled = !twitch || tokenExpired || !reward?.rewardId || reward.manageable === false;
+    editButton.title = reward?.manageable === false ? "This attached reward was not created by CircuitOS, so edit it in Twitch." : reward?.rewardId ? "Edit this CircuitOS-managed reward title and cost." : "Sync or attach a reward before editing it.";
+    editButton.addEventListener("click", () => editTwitchReward(profile, reward, editButton));
+    actions.append(editButton);
+
+    const deleteButton = element("button", "button small danger", "Delete");
+    deleteButton.type = "button";
+    deleteButton.disabled = !twitch || tokenExpired || !reward?.rewardId || reward.manageable === false;
+    deleteButton.title = reward?.manageable === false ? "This attached reward was not created by CircuitOS, so delete it in Twitch." : reward?.rewardId ? "Delete this CircuitOS-managed Twitch reward." : "Sync a reward before deleting it.";
+    deleteButton.addEventListener("click", () => deleteTwitchReward(profile, reward, deleteButton));
+    actions.append(deleteButton);
+    row.append(
+      element("div", "", ""),
+      element("strong", "", profile.name || profile.id),
+      rewardCell,
+      element("small", "", reward?.rewardId ? (reward.manageable === false ? "Attached" : "Synced") : twitch ? "Ready to create" : "Login needed"),
+      actions
+    );
+    rewards.append(row);
+  }
+}
+async function loadTwitchRewards(force = false) {
+  if (!lastSession.twitch) {
+    twitchRewardCatalog = { loaded: false, loading: false, error: "", items: [] };
+    renderTwitchSettings();
+    return;
+  }
+  if (twitchRewardCatalog.loading || (twitchRewardCatalog.loaded && !force)) return;
+  twitchRewardCatalog = { ...twitchRewardCatalog, loading: true, error: "" };
+  renderTwitchSettings();
+  try {
+    const response = await fetch("/api/twitch/rewards", { cache: "no-store" });
+    const result = await response.json();
+    if (!response.ok || result.ok === false) {
+      const message = result.errors?.join?.(" ") || result.error || "Could not load Twitch rewards.";
+      throw new Error(message);
+    }
+    twitchRewardCatalog = { loaded: true, loading: false, error: "", items: Array.isArray(result.rewards) ? result.rewards : [] };
+  } catch (error) {
+    twitchRewardCatalog = { loaded: false, loading: false, error: error.message, items: [] };
+    showNotice(error.message, "error");
+  }
+  renderTwitchSettings();
+}
+
+async function syncTwitchReward(profileId, button, rewardId = "") {
+  const original = button?.textContent || "Sync";
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Syncing...";
+  }
+  try {
+    const response = await fetch("/api/twitch/reward-sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profileId, rewardId })
+    });
+    const result = await response.json();
+    if (!response.ok || result.ok === false) {
+      const message = result.errors?.join?.(" ") || result.error || "Twitch reward sync failed.";
+      throw new Error(message);
+    }
+    if (Array.isArray(result.profiles)) profilesData.profiles = result.profiles;
+    renderProfileSwitcher();
+    renderTwitchSettings();
+    showNotice(`Twitch reward ready: ${result.reward?.title || "channel-point reward"}.`, "success");
+  } catch (error) {
+    showNotice(error.message, "error");
+    renderTwitchSettings();
+  } finally {
+    if (button) button.textContent = original;
+  }
+}
+async function editTwitchReward(profile, reward, button) {
+  if (!reward?.rewardId) return;
+  const currentTitle = reward.title || "";
+  const nextTitle = prompt("Twitch reward title", currentTitle);
+  if (nextTitle === null) return;
+  const trimmedTitle = nextTitle.trim();
+  if (!trimmedTitle) {
+    showNotice("Twitch reward title cannot be empty.", "error");
+    return;
+  }
+  const currentCost = Number(reward.cost || 100);
+  const nextCostText = prompt("Twitch reward cost", String(currentCost));
+  if (nextCostText === null) return;
+  const nextCost = Number.parseInt(nextCostText, 10);
+  if (!Number.isFinite(nextCost) || nextCost < 1) {
+    showNotice("Twitch reward cost must be at least 1 point.", "error");
+    return;
+  }
+
+  const original = button?.textContent || "Edit";
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Saving...";
+  }
+  try {
+    const response = await fetch("/api/twitch/reward-update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profileId: profile.id, title: trimmedTitle, cost: nextCost })
+    });
+    const result = await response.json();
+    if (!response.ok || result.ok === false) {
+      const message = result.errors?.join?.(" ") || result.error || "Twitch reward update failed.";
+      throw new Error(message);
+    }
+    if (Array.isArray(result.profiles)) profilesData.profiles = result.profiles;
+    if (profile.id === profilesData.activeProfileId) {
+      systemProfile.redemptionName = result.reward?.title || trimmedTitle;
+      applySystemProfile();
+    }
+    if (twitchRewardCatalog.loaded) {
+      twitchRewardCatalog.items = twitchRewardCatalog.items.map(item => item.rewardId === result.reward?.rewardId ? { ...item, ...result.reward } : item);
+    }
+    renderProfileSwitcher();
+    renderTwitchSettings();
+    showNotice(`Updated Twitch reward: ${result.reward?.title || trimmedTitle}.`, "success");
+  } catch (error) {
+    showNotice(error.message, "error");
+    renderTwitchSettings();
+  } finally {
+    if (button) button.textContent = original;
+  }
+}
+async function deleteTwitchReward(profile, reward, button) {
+  const rewardName = reward?.title || "this Twitch reward";
+  if (!confirm(`Delete ${rewardName} from Twitch for ${profile.name || profile.id}? This only removes the channel-point reward and clears the saved reward id.`)) return;
+  const original = button?.textContent || "Delete";
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Deleting...";
+  }
+  try {
+    const response = await fetch("/api/twitch/reward-delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profileId: profile.id })
+    });
+    const result = await response.json();
+    if (!response.ok || result.ok === false) {
+      const message = result.errors?.join?.(" ") || result.error || "Twitch reward delete failed.";
+      throw new Error(message);
+    }
+    if (Array.isArray(result.profiles)) profilesData.profiles = result.profiles;
+    renderProfileSwitcher();
+    renderTwitchSettings();
+    showNotice(`Deleted Twitch reward: ${result.deletedReward?.title || rewardName}.`, "success");
+  } catch (error) {
+    showNotice(error.message, "error");
+    renderTwitchSettings();
+  } finally {
+    if (button) button.textContent = original;
+  }
+}
 function renderStreamerBotSetup() {
   const version = document.getElementById("setupVersion");
   const summary = document.getElementById("setupSummary");
@@ -743,7 +1032,6 @@ async function copyGeneratedCode(actionName, textarea) {
 const wizardProfileFields = {
   gameName: "wizardGameName",
   adminName: "wizardAdminName",
-  brandKicker: "wizardBrandKicker",
   redemptionName: "wizardRedemptionName",
   itemSingular: "wizardItemSingular",
   itemPlural: "wizardItemPlural",
@@ -1198,6 +1486,7 @@ function renderAll() {
   renderRoleAwards();
   renderPatchNotes();
   renderBackups();
+  renderTwitchSettings();
   renderStreamerBotSetup();
   renderBoost();
   renderViewOnDemand(activeView);
@@ -1222,6 +1511,7 @@ async function loadProfiles() {
     renderProfiles();
   }
   renderProfileSwitcher();
+  renderTwitchSettings();
 }
 
 function renderProfilesSummary() {
@@ -1515,8 +1805,11 @@ function renderOverview() {
       slider.title = "Drag to set the pull weight";
       slider.value = String(Math.max(0, Number(col.value.weight) || 0));
       const paintSlider = () => {
-        const filled = sliderMax > 0 ? Math.min(100, (Number(slider.value) / sliderMax) * 100) : 0;
-        slider.style.background = `linear-gradient(90deg, var(--red) ${filled}%, #03111e ${filled}%)`;
+        const min = Number(slider.min) || 0;
+        const max = Number(slider.max) || 100;
+        const value = Number(slider.value) || 0;
+        const ratio = max > min ? Math.min(1, Math.max(0, (value - min) / (max - min))) : 0;
+        slider.style.setProperty("--fill", ratio);
       };
       paintSlider();
       slider.addEventListener("input", () => {
@@ -2104,8 +2397,8 @@ function buildWeightRow(col, container) {
   slider.title = "Drag to set the pull weight";
   slider.value = String(Math.max(0, Number(col.value.weight) || 0));
   const paintSlider = () => {
-    const filled = sliderMax > 0 ? Math.min(100, (Number(slider.value) / sliderMax) * 100) : 0;
-    slider.style.background = `linear-gradient(90deg, var(--red) ${filled}%, #03111e ${filled}%)`;
+    const ratio = sliderMax > 0 ? Math.min(1, Math.max(0, Number(slider.value) / sliderMax)) : 0;
+    slider.style.setProperty("--fill", ratio);
   };
   paintSlider();
   slider.addEventListener("input", () => {
@@ -2335,7 +2628,8 @@ function renderPatchNotes() {
   }
   if (!sections.length && !extra.length) lines.push("", "_No editor changes detected yet._");
 
-  const output = lines.join("\n");
+  const output = lines.join("\
+");
   document.getElementById("patchOutput").value = output;
   const changeCount = sections.reduce((sum, section) => sum + section.items.length, 0) + extra.length;
   document.getElementById("patchChangeCount").textContent = `${changeCount} CHANGE${changeCount === 1 ? "" : "S"}`;
@@ -2455,6 +2749,22 @@ function renderBackups() {
     stats.append(node);
   }
 
+  const liveFiles = document.getElementById("backupLiveFiles");
+  if (liveFiles) {
+    liveFiles.replaceChildren();
+    for (const file of backupCenter.liveFiles || []) {
+      const row = element("div", `backup-live-file ${file.exists ? "exists" : "missing"}`.trim());
+      row.append(element("strong", "", file.label || file.key || "Managed file"));
+      const detail = file.exists
+        ? `${formatBytes(file.size || 0)} - modified ${formatRoleDate(file.modifiedAtUtc)}`
+        : "Not created yet";
+      row.append(element("small", "", detail));
+      row.append(element("span", "", file.exists ? "LIVE" : "MISSING"));
+      liveFiles.append(row);
+    }
+    if (!liveFiles.children.length) liveFiles.append(element("div", "empty-state", "No files reported yet. Save your configuration to register tracked files."));
+  }
+
   const filter = document.getElementById("backupFilter").value;
   const filtered = backups.filter(backup => filter === "all" || backup.targetKey === filter);
   const list = document.getElementById("backupList");
@@ -2467,7 +2777,7 @@ function renderBackups() {
     button.addEventListener("click", () => selectBackup(backup.fileName));
     list.append(button);
   }
-  if (!filtered.length) list.append(element("div", "empty-state", "No backups match this filter."));
+  if (!filtered.length) list.append(element("div", "empty-state", backups.length ? "No backups match this filter." : "No backups yet. Save your configuration to create the first backup."));
   renderBackupPreview();
 }
 
@@ -2961,8 +3271,10 @@ function parseDelimitedRows(text) {
     } else if (character === delimiter && !quoted) {
       row.push(cell.trim());
       cell = "";
-    } else if ((character === "\n" || character === "\r") && !quoted) {
-      if (character === "\r" && text[index + 1] === "\n") index++;
+    } else if ((character === "\
+" || character === "\\r") && !quoted) {
+      if (character === "\\r" && text[index + 1] === "\
+") index++;
       row.push(cell.trim());
       if (row.some(value => value !== "")) rows.push(row);
       row = [];
@@ -3484,14 +3796,7 @@ function addCollection(type) {
   renderAll();
 }
 
-async function saveConfiguration() {
-  const errors = validateModel();
-  if (errors.length) {
-    showNotice(errors.join(" "), "error");
-    switchView("overview");
-    return;
-  }
-  if (!window.confirm(`Save configuration to ${dataPath}? Timestamped backups will be created first.`)) return;
+async function _saveCatalogData() {
   saveButton.disabled = true;
   try {
     const response = await fetch("/api/save", {
@@ -3511,11 +3816,24 @@ async function saveConfiguration() {
     if (backupsResponse.ok) backupCenter = await backupsResponse.json();
     markClean();
     renderAll();
-    showNotice(`Live configuration saved. ${result.backups?.length || 0} backup files created.`, "success");
-  } catch (error) {
-    showNotice(error.message, "error");
+    return result.backups?.length || 0;
   } finally {
     saveButton.disabled = false;
+  }
+}
+
+async function saveConfiguration() {
+  const errors = validateModel();
+  if (errors.length) {
+    showNotice(errors.join(" "), "error");
+    switchView("overview");
+    return;
+  }
+  try {
+    const backupCount = await _saveCatalogData();
+    showNotice(`Configuration saved. ${backupCount} backup files created.`, "success");
+  } catch (error) {
+    showNotice(error.message, "error");
   }
 }
 
@@ -3743,6 +4061,28 @@ function buildBgImageField(cfg) {
   return wrap;
 }
 
+function renderStateColorFields() {
+  const container = document.getElementById("overlayStateColorsFields");
+  const note = document.getElementById("overlayStateColorsNote");
+  if (!container) return;
+  const state = activeOverlayPreviewState;
+  if (state === "normal") {
+    if (note) note.hidden = false;
+    container.replaceChildren();
+    return;
+  }
+  if (note) note.hidden = true;
+  if (!overlayConfig.stateColors) overlayConfig.stateColors = {};
+  if (!overlayConfig.stateColors[state]) overlayConfig.stateColors[state] = {};
+  const sc = overlayConfig.stateColors[state];
+  const stateLabel = { rare: "Rare", complete: "Complete", duplicate: "Duplicate" }[state] || state;
+  container.replaceChildren(
+    overlayField(`${stateLabel} accent`, "color", sc.accentColor || overlayConfig.appearance?.accentColor || "#ff1821", v => { overlayConfig.stateColors[state].accentColor = v; }),
+    overlayField(`${stateLabel} label`, "color", sc.labelColor || overlayConfig.appearance?.labelColor || "#ff3b43", v => { overlayConfig.stateColors[state].labelColor = v; }),
+    overlayField(`${stateLabel} bar fill`, "color", sc.barColor || overlayConfig.appearance?.barColor || "#ff1821", v => { overlayConfig.stateColors[state].barColor = v; })
+  );
+}
+
 function renderOverlayEditor() {
   if (!overlayConfig) return;
   const cfg = overlayConfig;
@@ -3796,6 +4136,7 @@ function renderOverlayEditor() {
     overlayField("Complete badge", "text", cfg.labels.collectionComplete ?? "COLLECTION COMPLETE", v => { cfg.labels.collectionComplete = v; }, { maxLength: 60 }),
     overlayField("Duplicate badge", "text", cfg.labels.duplicate ?? "DUPLICATE", v => { cfg.labels.duplicate = v; }, { maxLength: 40 })
   );
+  renderStateColorFields();
 }
 
 function scaleOverlayPreview() {
@@ -3847,7 +4188,11 @@ function switchView(view) {
 }
 
 document.querySelectorAll(".nav-button").forEach(button => button.addEventListener("click", () => switchView(button.dataset.view)));
-document.querySelectorAll("[data-jump-view]").forEach(button => button.addEventListener("click", () => switchView(button.dataset.jumpView)));
+document.querySelectorAll("[data-jump-view]").forEach(target => target.addEventListener("click", event => {
+  const interactive = event.target.closest("input, select, textarea, button, a");
+  if (interactive && interactive !== target) return;
+  switchView(target.dataset.jumpView);
+}));
 
 // Optional: let the user hide the System Check card from the Overview (persisted locally).
 function applySystemCheckVisibility() {
@@ -3945,7 +4290,7 @@ document.getElementById("backupFilter").addEventListener("change", renderBackups
 document.getElementById("refreshBackupsButton").addEventListener("click", () => refreshBackupIndex().catch(error => showNotice(error.message, "error")));
 document.getElementById("downloadBackupButton").addEventListener("click", downloadSelectedBackup);
 document.getElementById("restoreBackupButton").addEventListener("click", restoreSelectedBackup);
-for (const id of ["profileGameName", "profileAdminName", "profileBrandKicker", "profileRedemptionName", "profileItemSingular", "profileItemPlural", "profileCollectionSingular", "profileCollectionPlural", "profileCurrencyName", "profileCooldown", "profileDupProtection"]) {
+for (const id of ["profileGameName", "profileAdminName", "profileRedemptionName", "profileItemSingular", "profileItemPlural", "profileCollectionSingular", "profileCollectionPlural", "profileCurrencyName", "profileCooldown", "profileDupProtection"]) {
   document.getElementById(id).addEventListener("input", updateProfileFromInputs);
 }
 document.getElementById("saveProfileButton").addEventListener("click", saveSystemProfile);
@@ -4009,10 +4354,12 @@ document.querySelectorAll("[data-preview-state]").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll("[data-preview-state]").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
+    activeOverlayPreviewState = btn.dataset.previewState;
     const frame = document.getElementById("overlayPreviewFrame");
     if (frame?.contentWindow) {
       frame.contentWindow.postMessage({ type: "overlayPreviewState", state: btn.dataset.previewState }, "*");
     }
+    renderStateColorFields();
   });
 });
 window.addEventListener("resize", scaleOverlayPreview);
@@ -4035,3 +4382,10 @@ document.addEventListener("visibilitychange", () => {
 });
 
 loadConfiguration(true).catch(error => showNotice(error.message, "error"));
+
+
+
+
+
+
+

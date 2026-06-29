@@ -39,7 +39,7 @@ internal sealed class TwitchSession
     public void Refresh() => _tokens = TwitchAuth.Refresh(_options, _tokens, _dataRoot);
 }
 
-internal sealed record CustomReward(string Id, string Title, int Cost);
+internal sealed record CustomReward(string Id, string Title, int Cost, bool Manageable = true);
 
 // Thin authenticated wrapper over the Twitch Helix REST API. Adds the Bearer + Client-Id headers,
 // refreshes once on a 401, and surfaces clear errors. Used for channel-point reward management and
@@ -63,7 +63,7 @@ internal sealed class TwitchHelix
             if (existing.Cost == cost) return existing;
             var updated = Send(HttpMethod.Patch, RewardsUrl + $"&id={existing.Id}",
                 new JsonObject { ["cost"] = cost, ["is_enabled"] = true });
-            return ParseRewards(updated).FirstOrDefault() ?? existing with { Cost = cost };
+            return ParseRewards(updated, manageable: true).FirstOrDefault() ?? existing with { Cost = cost, Manageable = true };
         }
         var created = Send(HttpMethod.Post, RewardsUrl, new JsonObject
         {
@@ -73,13 +73,41 @@ internal sealed class TwitchHelix
             ["is_enabled"] = true,
             ["is_user_input_required"] = false
         });
-        return ParseRewards(created).FirstOrDefault()
+        return ParseRewards(created, manageable: true).FirstOrDefault()
             ?? throw new InvalidOperationException("Twitch returned no reward after creation.");
     }
 
+    // Updates a reward created by this app. Twitch only allows editing manageable rewards.
+    public CustomReward UpdateReward(string rewardId, string title, int cost, string prompt)
+    {
+        if (string.IsNullOrWhiteSpace(rewardId)) throw new InvalidDataException("A Twitch reward id is required.");
+        if (string.IsNullOrWhiteSpace(title)) throw new InvalidDataException("A Twitch reward title is required.");
+        if (cost < 1) throw new InvalidDataException("Twitch reward cost must be at least 1 point.");
+        var updated = Send(HttpMethod.Patch, RewardsUrl + $"&id={Uri.EscapeDataString(rewardId)}", new JsonObject
+        {
+            ["title"] = title.Trim(),
+            ["cost"] = cost,
+            ["prompt"] = prompt,
+            ["is_enabled"] = true,
+            ["is_user_input_required"] = false
+        });
+        return ParseRewards(updated, manageable: true).FirstOrDefault()
+            ?? new CustomReward(rewardId, title.Trim(), cost, Manageable: true);
+    }
+    // Rewards visible to the broadcaster token. Some may not be manageable by this app.
+    public List<CustomReward> ListRewards()
+        => ParseRewards(Send(HttpMethod.Get, RewardsUrl, null), manageable: false);
+
     // Rewards this client_id created (only those are manageable + fulfillable by us).
     public List<CustomReward> ListManageableRewards()
-        => ParseRewards(Send(HttpMethod.Get, RewardsUrl + "&only_manageable_rewards=true", null));
+        => ParseRewards(Send(HttpMethod.Get, RewardsUrl + "&only_manageable_rewards=true", null), manageable: true);
+
+    // Deletes a reward created by this app. Twitch only allows deleting manageable rewards.
+    public void DeleteReward(string rewardId)
+    {
+        if (string.IsNullOrWhiteSpace(rewardId)) throw new InvalidDataException("A Twitch reward id is required.");
+        Send(HttpMethod.Delete, RewardsUrl + $"&id={Uri.EscapeDataString(rewardId)}", null);
+    }
 
     // Marks a redemption FULFILLED (pull succeeded) or CANCELED (refunds the points).
     public void UpdateRedemptionStatus(string rewardId, string redemptionId, bool fulfilled)
@@ -115,7 +143,7 @@ internal sealed class TwitchHelix
 
     // ── Helpers ──────────────────────────────────────────────────────────────────
 
-    private static List<CustomReward> ParseRewards(JsonObject response)
+    private static List<CustomReward> ParseRewards(JsonObject response, bool manageable)
     {
         var rewards = new List<CustomReward>();
         if (response["data"] is not JsonArray data) return rewards;
@@ -125,7 +153,7 @@ internal sealed class TwitchHelix
             var id = reward["id"]?.ToString();
             if (string.IsNullOrEmpty(id)) continue;
             var cost = int.TryParse(reward["cost"]?.ToString(), out var c) ? c : 0;
-            rewards.Add(new CustomReward(id, reward["title"]?.ToString() ?? "", cost));
+            rewards.Add(new CustomReward(id, reward["title"]?.ToString() ?? "", cost, manageable));
         }
         return rewards;
     }
@@ -155,3 +183,6 @@ internal sealed class TwitchHelix
     // Drop the query string (it carries the broadcaster id) from error messages.
     private static string Trim(string url) => url.Split('?')[0];
 }
+
+
+

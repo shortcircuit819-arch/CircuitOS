@@ -69,6 +69,9 @@ internal static class Program
     private static string _sessionMode = "local";
     private static TwitchTokens? _sessionTwitch;
     private static string _dataRoot = "";
+    private static readonly object _twitchRuntimeLock = new();
+    private static CancellationTokenSource? _twitchRuntimeCancellation;
+    private static Task? _twitchRuntimeTask;
 
     [STAThread]
     public static int Main(string[] args)
@@ -167,7 +170,7 @@ internal static class Program
 
             // Native Twitch: if logged in, listen for channel-point redemptions in the background
             // (no-op when Twitch isn't configured). Cancelled when the app exits.
-            _ = TwitchRuntime.TryStart(store, service, options.DataPath, Console.WriteLine, cancellation.Token);
+            RefreshNativeTwitch(service, cancellation.Token);
 
             if (options.Headless)
             {
@@ -179,6 +182,7 @@ internal static class Program
             using var window = new CircuitWindow(url);
             Application.Run(window);
 
+            StopNativeTwitch();
             cancellation.Cancel();
             listener.Stop();
             try { serverTask.GetAwaiter().GetResult(); }
@@ -217,6 +221,38 @@ internal static class Program
         throw new InvalidOperationException($"Unable to find a free loopback port from {candidatePort} to 65535.");
     }
 
+    private static void RefreshNativeTwitch(CircuitService service, CancellationToken appCancel)
+    {
+        lock (_twitchRuntimeLock)
+        {
+            _twitchRuntimeCancellation?.Cancel();
+            _twitchRuntimeCancellation?.Dispose();
+            _twitchRuntimeCancellation = null;
+            _twitchRuntimeTask = null;
+            if (appCancel.IsCancellationRequested) return;
+
+            var linked = CancellationTokenSource.CreateLinkedTokenSource(appCancel);
+            var task = TwitchRuntime.TryStart(service.Store, service, _dataRoot, Console.WriteLine, linked.Token);
+            if (task is null)
+            {
+                linked.Dispose();
+                return;
+            }
+            _twitchRuntimeCancellation = linked;
+            _twitchRuntimeTask = task;
+        }
+    }
+
+    private static void StopNativeTwitch()
+    {
+        lock (_twitchRuntimeLock)
+        {
+            _twitchRuntimeCancellation?.Cancel();
+            _twitchRuntimeCancellation?.Dispose();
+            _twitchRuntimeCancellation = null;
+            _twitchRuntimeTask = null;
+        }
+    }
     private static async Task RunServerAsync(
         HttpListener listener,
         CircuitService service,
@@ -230,13 +266,13 @@ internal static class Program
             HttpListenerContext context;
             try { context = await listener.GetContextAsync(); }
             catch when (cancellationToken.IsCancellationRequested) { break; }
-            _ = Task.Run(() => HandleRequestAsync(context, service, uiPath, overlayPath, overlayDataPath), cancellationToken);
+            _ = Task.Run(() => HandleRequestAsync(context, service, uiPath, overlayPath, overlayDataPath, cancellationToken), cancellationToken);
         }
     }
 
     // overlayDataPath is the local folder where the OBS overlay statics + state live; it
     // stays local even when game data is served from the cloud (--cloud).
-    private static async Task HandleRequestAsync(HttpListenerContext context, CircuitService service, string uiPath, string overlayPath, string overlayDataPath)
+    private static async Task HandleRequestAsync(HttpListenerContext context, CircuitService service, string uiPath, string overlayPath, string overlayDataPath, CancellationToken cancel)
     {
         try
         {
@@ -257,6 +293,7 @@ internal static class Program
             {
                 try { var tokenFile = Path.Combine(_dataRoot, TwitchTokens.FileName); if (File.Exists(tokenFile)) File.Delete(tokenFile); } catch { }
                 _sessionTwitch = null;
+                StopNativeTwitch();
                 await SendJsonAsync(context, 200, new { ok = true });
             }
             else if (request.HttpMethod == "POST" && path == "/api/twitch/login")
@@ -269,12 +306,33 @@ internal static class Program
                         ?? throw new InvalidOperationException($"{TwitchOptions.FileName} was not found in the data folder. See docs/0.7-twitch-auth-setup.md.");
                     var tokens = TwitchAuth.Login(twitchOptions, _dataRoot);
                     _sessionTwitch = tokens;
+                    RefreshNativeTwitch(service, cancel);
                     await SendJsonAsync(context, 200, new { ok = true, login = tokens.Login, displayName = tokens.DisplayName, userId = tokens.UserId });
                 }
                 catch (Exception ex)
                 {
                     await SendJsonAsync(context, 400, new { ok = false, error = ex.Message });
                 }
+            }
+            else if (request.HttpMethod == "GET" && path == "/api/twitch/rewards")
+                await SendResultAsync(context, ListTwitchRewards());
+            else if (request.HttpMethod == "POST" && path == "/api/twitch/reward-sync")
+            {
+                var result = SyncTwitchReward(service, await ReadBodyAsync(request));
+                await SendResultAsync(context, result);
+                if (result.Status == 200) RefreshNativeTwitch(service, cancel);
+            }
+            else if (request.HttpMethod == "POST" && path == "/api/twitch/reward-delete")
+            {
+                var result = DeleteTwitchReward(service, await ReadBodyAsync(request));
+                await SendResultAsync(context, result);
+                if (result.Status == 200) RefreshNativeTwitch(service, cancel);
+            }
+            else if (request.HttpMethod == "POST" && path == "/api/twitch/reward-update")
+            {
+                var result = UpdateTwitchReward(service, await ReadBodyAsync(request));
+                await SendResultAsync(context, result);
+                if (result.Status == 200) RefreshNativeTwitch(service, cancel);
             }
             else if (request.HttpMethod == "GET" && path == "/api/config")
                 await SendJsonAsync(context, 200, service.GetConfiguration());
@@ -317,7 +375,11 @@ internal static class Program
             {
                 var profileResult = service.InvokeProfileOperation(await ReadBodyAsync(request));
                 await SendResultAsync(context, profileResult);
-                if (profileResult.Status == 200) PublishOverlayStatics(overlayPath, overlayDataPath);
+                if (profileResult.Status == 200)
+                {
+                    PublishOverlayStatics(overlayPath, overlayDataPath);
+                    RefreshNativeTwitch(service, cancel);
+                }
             }
             else if (request.HttpMethod == "POST" && path == "/api/runtime/action")
                 await SendResultAsync(context, service.DispatchRuntimeAction(await ReadBodyAsync(request)));
@@ -351,6 +413,152 @@ internal static class Program
         }
     }
 
+    private static ServiceResult ListTwitchRewards()
+    {
+        try
+        {
+            var options = TwitchOptions.TryLoad(_dataRoot)
+                ?? throw new InvalidOperationException($"{TwitchOptions.FileName} was not found in the data folder. See docs/0.7-twitch-auth-setup.md.");
+            var tokens = _sessionTwitch ?? TwitchTokens.TryLoad(_dataRoot)
+                ?? throw new InvalidOperationException("Log in to Twitch before loading channel-point rewards.");
+            var helix = new TwitchHelix(new TwitchSession(options, tokens, _dataRoot));
+            var manageableIds = helix.ListManageableRewards().Select(r => r.Id).ToHashSet(StringComparer.Ordinal);
+            var rewards = new JsonArray(helix.ListRewards()
+                .OrderBy(r => r.Title, StringComparer.OrdinalIgnoreCase)
+                .Select(r => RewardObject(r with { Manageable = manageableIds.Contains(r.Id) }))
+                .ToArray());
+            _sessionTwitch = TwitchTokens.TryLoad(_dataRoot) ?? tokens;
+            return new ServiceResult(200, new JsonObject
+            {
+                ["ok"] = true,
+                ["rewards"] = rewards
+            });
+        }
+        catch (Exception ex)
+        {
+            return new ServiceResult(400, new JsonObject
+            {
+                ["ok"] = false,
+                ["errors"] = new JsonArray(ex.Message)
+            });
+        }
+    }
+
+    private static JsonObject RewardObject(CustomReward reward) => new()
+    {
+        ["rewardId"] = reward.Id,
+        ["title"] = reward.Title,
+        ["cost"] = reward.Cost,
+        ["manageable"] = reward.Manageable
+    };
+    private static ServiceResult SyncTwitchReward(CircuitService service, JsonObject body)
+    {
+        try
+        {
+            var profileId = body["profileId"]?.ToString();
+            if (string.IsNullOrWhiteSpace(profileId)) throw new InvalidDataException("Choose a live profile before syncing a Twitch reward.");
+            var options = TwitchOptions.TryLoad(_dataRoot)
+                ?? throw new InvalidOperationException($"{TwitchOptions.FileName} was not found in the data folder. See docs/0.7-twitch-auth-setup.md.");
+            var tokens = _sessionTwitch ?? TwitchTokens.TryLoad(_dataRoot)
+                ?? throw new InvalidOperationException("Log in to Twitch before syncing channel-point rewards.");
+            var session = new TwitchSession(options, tokens, _dataRoot);
+            var helix = new TwitchHelix(session);
+            var selectedRewardId = body["rewardId"]?.ToString();
+            CustomReward reward;
+            if (string.IsNullOrWhiteSpace(selectedRewardId))
+            {
+                reward = TwitchRuntime.SyncRewardForProfile(service.Store, profileId, helix, Console.WriteLine);
+            }
+            else
+            {
+                var manageableIds = helix.ListManageableRewards().Select(r => r.Id).ToHashSet(StringComparer.Ordinal);
+                var selected = helix.ListRewards().FirstOrDefault(r => string.Equals(r.Id, selectedRewardId, StringComparison.Ordinal))
+                    ?? throw new InvalidDataException("The selected Twitch reward was not found. Refresh rewards and try again.");
+                reward = TwitchRuntime.AttachRewardForProfile(service.Store, profileId, selected with { Manageable = manageableIds.Contains(selected.Id) }, Console.WriteLine);
+            }
+            _sessionTwitch = TwitchTokens.TryLoad(_dataRoot) ?? tokens;
+            return new ServiceResult(200, new JsonObject
+            {
+                ["ok"] = true,
+                ["profileId"] = profileId,
+                ["reward"] = RewardObject(reward),
+                ["profiles"] = service.GetProfiles()["profiles"]?.DeepClone()
+            });
+        }
+        catch (Exception ex)
+        {
+            return new ServiceResult(400, new JsonObject
+            {
+                ["ok"] = false,
+                ["errors"] = new JsonArray(ex.Message)
+            });
+        }
+    }
+    private static ServiceResult UpdateTwitchReward(CircuitService service, JsonObject body)
+    {
+        try
+        {
+            var profileId = body["profileId"]?.ToString();
+            var title = JsonUtil.String(body, "title").Trim();
+            var cost = (int)JsonUtil.Long(body, "cost");
+            if (string.IsNullOrWhiteSpace(profileId)) throw new InvalidDataException("Choose a profile before editing a Twitch reward.");
+            var options = TwitchOptions.TryLoad(_dataRoot)
+                ?? throw new InvalidOperationException($"{TwitchOptions.FileName} was not found in the data folder. See docs/0.7-twitch-auth-setup.md.");
+            var tokens = _sessionTwitch ?? TwitchTokens.TryLoad(_dataRoot)
+                ?? throw new InvalidOperationException("Log in to Twitch before editing channel-point rewards.");
+            var session = new TwitchSession(options, tokens, _dataRoot);
+            var helix = new TwitchHelix(session);
+            var reward = TwitchRuntime.UpdateRewardForProfile(service.Store, profileId, title, cost, helix, Console.WriteLine);
+            _sessionTwitch = TwitchTokens.TryLoad(_dataRoot) ?? tokens;
+            return new ServiceResult(200, new JsonObject
+            {
+                ["ok"] = true,
+                ["profileId"] = profileId,
+                ["reward"] = RewardObject(reward),
+                ["profile"] = service.GetSystemProfile()["profile"]?.DeepClone(),
+                ["profiles"] = service.GetProfiles()["profiles"]?.DeepClone()
+            });
+        }
+        catch (Exception ex)
+        {
+            return new ServiceResult(400, new JsonObject
+            {
+                ["ok"] = false,
+                ["errors"] = new JsonArray(ex.Message)
+            });
+        }
+    }
+    private static ServiceResult DeleteTwitchReward(CircuitService service, JsonObject body)
+    {
+        try
+        {
+            var profileId = body["profileId"]?.ToString();
+            if (string.IsNullOrWhiteSpace(profileId)) throw new InvalidDataException("Choose a profile before deleting a Twitch reward.");
+            var options = TwitchOptions.TryLoad(_dataRoot)
+                ?? throw new InvalidOperationException($"{TwitchOptions.FileName} was not found in the data folder. See docs/0.7-twitch-auth-setup.md.");
+            var tokens = _sessionTwitch ?? TwitchTokens.TryLoad(_dataRoot)
+                ?? throw new InvalidOperationException("Log in to Twitch before deleting channel-point rewards.");
+            var session = new TwitchSession(options, tokens, _dataRoot);
+            var helix = new TwitchHelix(session);
+            var reward = TwitchRuntime.DeleteRewardForProfile(service.Store, profileId, helix, Console.WriteLine);
+            _sessionTwitch = TwitchTokens.TryLoad(_dataRoot) ?? tokens;
+            return new ServiceResult(200, new JsonObject
+            {
+                ["ok"] = true,
+                ["profileId"] = profileId,
+                ["deletedReward"] = RewardObject(reward),
+                ["profiles"] = service.GetProfiles()["profiles"]?.DeepClone()
+            });
+        }
+        catch (Exception ex)
+        {
+            return new ServiceResult(400, new JsonObject
+            {
+                ["ok"] = false,
+                ["errors"] = new JsonArray(ex.Message)
+            });
+        }
+    }
     private static async Task<JsonObject> ReadBodyAsync(HttpListenerRequest request)
     {
         if (request.ContentLength64 is < 0 or > 1_048_576) throw new InvalidDataException("Request body is too large.");
@@ -923,3 +1131,7 @@ internal static class Program
         await context.Response.OutputStream.WriteAsync(body);
     }
 }
+
+
+
+

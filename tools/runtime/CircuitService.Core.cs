@@ -199,7 +199,7 @@ internal sealed partial class CircuitService
         var profile = NormalizeProfile(requested);
         var errors = ValidateProfile(profile);
         // Guard chat-command collisions only when the edited profile is itself live; drafts save freely.
-        if (IsProfileLive(_store.ActiveProfileId)) errors.AddRange(CommandCollisions(profile, _store.ActiveProfileId));
+        if (IsProfileLive(_store.ActiveProfileId)) errors.AddRange(LiveProfileCollisions(profile, _store.ActiveProfileId));
         if (errors.Count > 0) return Error(errors);
         var backup = _store.WriteAtomic(DataKeys.Profile, profile, "system-profile", Timestamp());
         return Ok(new JsonObject
@@ -390,8 +390,15 @@ internal sealed partial class CircuitService
 
         var configurationResult = SaveConfiguration(configuration!);
         if (configurationResult.Status != 200) return configurationResult;
-        var profileResult = SaveSystemProfile(profile);
-        if (profileResult.Status != 200) return profileResult;
+        // First-run creates a draft/editing profile. Command collisions are enforced when a
+        // profile goes live, not while initializing a new profile from the wizard.
+        var profileBackup = _store.WriteAtomic(DataKeys.Profile, profile, "system-profile", Timestamp());
+        var profileResult = Ok(new JsonObject
+        {
+            ["ok"] = true,
+            ["savedAtUtc"] = DateTime.UtcNow.ToString("O"),
+            ["backup"] = profileBackup
+        });
         return Ok(new JsonObject
         {
             ["ok"] = true,
@@ -673,7 +680,7 @@ internal sealed partial class CircuitService
 
     private void WriteProfileData(string profileId, string key, JsonNode value)
     {
-        _store.ImportProfileData(profileId, new Dictionary<string, JsonNode> { [key] = value });
+        _store.WriteProfileData(profileId, key, value);
     }
 
     private static ServiceResult Ok(JsonObject body) => new(200, body);
@@ -682,3 +689,4 @@ internal sealed partial class CircuitService
         ["ok"] = false, ["errors"] = ToJsonArray(errors)
     });
 }
+

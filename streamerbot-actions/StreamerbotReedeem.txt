@@ -285,8 +285,9 @@ public class CPHInline
             return false;
         }
 
-        // Roll variants — independent sequential rolls, cap at 2, no duplicate labels
+        // Roll variants - independent sequential rolls, cap at 2, no duplicate-looking labels
         var variantLabels = new List<string>();
+        var seenVariantLabels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         JArray collectionVariants = selectedCollection["variants"] as JArray;
         if (collectionVariants != null)
         {
@@ -295,14 +296,17 @@ public class CPHInline
             {
                 if (variantLabels.Count >= 2) break;
                 JObject variant = vt as JObject;
-                string vlabel = variant?["label"]?.ToString() ?? "";
+                string vlabel = (variant?["label"]?.ToString() ?? "").Trim();
                 double vchance = 0;
                 Double.TryParse(variant?["chance"]?.ToString(),
                     System.Globalization.NumberStyles.Float,
                     System.Globalization.CultureInfo.InvariantCulture, out vchance);
                 if (string.IsNullOrWhiteSpace(vlabel) || vchance <= 0) continue;
-                if (!variantLabels.Contains(vlabel) && variantRng.NextDouble() < vchance)
+                if (!seenVariantLabels.Contains(vlabel) && variantRng.NextDouble() < vchance)
+                {
+                    seenVariantLabels.Add(vlabel);
                     variantLabels.Add(vlabel);
+                }
             }
         }
         string variantPrefix = variantLabels.Count > 0 ? string.Join(" ", variantLabels) + " " : "";

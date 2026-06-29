@@ -55,6 +55,7 @@ internal sealed class LocalFileDataStore : ILocalDataStore
         DataKeys.Roles => Path.Combine(profileDir, "discord-role-awards.json"),
         DataKeys.Profile => Path.Combine(profileDir, "system-profile.json"),
         DataKeys.OverlayConfig => Path.Combine(profileDir, "overlay-config.json"),
+        DataKeys.TwitchRewards => Path.Combine(profileDir, "twitch-rewards.json"),
         _ => null
     };
 
@@ -252,6 +253,12 @@ internal sealed class LocalFileDataStore : ILocalDataStore
         catch { return null; }
     }
 
+    public void WriteProfileData(string profileId, string key, JsonNode value)
+    {
+        var path = KeyToProfilePath(GetProfilePath(profileId), key) ?? throw new InvalidDataException($"Unsupported profile data key: {key}");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, value.ToJsonString(JsonUtil.IndentedOptions), new UTF8Encoding(false));
+    }
     // One-time backfill so every profile has an explicit `active` flag: pre-feature installs
     // (no flag anywhere) treat the editing-current profile as the live one, matching the old
     // single-active behavior. Idempotent — profiles that already carry a flag are left alone.
@@ -385,3 +392,4 @@ internal sealed class LocalFileDataStore : ILocalDataStore
         return null;
     }
 }
+

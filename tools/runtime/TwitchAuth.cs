@@ -92,7 +92,7 @@ internal static class TwitchAuth
         }
         var context = contextTask.Result;
         var query = ParseQuery(context.Request.Url?.Query ?? "");
-        RespondHtml(context, "CircuitOS — Twitch login complete. You can close this tab and return to CircuitOS.");
+        RespondClose(context);
         listener.Stop();
 
         if (query.TryGetValue("error", out var error))
@@ -193,6 +193,15 @@ internal static class TwitchAuth
             result[Uri.UnescapeDataString(kv[0])] = kv.Length > 1 ? Uri.UnescapeDataString(kv[1]) : "";
         }
         return result;
+    }
+
+    private static void RespondClose(HttpListenerContext context)
+    {
+        var bytes = Encoding.UTF8.GetBytes("<html><body><script>window.close();</script></body></html>");
+        context.Response.ContentType = "text/html";
+        context.Response.ContentLength64 = bytes.Length;
+        context.Response.OutputStream.Write(bytes, 0, bytes.Length);
+        context.Response.Close();
     }
 
     private static void RespondHtml(HttpListenerContext context, string message)

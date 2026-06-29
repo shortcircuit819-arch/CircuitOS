@@ -56,7 +56,6 @@
         <div class="wizard-field-grid">
           <label class="field"><span>Game name</span><input id="wizardGameName" maxlength="80"></label>
           <label class="field"><span>Control panel name</span><input id="wizardAdminName" maxlength="80"></label>
-          <label class="field"><span>Eyebrow label</span><input id="wizardBrandKicker" maxlength="80" title="Short uppercase phrase shown above panel titles, e.g. CIRCUITOS"></label>
           <label class="field"><span>Redemption name</span><input id="wizardRedemptionName" maxlength="80"></label>
           <label class="field"><span>Item singular</span><input id="wizardItemSingular" maxlength="80"></label>
           <label class="field"><span>Item plural</span><input id="wizardItemPlural" maxlength="80"></label>
@@ -319,6 +318,7 @@ Item Three</textarea></label>
             <button class="nav-button" data-view="patchnotes">Patch Notes</button>
           </div>
         </details>
+        <button class="nav-button" data-view="twitch">Twitch</button>
         <button class="nav-button" data-view="setup">Streamer.bot</button>
         <details class="nav-group" id="toolsNav">
           <summary>Tools</summary>
@@ -369,8 +369,7 @@ Item Three</textarea></label>
             <p class="profile-help">These choices shape the names, chat commands, and generated Streamer.bot setup for your experience.</p>
             <div class="profile-fields">
               <label class="field"><span>Game name</span><input id="profileGameName" type="text" maxlength="80"></label>
-              <label class="field"><span>Panel nickname</span><input id="profileAdminName" type="text" maxlength="80"></label>
-              <label class="field"><span>Eyebrow label</span><input id="profileBrandKicker" type="text" maxlength="80" title="Short uppercase phrase shown above panel titles, e.g. CIRCUITOS"></label>
+              <label class="field"><span>Panel nickname</span><input id="profileAdminName" type="text" maxlength="80" title="Name shown in the sidebar under your game name. Also used as the control panel title."></label>
               <label class="field"><span>Redemption name</span><input id="profileRedemptionName" type="text" maxlength="80"></label>
               <label class="field"><span>Item singular</span><input id="profileItemSingular" type="text" maxlength="80"></label>
               <label class="field"><span>Item plural</span><input id="profileItemPlural" type="text" maxlength="80"></label>
@@ -381,7 +380,7 @@ Item Three</textarea></label>
               <label class="field"><span>Duplicate protection (pulls)</span><input id="profileDupProtection" type="number" min="0" max="20" step="1" title="After a duplicate pull, the next N pulls for that viewer are guaranteed to land on items they don't own yet. 0 = disabled. Applies when you regenerate Streamer.bot actions."></label>
             </div>
             <div class="subsection-title">Chat commands</div>
-            <div id="profileCommands" class="command-grid"></div>
+            <div id="profileCommands" class="command-list"></div>
             <div class="profile-actions">
               <button id="resetProfileButton" class="button secondary">Reset to defaults</button>
               <button id="saveProfileButton" class="button primary">Save</button>
@@ -393,7 +392,6 @@ Item Three</textarea></label>
             <div class="profile-preview-brand">
               <img class="brand-icon profile-preview-icon" src="circuitos-icon.png" alt="">
               <div>
-                <small id="previewBrandKicker"></small>
                 <h2 id="previewAdminName"></h2>
               </div>
             </div>
@@ -461,6 +459,44 @@ Item Three</textarea></label>
         <div id="messageList" class="message-list"></div>
       </section>
 
+
+      <section id="twitchView" class="view">
+        <div class="twitch-layout">
+          <article class="panel twitch-hero-panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">NATIVE INTEGRATION</div>
+                <h2>Twitch Settings</h2>
+              </div>
+              <span id="twitchStatusChip" class="metric-chip">CHECKING</span>
+            </div>
+            <p class="profile-help">Native Twitch is the 0.7 path: log in, verify readiness, then let CircuitOS manage rewards and redemptions without pasted C#.</p>
+            <div id="twitchAccountCard" class="twitch-account-card"></div>
+          </article>
+
+          <article class="panel twitch-helper-panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">WORKFLOW</div>
+                <h2>Twitch Tools</h2>
+              </div>
+            </div>
+            <p class="profile-help">Keep the Twitch page focused on things you can do: rewards, native mode, and fallback setup.</p>
+            <div id="twitchUtilityList" class="twitch-utility-grid"></div>
+          </article>
+
+          <article class="panel twitch-wide-panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-kicker">CHANNEL POINTS</div>
+                <h2>Reward Management</h2>
+              </div>
+            </div>
+            <p class="profile-help">Create, review, and eventually edit or remove the channel-point rewards CircuitOS manages for live profiles.</p>
+            <div id="twitchRewardList" class="twitch-reward-list"></div>
+          </article>
+        </div>
+      </section>
       <section id="setupView" class="view">
         <div class="setup-toolbar">
           <div>
@@ -494,7 +530,7 @@ Item Three</textarea></label>
         </article>
 
         <div class="overview-grid">
-          <article class="panel clickable-card" data-jump-view="ratelab">
+          <article class="panel overview-rate-panel">
             <div class="panel-header">
               <div>
                 <div class="panel-kicker">PULL ODDS</div>
@@ -764,6 +800,21 @@ Item Three</textarea></label>
           <button id="refreshBackupsButton" class="button secondary">Refresh History</button>
         </div>
 
+        <div class="backup-guide">
+          <article>
+            <strong>What's backed up</strong>
+            <span>Catalog, featured boosts, Discord role awards, and game profile. Backups are created automatically every time you save.</span>
+          </article>
+          <article>
+            <strong>Viewer inventory is safe</strong>
+            <span>Pulls and balances are never touched by a restore — only catalog and profile data changes.</span>
+          </article>
+          <article>
+            <strong>Safe to restore</strong>
+            <span>CircuitOS validates the file and takes a fresh snapshot of your current config before applying any restore.</span>
+          </article>
+        </div>
+
         <div id="backupStats" class="stats-grid"></div>
         <div class="backup-layout">
           <article class="panel backup-list-panel">
@@ -773,6 +824,9 @@ Item Three</textarea></label>
                 <h2>Backup History</h2>
               </div>
             </div>
+            <div class="backup-subhead">What's covered</div>
+            <div id="backupLiveFiles" class="backup-live-files"></div>
+            <div class="backup-subhead">Available backups</div>
             <div id="backupList" class="backup-list"></div>
           </article>
 
@@ -903,6 +957,13 @@ Item Three</textarea></label>
               <h2>Appearance</h2>
               <div class="overlay-field-grid" id="overlayAppearanceFields"></div>
             </article>
+
+            <article class="panel">
+              <div class="panel-kicker">STATE COLORS</div>
+              <h2>State Overrides</h2>
+              <p class="panel-note" id="overlayStateColorsNote">Switch to Rare, Complete, or Duplicate above to set per-state color overrides.</p>
+              <div class="overlay-field-grid" id="overlayStateColorsFields"></div>
+            </article>
           </div>
 
           <div class="overlay-editor-col">
@@ -967,3 +1028,4 @@ Item Three</textarea></label>
   <script src="app.js"></script>
 </body>
 </html>
+
