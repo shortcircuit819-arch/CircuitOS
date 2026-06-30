@@ -249,22 +249,62 @@ function renderSessionPanel() {
 
 async function loginTwitch() {
   const button = document.getElementById("twitchLoginButton");
-  if (button) { button.disabled = true; button.textContent = "Waiting for Twitch…"; }
-  showNotice("Opening Twitch in your browser — approve the login there, then come back.", "success");
+  const setButton = text => { if (button) { button.disabled = true; button.textContent = text; } };
+  setButton("Connecting…");
   try {
-    const response = await fetch("/api/twitch/login", { method: "POST" });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.ok) throw new Error(result.error || "Twitch login failed.");
-    const health = await (await fetch("/api/health", { cache: "no-store" })).json();
-    renderSessionMode(health.mode || lastSession.mode, health.twitch || null, lastSession.dataPath);
-    twitchRewardCatalog = { loaded: false, loading: false, error: "", items: [] };
-    renderSessionPanel();
-    renderTwitchSettings();
-    showNotice(`Logged in to Twitch as ${result.displayName}. Restart in cloud mode to key your data to this account.`, "success");
+    const startResp = await fetch("/api/twitch/login/start", { method: "POST" });
+    const start = await startResp.json().catch(() => ({}));
+    if (!startResp.ok || !start.ok) throw new Error((start.errors || ["Could not start Twitch login."]).join(" "));
+
+    // Self-host (own app + secret): fall back to the legacy blocking browser flow.
+    if (!start.inline) return await loginTwitchBlocking();
+
+    // Zero-config device flow: the host opened the pre-filled activate page; show the code and poll.
+    setButton(`Code: ${start.userCode}`);
+    showNotice(`Authorize in the browser tab that just opened. If asked, the code is ${start.userCode}.`, "success");
+    await onTwitchLoginComplete(await pollTwitchLogin(start));
   } catch (error) {
     showNotice(error.message, "error");
     renderSessionPanel();
   }
+}
+
+// Polls /api/twitch/login/poll until the device login completes; returns the success payload or throws.
+async function pollTwitchLogin(start) {
+  const intervalMs = Math.max(2, Number(start.interval) || 5) * 1000;
+  const deadline = Date.now() + (Number(start.expiresIn) || 1800) * 1000;
+  while (Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+    const resp = await fetch("/api/twitch/login/poll", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ loginId: start.loginId })
+    });
+    const poll = await resp.json().catch(() => ({}));
+    if (poll.status === "done") return poll;
+    if (poll.status === "expired") throw new Error("The login code expired — please try again.");
+    if (poll.status === "error" || poll.ok === false) throw new Error((poll.errors || ["Twitch login failed."]).join(" "));
+    // status === "pending" → keep waiting
+  }
+  throw new Error("Login timed out — please try again.");
+}
+
+async function onTwitchLoginComplete(result) {
+  const health = await (await fetch("/api/health", { cache: "no-store" })).json();
+  renderSessionMode(health.mode || lastSession.mode, health.twitch || null, lastSession.dataPath);
+  twitchRewardCatalog = { loaded: false, loading: false, error: "", items: [] };
+  renderSessionPanel();
+  renderTwitchSettings();
+  showNotice(`Logged in to Twitch as ${result.displayName}.`, "success");
+}
+
+// Legacy blocking flow (self-host with a client secret): the host opens the browser and the request
+// returns once authorized. Kept as a fallback so login still works if the inline path is unavailable.
+async function loginTwitchBlocking() {
+  showNotice("Opening Twitch in your browser — approve the login there, then come back.", "success");
+  const response = await fetch("/api/twitch/login", { method: "POST" });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.ok) throw new Error(result.error || "Twitch login failed.");
+  await onTwitchLoginComplete(result);
 }
 
 async function logoutTwitch() {

@@ -71,6 +71,9 @@ internal static class Program
     private static TwitchTokens? _sessionTwitch;
     private static string _dataRoot = "";
     private static bool _headless;
+    // In-flight inline (admin-panel) device logins: loginId -> the device code being polled. Lets the
+    // UI show the code and poll /api/twitch/login/poll without blocking a request for the whole flow.
+    private static readonly Dictionary<string, (TwitchOptions Opts, string DeviceCode, DateTimeOffset ExpiresAt)> _pendingDeviceLogins = new();
     private static readonly object _twitchRuntimeLock = new();
     private static CancellationTokenSource? _twitchRuntimeCancellation;
     private static Task? _twitchRuntimeTask;
@@ -331,6 +334,10 @@ internal static class Program
                     await SendJsonAsync(context, 400, new { ok = false, error = ex.Message });
                 }
             }
+            else if (request.HttpMethod == "POST" && path == "/api/twitch/login/start")
+                await SendResultAsync(context, StartDeviceLogin());
+            else if (request.HttpMethod == "POST" && path == "/api/twitch/login/poll")
+                await SendResultAsync(context, PollDeviceLogin(service, await ReadBodyAsync(request), cancel));
             else if (request.HttpMethod == "GET" && path == "/api/twitch/rewards")
                 await SendResultAsync(context, ListTwitchRewards());
             else if (request.HttpMethod == "POST" && path == "/api/twitch/reward-sync")
@@ -464,6 +471,87 @@ internal static class Program
         var text = $"Connect Twitch: go to {prompt.VerificationUri} and enter code {prompt.UserCode}.";
         if (_headless) Console.Out.WriteLine(text);
         else MessageBox.Show(text, "CircuitOS — Connect Twitch", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    // Inline device login, step 1: issue a device/user code for the admin panel to display. Returns
+    // inline=false when a secret is configured (self-host) so the frontend falls back to the blocking
+    // browser flow. The device code is held server-side and polled by loginId.
+    private static ServiceResult StartDeviceLogin()
+    {
+        try
+        {
+            var opts = TwitchOptions.Resolve(_dataRoot);
+            if (opts.HasSecret)
+                return new ServiceResult(200, new JsonObject { ["ok"] = true, ["inline"] = false });
+            var request = TwitchAuth.RequestDeviceCode(opts);
+            // Open the OS browser to the pre-filled activate page (reliable from the host, vs a
+            // WebView2 window.open). The panel still shows the code and polls for completion.
+            if (!_headless)
+            {
+                try { Process.Start(new ProcessStartInfo(request.VerificationUri) { UseShellExecute = true }); } catch { }
+            }
+            var loginId = Guid.NewGuid().ToString("N");
+            lock (_pendingDeviceLogins)
+            {
+                foreach (var stale in _pendingDeviceLogins.Where(kv => kv.Value.ExpiresAt < DateTimeOffset.UtcNow).Select(kv => kv.Key).ToList())
+                    _pendingDeviceLogins.Remove(stale);
+                _pendingDeviceLogins[loginId] = (opts, request.DeviceCode, DateTimeOffset.UtcNow.AddSeconds(request.ExpiresInSeconds));
+            }
+            return new ServiceResult(200, new JsonObject
+            {
+                ["ok"] = true,
+                ["inline"] = true,
+                ["loginId"] = loginId,
+                ["userCode"] = request.UserCode,
+                ["verificationUri"] = request.VerificationUri,
+                ["expiresIn"] = request.ExpiresInSeconds,
+                ["interval"] = request.IntervalSeconds
+            });
+        }
+        catch (Exception ex)
+        {
+            return new ServiceResult(400, new JsonObject { ["ok"] = false, ["errors"] = new JsonArray(ex.Message) });
+        }
+    }
+
+    // Inline device login, step 2: poll Twitch once for the given loginId. Returns status
+    // pending / done / expired / error so the admin panel can drive its own polling loop.
+    private static ServiceResult PollDeviceLogin(CircuitService service, JsonObject body, CancellationToken cancel)
+    {
+        var loginId = body["loginId"]?.ToString() ?? "";
+        (TwitchOptions Opts, string DeviceCode, DateTimeOffset ExpiresAt) pending;
+        lock (_pendingDeviceLogins)
+        {
+            if (!_pendingDeviceLogins.TryGetValue(loginId, out pending))
+                return new ServiceResult(200, new JsonObject { ["ok"] = true, ["status"] = "expired" });
+        }
+        if (pending.ExpiresAt < DateTimeOffset.UtcNow)
+        {
+            lock (_pendingDeviceLogins) _pendingDeviceLogins.Remove(loginId);
+            return new ServiceResult(200, new JsonObject { ["ok"] = true, ["status"] = "expired" });
+        }
+        try
+        {
+            var tokens = TwitchAuth.PollDeviceToken(pending.Opts, pending.DeviceCode, _dataRoot);
+            if (tokens is null)
+                return new ServiceResult(200, new JsonObject { ["ok"] = true, ["status"] = "pending" });
+            lock (_pendingDeviceLogins) _pendingDeviceLogins.Remove(loginId);
+            _sessionTwitch = tokens;
+            RefreshNativeTwitch(service, cancel);
+            return new ServiceResult(200, new JsonObject
+            {
+                ["ok"] = true,
+                ["status"] = "done",
+                ["login"] = tokens.Login,
+                ["displayName"] = tokens.DisplayName,
+                ["userId"] = tokens.UserId
+            });
+        }
+        catch (Exception ex)
+        {
+            lock (_pendingDeviceLogins) _pendingDeviceLogins.Remove(loginId);
+            return new ServiceResult(400, new JsonObject { ["ok"] = false, ["status"] = "error", ["errors"] = new JsonArray(ex.Message) });
+        }
     }
 
     private static ServiceResult ListTwitchRewards()

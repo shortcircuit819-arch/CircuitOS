@@ -151,59 +151,72 @@ internal static class TwitchAuth
 
     // Prompt shown to the user during the Device Code Flow: go to VerificationUri and enter UserCode.
     internal sealed record DeviceCodePrompt(string UserCode, string VerificationUri, int ExpiresInSeconds);
+    // The device/user code Twitch issues to start the flow; the caller polls with DeviceCode.
+    internal sealed record DeviceCodeRequest(string DeviceCode, string UserCode, string VerificationUri, int ExpiresInSeconds, int IntervalSeconds);
 
-    // Device Code Flow — the secret-less login for distributed apps. Requests a device/user code,
-    // shows the user where to enter it (onPrompt), then polls the token endpoint until the user
-    // authorizes (or it times out). Needs only the (public) client id, so a shipped CircuitOS client
-    // id lets any streamer log in with no twitch.local.json. The Twitch app must be Client Type=Public.
-    public static TwitchTokens LoginDeviceFlow(TwitchOptions opts, string dataRoot, Action<DeviceCodePrompt> onPrompt, CancellationToken cancel)
+    // Step 1 of the Device Code Flow: ask Twitch for a device/user code. Needs only the (public)
+    // client id. The user then authorizes at VerificationUri (which embeds the code).
+    public static DeviceCodeRequest RequestDeviceCode(TwitchOptions opts)
     {
-        var scopeList = string.Join(' ', Scopes);
         var device = PostForm("https://id.twitch.tv/oauth2/device", new Dictionary<string, string>
         {
             ["client_id"] = opts.ClientId,
-            ["scopes"] = scopeList
+            ["scopes"] = string.Join(' ', Scopes)
         });
-        var deviceCode = device["device_code"]?.ToString()
-            ?? throw new InvalidOperationException("Twitch device endpoint returned no device_code.");
-        var userCode = device["user_code"]?.ToString() ?? "";
-        var verificationUri = device["verification_uri"]?.ToString() ?? "https://www.twitch.tv/activate";
-        var expiresIn = int.TryParse(device["expires_in"]?.ToString(), out var exp) ? exp : 1800;
-        var interval = int.TryParse(device["interval"]?.ToString(), out var iv) && iv > 0 ? iv : 5;
+        return new DeviceCodeRequest(
+            device["device_code"]?.ToString() ?? throw new InvalidOperationException("Twitch device endpoint returned no device_code."),
+            device["user_code"]?.ToString() ?? "",
+            device["verification_uri"]?.ToString() ?? "https://www.twitch.tv/activate",
+            int.TryParse(device["expires_in"]?.ToString(), out var exp) ? exp : 1800,
+            int.TryParse(device["interval"]?.ToString(), out var iv) && iv > 0 ? iv : 5);
+    }
 
-        onPrompt(new DeviceCodePrompt(userCode, verificationUri, expiresIn));
+    // Step 2 of the Device Code Flow: poll the token endpoint once. Returns the tokens on success,
+    // null while the user hasn't authorized yet (authorization_pending), and throws on a hard error.
+    public static TwitchTokens? PollDeviceToken(TwitchOptions opts, string deviceCode, string dataRoot)
+    {
+        var (status, body) = PostFormRaw("https://id.twitch.tv/oauth2/token", new Dictionary<string, string>
+        {
+            ["client_id"] = opts.ClientId,
+            ["scopes"] = string.Join(' ', Scopes),
+            ["device_code"] = deviceCode,
+            ["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code"
+        });
+        if (status == 200)
+        {
+            var token = JsonNode.Parse(body) as JsonObject
+                ?? throw new InvalidOperationException("Twitch token response was not a JSON object.");
+            var accessToken = token["access_token"]?.ToString()
+                ?? throw new InvalidOperationException("No access_token in Twitch device token response.");
+            var refreshToken = token["refresh_token"]?.ToString() ?? "";
+            var tokenExpiresIn = int.TryParse(token["expires_in"]?.ToString(), out var e) ? e : 3600;
+            var identity = FetchIdentity(opts.ClientId, accessToken);
+            var tokens = new TwitchTokens(accessToken, refreshToken, DateTimeOffset.UtcNow.AddSeconds(tokenExpiresIn),
+                identity.UserId, identity.Login, identity.DisplayName);
+            tokens.Save(dataRoot);
+            return tokens;
+        }
+        if (body.Contains("authorization_pending", StringComparison.OrdinalIgnoreCase)) return null;
+        throw new InvalidOperationException($"Twitch device authorization failed ({status}): {body}");
+    }
 
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(expiresIn);
+    // Device Code Flow — the secret-less login for distributed apps (composes RequestDeviceCode +
+    // PollDeviceToken into one blocking call). Used by the CLI/diagnostic path; the in-app path uses
+    // the two steps directly so the UI can show the code and poll without blocking a request.
+    public static TwitchTokens LoginDeviceFlow(TwitchOptions opts, string dataRoot, Action<DeviceCodePrompt> onPrompt, CancellationToken cancel)
+    {
+        var request = RequestDeviceCode(opts);
+        onPrompt(new DeviceCodePrompt(request.UserCode, request.VerificationUri, request.ExpiresInSeconds));
+
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(request.ExpiresInSeconds);
         while (DateTimeOffset.UtcNow < deadline)
         {
             cancel.ThrowIfCancellationRequested();
-            try { Task.Delay(TimeSpan.FromSeconds(interval), cancel).GetAwaiter().GetResult(); }
+            try { Task.Delay(TimeSpan.FromSeconds(request.IntervalSeconds), cancel).GetAwaiter().GetResult(); }
             catch (OperationCanceledException) { throw; }
 
-            var (status, body) = PostFormRaw("https://id.twitch.tv/oauth2/token", new Dictionary<string, string>
-            {
-                ["client_id"] = opts.ClientId,
-                ["scopes"] = scopeList,
-                ["device_code"] = deviceCode,
-                ["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code"
-            });
-            if (status == 200)
-            {
-                var token = JsonNode.Parse(body) as JsonObject
-                    ?? throw new InvalidOperationException("Twitch token response was not a JSON object.");
-                var accessToken = token["access_token"]?.ToString()
-                    ?? throw new InvalidOperationException("No access_token in Twitch device token response.");
-                var refreshToken = token["refresh_token"]?.ToString() ?? "";
-                var tokenExpiresIn = int.TryParse(token["expires_in"]?.ToString(), out var e) ? e : 3600;
-                var identity = FetchIdentity(opts.ClientId, accessToken);
-                var tokens = new TwitchTokens(accessToken, refreshToken, DateTimeOffset.UtcNow.AddSeconds(tokenExpiresIn),
-                    identity.UserId, identity.Login, identity.DisplayName);
-                tokens.Save(dataRoot);
-                return tokens;
-            }
-            // Still pending is the normal case while the user authorizes; anything else is fatal.
-            if (!body.Contains("authorization_pending", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException($"Twitch device authorization failed ({status}): {body}");
+            var tokens = PollDeviceToken(opts, request.DeviceCode, dataRoot);
+            if (tokens is not null) return tokens;
         }
         throw new TimeoutException("Twitch device authorization timed out — the code expired before it was entered.");
     }
