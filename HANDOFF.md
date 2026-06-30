@@ -505,9 +505,14 @@ green, runtime builds 0/0.
 
 **Still open (deferred, low-risk):** Overview slider fill drift (visual); per-profile overlay URLs
 (overlay statics still publish only to the active profile — a live-but-not-editing profile's native
-pull writes its overlay state, but its statics aren't served yet); per-profile reward cost (sync is
-still the 100 placeholder until you Edit); porting the dup-protection fix into `StreamerbotReedeem.txt`
-if Streamer.bot stays a supported path.
+pull writes its overlay state, but its statics aren't served yet); porting the dup-protection fix into
+`StreamerbotReedeem.txt` if Streamer.bot stays a supported path.
+
+**Per-profile reward cost (also fixed this session):** added a `redemptionCost` profile field
+(default 100, validated 1..1,000,000) mirroring the `redeemCooldownSeconds` pattern across
+`DefaultProfile`/`NormalizeProfile`, the template, and the Game Profile UI (`#profileRedemptionCost`).
+`TwitchRuntime.SyncRewardForProfile` now reads it instead of the hardcoded 100. Verified end-to-end in
+the preview (edit → save → `/api/profile` returns the new cost).
 
 ---
 

@@ -112,6 +112,7 @@ internal sealed partial class CircuitService
         },
         ["redeemCooldownSeconds"] = 120,
         ["redeemDupProtectionTurns"] = 0,
+        ["redemptionCost"] = 100,
         ["colors"] = new JsonObject
         {
             ["background"] = "#000d19", ["panel"] = "#061a2b", ["panelAlt"] = "#092239",
@@ -135,6 +136,8 @@ internal sealed partial class CircuitService
         if (cooldown >= 0 && cooldown <= 3600) normalized["redeemCooldownSeconds"] = cooldown;
         var dupProtection = JsonUtil.Long(incoming, "redeemDupProtectionTurns");
         if (dupProtection >= 0 && dupProtection <= 20) normalized["redeemDupProtectionTurns"] = dupProtection;
+        var redemptionCost = JsonUtil.Long(incoming, "redemptionCost");
+        if (redemptionCost >= 1 && redemptionCost <= 1_000_000) normalized["redemptionCost"] = redemptionCost;
         return normalized;
     }
 

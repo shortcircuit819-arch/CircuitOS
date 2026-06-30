@@ -11,6 +11,7 @@
   "redemptionName": "Circuit Component",
   "redeemCooldownSeconds": 120,
   "redeemDupProtectionTurns": 0,
+  "redemptionCost": 100,
   "commands": {
     "inventory": "components",
     "missing": "missing",

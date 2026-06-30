@@ -33,6 +33,7 @@ const defaultSystemProfile = {
   redemptionName: "Circuit Component",
   redeemCooldownSeconds: 120,
   redeemDupProtectionTurns: 0,
+  redemptionCost: 100,
   commands: {
     inventory: "components",
     missing: "missing",
@@ -310,6 +311,8 @@ function applySystemProfile() {
   if (cooldownInput) cooldownInput.value = systemProfile.redeemCooldownSeconds ?? 120;
   const dupProtInput = document.getElementById("profileDupProtection");
   if (dupProtInput) dupProtInput.value = systemProfile.redeemDupProtectionTurns ?? 0;
+  const redemptionCostInput = document.getElementById("profileRedemptionCost");
+  if (redemptionCostInput) redemptionCostInput.value = systemProfile.redemptionCost ?? 100;
   document.getElementById("overviewEconomyTitle").textContent = `${systemProfile.currencyName} & Duplicates`;
   document.getElementById("collectionEconomyTitle").textContent = `Unclaimed ${systemProfile.currencyName} by ${titleCase(systemProfile.collectionSingular)}`;
   document.getElementById("currencyLeaderTitle").textContent = `Top ${systemProfile.currencyName} Balances`;
@@ -450,6 +453,7 @@ function updateProfileFromInputs() {
   for (const [id, key] of Object.entries(fields)) systemProfile[key] = document.getElementById(id).value;
   systemProfile.redeemCooldownSeconds = Math.max(0, Math.min(3600, Number(document.getElementById("profileCooldown").value) || 0));
   systemProfile.redeemDupProtectionTurns = Math.max(0, Math.min(20, Number(document.getElementById("profileDupProtection").value) || 0));
+  systemProfile.redemptionCost = Math.max(1, Math.min(1000000, Number(document.getElementById("profileRedemptionCost").value) || 100));
   profileDirty = true;
   setupBundle = null;
   applySystemProfile();
@@ -4290,7 +4294,7 @@ document.getElementById("backupFilter").addEventListener("change", renderBackups
 document.getElementById("refreshBackupsButton").addEventListener("click", () => refreshBackupIndex().catch(error => showNotice(error.message, "error")));
 document.getElementById("downloadBackupButton").addEventListener("click", downloadSelectedBackup);
 document.getElementById("restoreBackupButton").addEventListener("click", restoreSelectedBackup);
-for (const id of ["profileGameName", "profileAdminName", "profileRedemptionName", "profileItemSingular", "profileItemPlural", "profileCollectionSingular", "profileCollectionPlural", "profileCurrencyName", "profileCooldown", "profileDupProtection"]) {
+for (const id of ["profileGameName", "profileAdminName", "profileRedemptionName", "profileItemSingular", "profileItemPlural", "profileCollectionSingular", "profileCollectionPlural", "profileCurrencyName", "profileCooldown", "profileDupProtection", "profileRedemptionCost"]) {
   document.getElementById(id).addEventListener("input", updateProfileFromInputs);
 }
 document.getElementById("saveProfileButton").addEventListener("click", saveSystemProfile);

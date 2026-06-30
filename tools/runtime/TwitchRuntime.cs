@@ -93,7 +93,9 @@ internal static class TwitchRuntime
         var title = JsonUtil.String(data, "redemptionName");
         if (string.IsNullOrWhiteSpace(title)) throw new InvalidDataException($"Profile '{profile.Name}' needs a redemption name before syncing Twitch.");
 
-        const int cost = 100;
+        // Reward cost comes from the profile (redemptionCost); default 100 when unset/out of range.
+        var configuredCost = JsonUtil.Long(data, "redemptionCost");
+        var cost = configuredCost is >= 1 and <= 1_000_000 ? (int)configuredCost : 100;
         const string prompt = "Redeem to pull an item with CircuitOS.";
         var reward = ensureReward(title, cost, prompt);
         EnsureRewardIsNotMappedToAnotherLiveProfile(store, profile.Id, reward);
