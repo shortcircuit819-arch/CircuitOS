@@ -15,8 +15,7 @@ internal sealed record TwitchOptions(string ClientId, string ClientSecret, strin
     // distributed. With this set, end users log in via the Device Code Flow with no twitch.local.json
     // and no per-streamer Twitch app. The Twitch app MUST be registered with Client Type = Public for
     // the device flow to work. twitch.local.json (if present) overrides this for self-hosters.
-    // TODO(0.7): paste the CircuitOS Public app client id here.
-    public const string DefaultClientId = "";
+    public const string DefaultClientId = "rs7hti26ty98in6ltdjd8rb980wjjb";
 
     // Device flow needs no secret. When no secret is available we must use the device flow; the
     // legacy loopback authorization-code flow is only used when a secret is present (advanced/self-host).

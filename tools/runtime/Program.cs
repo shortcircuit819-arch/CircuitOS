@@ -70,6 +70,7 @@ internal static class Program
     private static string _sessionMode = "local";
     private static TwitchTokens? _sessionTwitch;
     private static string _dataRoot = "";
+    private static bool _headless;
     private static readonly object _twitchRuntimeLock = new();
     private static CancellationTokenSource? _twitchRuntimeCancellation;
     private static Task? _twitchRuntimeTask;
@@ -145,6 +146,7 @@ internal static class Program
         _sessionMode = args.Contains("--cloud") ? "cloud" : "local";
         _sessionTwitch = TwitchTokens.TryLoad(options.DataPath);
         _dataRoot = options.DataPath;
+        _headless = options.Headless;
 
         PublishOverlayStatics(options.OverlayPath, overlayDataPath);
 
@@ -310,13 +312,16 @@ internal static class Program
             }
             else if (request.HttpMethod == "POST" && path == "/api/twitch/login")
             {
-                // Runs the interactive OAuth flow (opens the browser, waits for consent).
-                // The request blocks until the user authorizes or it times out.
+                // Runs the interactive OAuth flow and blocks until the user authorizes (or it times
+                // out). With a bundled client id and no secret this is the zero-config Device Code
+                // Flow: a desktop dialog shows the code + opens twitch.tv/activate. With a secret
+                // present (self-host) it's the legacy loopback authorization-code flow.
                 try
                 {
-                    var twitchOptions = TwitchOptions.TryLoad(_dataRoot)
-                        ?? throw new InvalidOperationException($"{TwitchOptions.FileName} was not found in the data folder. See docs/0.7-twitch-auth-setup.md.");
-                    var tokens = TwitchAuth.Login(twitchOptions, _dataRoot);
+                    var twitchOptions = TwitchOptions.Resolve(_dataRoot);
+                    var tokens = twitchOptions.HasSecret
+                        ? TwitchAuth.Login(twitchOptions, _dataRoot)
+                        : TwitchAuth.LoginDeviceFlow(twitchOptions, _dataRoot, ShowDeviceCodePrompt, cancel);
                     _sessionTwitch = tokens;
                     RefreshNativeTwitch(service, cancel);
                     await SendJsonAsync(context, 200, new { ok = true, login = tokens.Login, displayName = tokens.DisplayName, userId = tokens.UserId });
@@ -445,12 +450,28 @@ internal static class Program
         return host is "127.0.0.1" or "localhost" or "::1";
     }
 
+    // Surfaces the Device Code Flow prompt to the streamer: opens twitch.tv/activate and shows the
+    // code to enter. Blocks (modal) until dismissed; the device-code poll resumes after. Headless
+    // mode logs the instructions to the console instead of opening a dialog.
+    private static void ShowDeviceCodePrompt(TwitchAuth.DeviceCodePrompt prompt)
+    {
+        var text = $"To connect Twitch:\n\n1. Go to {prompt.VerificationUri}\n2. Enter this code:  {prompt.UserCode}\n\n"
+            + $"Leave this open and authorize in your browser. The code expires in {prompt.ExpiresInSeconds / 60} minutes; "
+            + "click OK after you've approved it.";
+        if (_headless)
+        {
+            Console.Out.WriteLine(text);
+            return;
+        }
+        try { Process.Start(new ProcessStartInfo(prompt.VerificationUri) { UseShellExecute = true }); } catch { }
+        MessageBox.Show(text, "CircuitOS — Connect Twitch", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
     private static ServiceResult ListTwitchRewards()
     {
         try
         {
-            var options = TwitchOptions.TryLoad(_dataRoot)
-                ?? throw new InvalidOperationException($"{TwitchOptions.FileName} was not found in the data folder. See docs/0.7-twitch-auth-setup.md.");
+            var options = TwitchOptions.Resolve(_dataRoot);
             var tokens = _sessionTwitch ?? TwitchTokens.TryLoad(_dataRoot)
                 ?? throw new InvalidOperationException("Log in to Twitch before loading channel-point rewards.");
             var helix = new TwitchHelix(new TwitchSession(options, tokens, _dataRoot));
@@ -489,8 +510,7 @@ internal static class Program
         {
             var profileId = body["profileId"]?.ToString();
             if (string.IsNullOrWhiteSpace(profileId)) throw new InvalidDataException("Choose a live profile before syncing a Twitch reward.");
-            var options = TwitchOptions.TryLoad(_dataRoot)
-                ?? throw new InvalidOperationException($"{TwitchOptions.FileName} was not found in the data folder. See docs/0.7-twitch-auth-setup.md.");
+            var options = TwitchOptions.Resolve(_dataRoot);
             var tokens = _sessionTwitch ?? TwitchTokens.TryLoad(_dataRoot)
                 ?? throw new InvalidOperationException("Log in to Twitch before syncing channel-point rewards.");
             var session = new TwitchSession(options, tokens, _dataRoot);
@@ -534,8 +554,7 @@ internal static class Program
             var title = JsonUtil.String(body, "title").Trim();
             var cost = (int)JsonUtil.Long(body, "cost");
             if (string.IsNullOrWhiteSpace(profileId)) throw new InvalidDataException("Choose a profile before editing a Twitch reward.");
-            var options = TwitchOptions.TryLoad(_dataRoot)
-                ?? throw new InvalidOperationException($"{TwitchOptions.FileName} was not found in the data folder. See docs/0.7-twitch-auth-setup.md.");
+            var options = TwitchOptions.Resolve(_dataRoot);
             var tokens = _sessionTwitch ?? TwitchTokens.TryLoad(_dataRoot)
                 ?? throw new InvalidOperationException("Log in to Twitch before editing channel-point rewards.");
             var session = new TwitchSession(options, tokens, _dataRoot);
@@ -566,8 +585,7 @@ internal static class Program
         {
             var profileId = body["profileId"]?.ToString();
             if (string.IsNullOrWhiteSpace(profileId)) throw new InvalidDataException("Choose a profile before deleting a Twitch reward.");
-            var options = TwitchOptions.TryLoad(_dataRoot)
-                ?? throw new InvalidOperationException($"{TwitchOptions.FileName} was not found in the data folder. See docs/0.7-twitch-auth-setup.md.");
+            var options = TwitchOptions.Resolve(_dataRoot);
             var tokens = _sessionTwitch ?? TwitchTokens.TryLoad(_dataRoot)
                 ?? throw new InvalidOperationException("Log in to Twitch before deleting channel-point rewards.");
             var session = new TwitchSession(options, tokens, _dataRoot);

@@ -493,16 +493,27 @@ Twitch app, no `twitch.local.json` required.
   the code in headless, MessageBox + opens browser otherwise). The legacy loopback flow still runs
   when a secret IS present (self-host).
 
-**REMAINING to finish the feature (next session):**
-1. **Set `TwitchOptions.DefaultClientId`** to the real CircuitOS Public-app clientId (you must register
-   the app with Client Type = Public in the Twitch dev console, add the device-flow grant).
-2. **Wire the in-app login** (`/api/twitch/login` in `Program.cs` + the frontend Twitch page): device
-   flow is async with a user-code, so the current single-blocking-request + browser-open won't do —
-   the UI needs to display the code/verification URL and poll. (CLI `--twitch-login` already works.)
-3. Switch the reward endpoints (`ListTwitchRewards`/Sync/Update/Delete) from `TryLoad ?? throw` to
-   `Resolve` so they work with the bundled clientId too.
-4. Update `docs/0.7-twitch-auth-setup.md` for the Public-app + device-flow model.
-5. Then bump to 0.7.1, rebuild EXE/dist, move the tag.
+**DONE (second pass):**
+1. ✅ `TwitchOptions.DefaultClientId` set to the CircuitOS Public app id `rs7hti26ty98in6ltdjd8rb980wjjb`.
+   Validated live against `https://id.twitch.tv/oauth2/device` — returns a device/user code, confirming
+   the app is Public + device-grant enabled. Twitch's `verification_uri` even pre-fills the code
+   (`twitch.tv/activate?device-code=XXXX`).
+2. ✅ In-app `/api/twitch/login` now uses `Resolve` + device flow when no secret: a desktop dialog
+   (`ShowDeviceCodePrompt`) opens the pre-filled activate URL and shows the code, then the request
+   blocks on the poll and returns on success — no frontend change needed (reuses the existing button).
+   Headless mode logs the code to the console. Legacy loopback flow still used when a secret is present.
+3. ✅ Reward endpoints (`ListTwitchRewards`/Sync/Update/Delete) switched to `Resolve`.
+
+**REMAINING:**
+1. **Live end-to-end test:** click "Log in with Twitch" in the app, authorize in the browser, confirm
+   the session shows your identity and a native redemption works. (Protocol is validated; the actual
+   user-authorize step needs you.)
+2. Update `docs/0.7-twitch-auth-setup.md` for the Public-app + device-flow model (the old doc still
+   describes registering your own app + secret).
+3. Then bump to 0.7.1, rebuild EXE/dist, move the tag.
+
+**UX note:** the in-app prompt is a blocking MessageBox (functional, basic). A nicer version shows the
+code inline on the Twitch page with async polling — optional polish, not required to ship.
 
 ---
 
