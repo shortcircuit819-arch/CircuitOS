@@ -149,6 +149,65 @@ internal static class TwitchAuth
         return tokens;
     }
 
+    // Prompt shown to the user during the Device Code Flow: go to VerificationUri and enter UserCode.
+    internal sealed record DeviceCodePrompt(string UserCode, string VerificationUri, int ExpiresInSeconds);
+
+    // Device Code Flow — the secret-less login for distributed apps. Requests a device/user code,
+    // shows the user where to enter it (onPrompt), then polls the token endpoint until the user
+    // authorizes (or it times out). Needs only the (public) client id, so a shipped CircuitOS client
+    // id lets any streamer log in with no twitch.local.json. The Twitch app must be Client Type=Public.
+    public static TwitchTokens LoginDeviceFlow(TwitchOptions opts, string dataRoot, Action<DeviceCodePrompt> onPrompt, CancellationToken cancel)
+    {
+        var scopeList = string.Join(' ', Scopes);
+        var device = PostForm("https://id.twitch.tv/oauth2/device", new Dictionary<string, string>
+        {
+            ["client_id"] = opts.ClientId,
+            ["scopes"] = scopeList
+        });
+        var deviceCode = device["device_code"]?.ToString()
+            ?? throw new InvalidOperationException("Twitch device endpoint returned no device_code.");
+        var userCode = device["user_code"]?.ToString() ?? "";
+        var verificationUri = device["verification_uri"]?.ToString() ?? "https://www.twitch.tv/activate";
+        var expiresIn = int.TryParse(device["expires_in"]?.ToString(), out var exp) ? exp : 1800;
+        var interval = int.TryParse(device["interval"]?.ToString(), out var iv) && iv > 0 ? iv : 5;
+
+        onPrompt(new DeviceCodePrompt(userCode, verificationUri, expiresIn));
+
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(expiresIn);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            cancel.ThrowIfCancellationRequested();
+            try { Task.Delay(TimeSpan.FromSeconds(interval), cancel).GetAwaiter().GetResult(); }
+            catch (OperationCanceledException) { throw; }
+
+            var (status, body) = PostFormRaw("https://id.twitch.tv/oauth2/token", new Dictionary<string, string>
+            {
+                ["client_id"] = opts.ClientId,
+                ["scopes"] = scopeList,
+                ["device_code"] = deviceCode,
+                ["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code"
+            });
+            if (status == 200)
+            {
+                var token = JsonNode.Parse(body) as JsonObject
+                    ?? throw new InvalidOperationException("Twitch token response was not a JSON object.");
+                var accessToken = token["access_token"]?.ToString()
+                    ?? throw new InvalidOperationException("No access_token in Twitch device token response.");
+                var refreshToken = token["refresh_token"]?.ToString() ?? "";
+                var tokenExpiresIn = int.TryParse(token["expires_in"]?.ToString(), out var e) ? e : 3600;
+                var identity = FetchIdentity(opts.ClientId, accessToken);
+                var tokens = new TwitchTokens(accessToken, refreshToken, DateTimeOffset.UtcNow.AddSeconds(tokenExpiresIn),
+                    identity.UserId, identity.Login, identity.DisplayName);
+                tokens.Save(dataRoot);
+                return tokens;
+            }
+            // Still pending is the normal case while the user authorizes; anything else is fatal.
+            if (!body.Contains("authorization_pending", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Twitch device authorization failed ({status}): {body}");
+        }
+        throw new TimeoutException("Twitch device authorization timed out — the code expired before it was entered.");
+    }
+
     // Exchanges the stored refresh token for a fresh access token (Twitch access tokens last
     // ~4h, so a long stream needs this). Returns updated tokens and re-saves them. Throws if
     // the refresh token is no longer valid (the user must log in again).
@@ -156,13 +215,15 @@ internal static class TwitchAuth
     {
         if (string.IsNullOrWhiteSpace(current.RefreshToken))
             throw new InvalidOperationException("No Twitch refresh token on file — please log in again.");
-        var token = PostForm("https://id.twitch.tv/oauth2/token", new Dictionary<string, string>
+        var form = new Dictionary<string, string>
         {
             ["client_id"] = opts.ClientId,
-            ["client_secret"] = opts.ClientSecret,
             ["grant_type"] = "refresh_token",
             ["refresh_token"] = current.RefreshToken
-        });
+        };
+        // Public-client (device-flow) tokens refresh without a secret; only include it when present.
+        if (opts.HasSecret) form["client_secret"] = opts.ClientSecret;
+        var token = PostForm("https://id.twitch.tv/oauth2/token", form);
         var accessToken = token["access_token"]?.ToString()
             ?? throw new InvalidOperationException("No access_token in Twitch refresh response.");
         var refreshToken = token["refresh_token"]?.ToString() ?? current.RefreshToken;
@@ -196,13 +257,21 @@ internal static class TwitchAuth
 
     private static JsonObject PostForm(string url, Dictionary<string, string> form)
     {
+        var (status, text) = PostFormRaw(url, form);
+        if (status is < 200 or >= 300)
+            throw new InvalidOperationException($"Twitch token endpoint returned {status}: {text}");
+        return JsonNode.Parse(text) as JsonObject
+            ?? throw new InvalidOperationException("Twitch token response was not a JSON object.");
+    }
+
+    // POSTs a form and returns the raw (status, body) without throwing on non-2xx — the device-flow
+    // poll needs to read the "authorization_pending" body rather than treat it as an error.
+    private static (int Status, string Body) PostFormRaw(string url, Dictionary<string, string> form)
+    {
         using var content = new FormUrlEncodedContent(form);
         using var response = Http.PostAsync(url, content).GetAwaiter().GetResult();
         var text = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-        if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"Twitch token endpoint returned {(int)response.StatusCode}: {text}");
-        return JsonNode.Parse(text) as JsonObject
-            ?? throw new InvalidOperationException("Twitch token response was not a JSON object.");
+        return ((int)response.StatusCode, text);
     }
 
     private static void OpenBrowser(string url)

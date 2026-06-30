@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -958,19 +959,28 @@ internal static class Program
         TwitchOptions? opts = null;
         try
         {
-            opts = TwitchOptions.TryLoad(dataRoot);
-            if (opts is null)
+            // Resolve never returns null: a present twitch.local.json wins, else the bundled client id.
+            opts = TwitchOptions.Resolve(dataRoot);
+            TwitchTokens tokens;
+            if (opts.HasSecret)
             {
-                message = $"No Twitch config found.\n\nExpected {TwitchOptions.FileName} in:\n{dataRoot}\n\nSee docs/0.7-twitch-auth-setup.md.";
+                // Legacy loopback authorization-code flow (self-host / advanced: their own Twitch app + secret).
+                tokens = TwitchAuth.Login(opts, dataRoot);
             }
             else
             {
-                var tokens = TwitchAuth.Login(opts, dataRoot);
-                ok = true;
-                message = $"Logged in to Twitch.\n\nDisplay name: {tokens.DisplayName}\nLogin: {tokens.Login}\nUser id: {tokens.UserId}\n\n"
-                    + $"Tokens cached in {TwitchTokens.FileName}. Push and --cloud now use this Twitch id as the tenant.\n"
-                    + "Next: re-run --push-to-appwrite to move your data under this id, then --cloud.";
+                // Zero-config Device Code Flow: no secret, works with the bundled CircuitOS client id.
+                void Prompt(TwitchAuth.DeviceCodePrompt p)
+                {
+                    var instr = $"To connect Twitch:\n\n1. Go to {p.VerificationUri}\n2. Enter this code: {p.UserCode}\n\nThis window finishes once you authorize (code expires in {p.ExpiresInSeconds / 60} min).";
+                    if (headless) Console.Out.WriteLine(instr);
+                    else { try { Process.Start(new ProcessStartInfo(p.VerificationUri) { UseShellExecute = true }); } catch { } MessageBox.Show(instr, "CircuitOS — Twitch login", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+                }
+                tokens = TwitchAuth.LoginDeviceFlow(opts, dataRoot, Prompt, CancellationToken.None);
             }
+            ok = true;
+            message = $"Logged in to Twitch.\n\nDisplay name: {tokens.DisplayName}\nLogin: {tokens.Login}\nUser id: {tokens.UserId}\n\n"
+                + $"Tokens cached (encrypted) in {TwitchTokens.FileName}.";
         }
         catch (Exception ex)
         {

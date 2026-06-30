@@ -468,6 +468,44 @@ DataPath/
 
 ## Session Log
 
+### 2026-06-29 — Claude (claude-opus-4-8) — Twitch login: Device Code Flow (zero-config distribution) — IN PROGRESS
+
+**Problem (user-reported):** when anyone other than the dev tries to log in, they hit
+"twitch.local.json was not found." Root cause: the login uses the **authorization-code grant**,
+which needs a **client secret**, and the design required every streamer to register their own
+Twitch app and supply clientId+secret in `twitch.local.json`. That breaks the zero-config vision,
+and you can't ship your own secret (a client secret in a distributed desktop app is extractable).
+
+**Decision (with user): full zero-config via Twitch Device Code Flow.** CircuitOS registers ONE
+Twitch app (Client Type = **Public**), bundles only its **clientId** (public by design), and each
+streamer logs in via the device flow (enter a code at twitch.tv/activate) — no secret, no per-user
+Twitch app, no `twitch.local.json` required.
+
+**Done this session (additive, compiles 0/0, smoke green — NOT yet shipped, tag NOT moved):**
+- `TwitchOptions`: added `DefaultClientId` (bundled, **currently empty — must be filled**), `HasSecret`,
+  and `Resolve(dataRoot)` which never returns null (file wins; else bundled clientId; secret optional).
+  Left `TryLoad` intact so legacy paths + tests are unaffected.
+- `TwitchAuth.LoginDeviceFlow(opts, dataRoot, onPrompt, cancel)` — full device flow: request
+  device/user code → `onPrompt` shows where to enter it → poll token endpoint (handles
+  `authorization_pending`) → fetch identity → save (encrypted). Added `DeviceCodePrompt` record and
+  `PostFormRaw`. `Refresh` now omits the secret when absent (public-client tokens refresh secret-less).
+- `Program.cs --twitch-login` now uses `Resolve` and picks device flow when there's no secret (prints
+  the code in headless, MessageBox + opens browser otherwise). The legacy loopback flow still runs
+  when a secret IS present (self-host).
+
+**REMAINING to finish the feature (next session):**
+1. **Set `TwitchOptions.DefaultClientId`** to the real CircuitOS Public-app clientId (you must register
+   the app with Client Type = Public in the Twitch dev console, add the device-flow grant).
+2. **Wire the in-app login** (`/api/twitch/login` in `Program.cs` + the frontend Twitch page): device
+   flow is async with a user-code, so the current single-blocking-request + browser-open won't do —
+   the UI needs to display the code/verification URL and poll. (CLI `--twitch-login` already works.)
+3. Switch the reward endpoints (`ListTwitchRewards`/Sync/Update/Delete) from `TryLoad ?? throw` to
+   `Resolve` so they work with the bundled clientId too.
+4. Update `docs/0.7-twitch-auth-setup.md` for the Public-app + device-flow model.
+5. Then bump to 0.7.1, rebuild EXE/dist, move the tag.
+
+---
+
 ### 2026-06-29 — Claude (claude-opus-4-8) — 0.7 review + reliability/security hardening
 
 **Goal:** Full review of the 0.7 source after cutting the release, then fix what the review surfaced.
