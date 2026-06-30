@@ -5,7 +5,7 @@ Streamer.bot. Circuit Components is the included starter profile, while the
 editor and generated actions support custom games, terminology, collections,
 themes, messages, events, and currencies.
 
-Current application version: **0.7.0**
+Current application version: **0.7.1**
 
 ## Current Features
 

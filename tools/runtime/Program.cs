@@ -299,7 +299,7 @@ internal static class Program
                     dataPath = overlayDataPath,
                     overlayFilePath = Path.Combine(overlayDataPath, "overlay", "index.html"),
                     runtime = ".NET",
-                    version = "0.7.0",
+                    version = "0.7.1",
                     mode = _sessionMode,
                     twitch = _sessionTwitch is null ? null : new { login = _sessionTwitch.Login, displayName = _sessionTwitch.DisplayName, userId = _sessionTwitch.UserId, expiresAt = _sessionTwitch.ExpiresAt }
                 });

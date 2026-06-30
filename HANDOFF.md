@@ -504,16 +504,15 @@ Twitch app, no `twitch.local.json` required.
    Headless mode logs the code to the console. Legacy loopback flow still used when a secret is present.
 3. ✅ Reward endpoints (`ListTwitchRewards`/Sync/Update/Delete) switched to `Resolve`.
 
-**REMAINING:**
-1. **Live end-to-end test:** click "Log in with Twitch" in the app, authorize in the browser, confirm
-   the session shows your identity and a native redemption works. (Protocol is validated; the actual
-   user-authorize step needs you.)
-2. Update `docs/0.7-twitch-auth-setup.md` for the Public-app + device-flow model (the old doc still
-   describes registering your own app + secret).
-3. Then bump to 0.7.1, rebuild EXE/dist, move the tag.
+**SHIPPED as 0.7.1.** User live-tested the in-app login (device flow) successfully. Removed the
+blocking MessageBox — `ShowDeviceCodePrompt` now opens Twitch's pre-filled activate URL directly and
+polls in the background, so the flow is just Log in → Authorize → done. Kept the device flow (not
+implicit) so sessions keep their refresh token and survive long streams — decided with the user.
+Version bumped 0.7.0 → 0.7.1 (all 5 locations), `docs/0.7-twitch-auth-setup.md` rewritten for the
+zero-config model, `docs/patch-notes/v0.7.1.md` added, EXE + dist rebuilt, tag `v0.7.1` created.
 
-**UX note:** the in-app prompt is a blocking MessageBox (functional, basic). A nicer version shows the
-code inline on the Twitch page with async polling — optional polish, not required to ship.
+**Optional polish (not required):** show the code inline on the Twitch admin page with async polling
+instead of opening the external browser; a nicer "waiting for authorization…" state on the login button.
 
 ---
 
