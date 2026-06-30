@@ -19,9 +19,14 @@ internal static class TwitchRuntime
     // credentials/login), so the app simply runs without it. The task ends when `cancel` fires.
     public static Task? TryStart(IDataStore store, CircuitService service, string dataRoot, Action<string> log, CancellationToken cancel)
     {
-        var options = TwitchOptions.TryLoad(dataRoot);
+        // Resolve (not TryLoad): the listener must start in the zero-config case too, where there's no
+        // twitch.local.json and the bundled client id is used. TryLoad returned null with no file, which
+        // silently disabled the whole native listener (redemptions + chat + overlay) after login.
+        TwitchOptions options;
+        try { options = TwitchOptions.Resolve(dataRoot); }
+        catch { return null; } // no client id anywhere — Twitch genuinely not configured
         var tokens = TwitchTokens.TryLoad(dataRoot);
-        if (options is null || tokens is null) return null;
+        if (tokens is null) return null; // not logged in yet
 
         return Task.Run(async () =>
         {

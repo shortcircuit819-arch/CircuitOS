@@ -468,6 +468,27 @@ DataPath/
 
 ## Session Log
 
+### 2026-06-29 — Claude (claude-opus-4-8) — HOTFIX: zero-config login killed the native listener
+
+**User report:** on 0.7.1, logged in + refreshed, but commands, redemptions, AND overlay all dead.
+
+**Root cause:** `TwitchRuntime.TryStart` still called `TwitchOptions.TryLoad(dataRoot)`, which returns
+**null when there's no `twitch.local.json`** — i.e. the zero-config case the device-flow login created.
+So `TryStart` returned null and the **EventSub listener never started**. That one socket powers chat
+commands, redemption intake, and (via redemptions → overlay-state.json) the overlay, so all three died
+together. When I moved the login + reward endpoints to `Resolve`, I missed the listener itself.
+
+**Fix:** `TwitchRuntime.TryStart` now uses `TwitchOptions.Resolve(dataRoot)` (bundled client id when no
+file), wrapped in try/catch → null only if genuinely unconfigured; still returns null when not logged
+in. Also moved the `--twitch-reward` diagnostic off `TryLoad`. Build 0/0, smoke green. No version bump
+(per the runway preference) — rebuilt the 0.7.1 binary in place.
+
+**Still likely needed by the user (app-switch fallout, not a code bug):** their existing channel-point
+reward was created by the OLD Twitch app; the NEW bundled app didn't create it. Commands work
+immediately after this fix; for redemptions, re-sync/create the reward under the new app from the
+Twitch page so it's manageable/fulfillable. Confirm the profile is **Live** (redemptions only route to
+live profiles).
+
 ### 2026-06-29 — Claude (claude-opus-4-8) — Autonomous: command tester, inline login polish, feature writeups
 
 Ran unsupervised (maintainer at work, no approvals). Banked each piece as its own commit; skipped

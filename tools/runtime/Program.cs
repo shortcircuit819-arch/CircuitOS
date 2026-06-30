@@ -1113,8 +1113,7 @@ internal static class Program
         var ok = false;
         try
         {
-            var opts = TwitchOptions.TryLoad(dataRoot)
-                ?? throw new InvalidOperationException($"No {TwitchOptions.FileName} in {dataRoot}. See docs/0.7-twitch-auth-setup.md.");
+            var opts = TwitchOptions.Resolve(dataRoot);
             var tokens = TwitchTokens.TryLoad(dataRoot)
                 ?? throw new InvalidOperationException("Not logged in to Twitch — run --twitch-login first.");
             var session = new TwitchSession(opts, tokens, dataRoot);
