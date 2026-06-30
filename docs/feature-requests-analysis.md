@@ -8,29 +8,33 @@ The third request, **"test feature on commands,"** is **done** — the Game Prof
 
 ---
 
-## 1. Link alternate accounts (e.g. "botsefer")
+## 1. Bot chat account ("botsefer")  — CLARIFIED 2026-06-29
 
-**Goal:** a streamer's alt/bot account (and viewers' alts) credit the main account's inventory,
-so pulls/duplicates/currency don't get split across accounts.
+**Corrected understanding (my first writeup was wrong — it was about inventory merging; it's not).**
+This is a **separate bot chat account**, like MixItUp / Streamer.bot: the bot's replies and pull
+announcements post **from a dedicated bot account** (e.g. `botsefer`) instead of from the broadcaster
+account (e.g. `Moosefer`). So `!inventory` is answered by **botsefer**, not the streamer. Some
+streamers prefer this so the bot is visibly a bot. Inventory/currency are unaffected — only the
+**chat sender identity** changes.
 
-**The core problem:** inventory is keyed by **Twitch user-id** (the redemption event carries
-`user_id`). But a streamer adding a link only knows **usernames**. So we must resolve a username to
-a user-id somewhere. Three options:
+**How it works on Twitch:** `POST /helix/chat/messages` takes `broadcaster_id` (the channel) and
+`sender_id` (who's talking). Today both are the broadcaster. To send as the bot, log the bot account
+in separately and send with `sender_id` = bot's user-id, using the **bot's** token.
 
-| Option | How it works | Pros | Cons |
-|--------|--------------|------|------|
-| **A. Resolve at add-time via Helix (recommended)** | When you add "alt → main" in the panel, CircuitOS looks both usernames up via `helix/users?login=` and stores `altUserId → mainUserId`. Dispatch redirects by user-id. | Robust; survives display-name changes; clean dispatch. | Requires Twitch connected when adding a link (you already are — zero-config login). |
-| **B. Resolve lazily by login** | Store `altLogin → mainLogin`; at redemption, match the event's login and redirect to the main's inventory entry (found by its stored display-name). | No Helix call. | Fails if the main hasn't redeemed yet; brittle if a login changes; messier merge logic. |
-| **C. Manual user-id entry** | You paste both Twitch user-ids. | No Helix, fully explicit. | Awful UX — nobody knows their user-id. |
+**Scope (implementable, well-bounded):**
+- A **second, optional Twitch login** for the bot account — reuse the device flow (a "Connect a bot
+  account" button on the Twitch page). Store its tokens separately (e.g. `twitch-bot-tokens.local.json`,
+  DPAPI-encrypted like the main token).
+- Bot login scopes: `user:write:chat`, `user:read:chat`, `user:bot`; the broadcaster also needs
+  `channel:bot` granted (add to the main login's scopes) so the bot may post in the channel.
+- `TwitchHelix.SendChatMessage`: when a bot session exists, send with `sender_id` = bot id (bot token);
+  otherwise behave exactly as now (send as broadcaster). Redemption intake, reward management, and
+  EventSub all stay on the **broadcaster** account.
+- UI: show "Bot: @botsefer (connected)" with connect/disconnect; falls back to broadcaster when absent.
 
-**Recommendation: Option A.** Scope:
-- New per-profile data `account-links.json`: `{ links: { "<altUserId>": { mainUserId, altLogin, mainLogin } } }`.
-- New endpoint `POST /api/twitch/links` (add/remove) that Helix-resolves the two logins.
-- `DispatchRuntimeAction`: resolve `viewerId`/`viewerName` through the link map before reading/writing
-  inventory (one small hook, fully smoke-testable).
-- Admin UI: a "Linked accounts" panel on the Twitch page (add alt→main, list, remove).
-- Decision needed from you: **per-profile links or global** (one alt→main map shared across all your
-  profiles)? Global is simpler for the streamer; per-profile is more flexible. I lean global.
+**Open question for you:** does the bot also **read** chat (i.e. run the `!command` listener under the
+bot identity), or does the broadcaster keep listening and only *replies* go out as the bot? Simplest =
+broadcaster keeps EventSub/chat-read, bot only sends. That's the recommended default.
 
 ---
 
@@ -45,10 +49,10 @@ meanings, very different scope:
 | **B. Transfer command** | A command/admin action moves currency from one profile to another for a viewer. | Medium — a transfer operation + UI; balances stay per-profile. |
 | **C. Merged view** | A command shows a viewer's balances across all profiles in one readout. | Smallest — read-only aggregation across profiles. |
 
-**Recommendation:** start with **C (merged view)** if the goal is visibility, or **A (shared balance)**
-if the goal is a true cross-game economy — but A is a meaningful data-model change and should be its
-own milestone. **B** is the middle ground. I can't pick this one for you; it changes the whole economy
-model. Tell me which intent and I'll scope it properly.
+**Decision 2026-06-29:** deferred — not a 0.7 item. The maintainer wants this tied to the **shops /
+2.0 update** (a true cross-game economy gives useful data there), targeting roughly **0.7.9 or 0.8.5**.
+Likely lands as **A (shared balance)** since that's what a cross-game shop economy needs, but the
+intent is confirmed only when the shops work starts. Park until then.
 
 ---
 
