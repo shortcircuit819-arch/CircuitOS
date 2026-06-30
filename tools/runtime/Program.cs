@@ -450,21 +450,20 @@ internal static class Program
         return host is "127.0.0.1" or "localhost" or "::1";
     }
 
-    // Surfaces the Device Code Flow prompt to the streamer: opens twitch.tv/activate and shows the
-    // code to enter. Blocks (modal) until dismissed; the device-code poll resumes after. Headless
-    // mode logs the instructions to the console instead of opening a dialog.
+    // Surfaces the Device Code Flow prompt by opening Twitch's activate page directly — the
+    // verification_uri already has the code pre-filled, so the streamer just clicks Authorize while
+    // the login request polls in the background. No dialog. Only if the browser fails to open (or
+    // we're headless) do we fall back to showing the code to enter manually.
     private static void ShowDeviceCodePrompt(TwitchAuth.DeviceCodePrompt prompt)
     {
-        var text = $"To connect Twitch:\n\n1. Go to {prompt.VerificationUri}\n2. Enter this code:  {prompt.UserCode}\n\n"
-            + $"Leave this open and authorize in your browser. The code expires in {prompt.ExpiresInSeconds / 60} minutes; "
-            + "click OK after you've approved it.";
-        if (_headless)
+        if (!_headless)
         {
-            Console.Out.WriteLine(text);
-            return;
+            try { Process.Start(new ProcessStartInfo(prompt.VerificationUri) { UseShellExecute = true }); return; }
+            catch { /* fall through to the manual instructions below */ }
         }
-        try { Process.Start(new ProcessStartInfo(prompt.VerificationUri) { UseShellExecute = true }); } catch { }
-        MessageBox.Show(text, "CircuitOS — Connect Twitch", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        var text = $"Connect Twitch: go to {prompt.VerificationUri} and enter code {prompt.UserCode}.";
+        if (_headless) Console.Out.WriteLine(text);
+        else MessageBox.Show(text, "CircuitOS — Connect Twitch", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private static ServiceResult ListTwitchRewards()
