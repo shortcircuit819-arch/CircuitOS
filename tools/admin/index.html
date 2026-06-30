@@ -382,6 +382,13 @@ Item Three</textarea></label>
             </div>
             <div class="subsection-title">Chat commands</div>
             <div id="profileCommands" class="command-list"></div>
+            <div class="subsection-title">Test a command</div>
+            <p class="panel-note">Run a command against this profile's saved data as a sandbox viewer — no Twitch, no live data changed. Save first to test your latest edits.</p>
+            <div class="command-tester">
+              <input id="commandTestInput" type="text" placeholder="e.g. components, balance, collection circuits" autocomplete="off">
+              <button id="commandTestButton" class="button secondary" type="button">Run test</button>
+            </div>
+            <div id="commandTestOutput" class="command-test-output" hidden></div>
             <div class="profile-actions">
               <button id="resetProfileButton" class="button secondary">Reset to defaults</button>
               <button id="saveProfileButton" class="button primary">Save</button>

@@ -407,6 +407,10 @@ input.invalid { border-color: var(--danger); }
 .command-input { display: flex; align-items: center; }
 .command-input strong { color: var(--red); padding-right: 2px; font-size: 15px; line-height: 1; }
 .command-input input { flex: 1; }
+.command-tester { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.command-tester input { flex: 1; }
+.command-test-output { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line); background: rgba(0,10,20,0.35); border-radius: 4px; font-size: 13px; line-height: 1.5; color: var(--text); white-space: pre-wrap; word-break: break-word; }
+.command-test-output.error { border-color: var(--red); color: #ff9aa0; }
 .color-field { display: grid; grid-template-columns: 42px 1fr; align-items: center; gap: 9px; padding: 9px; border: 1px solid var(--line); background: rgba(0,10,20,0.25); }
 .color-field input[type="color"] { width: 42px; height: 36px; padding: 2px; cursor: pointer; }
 .color-field span { color: var(--muted); font-size: 11px; }

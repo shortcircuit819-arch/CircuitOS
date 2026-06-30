@@ -2899,6 +2899,44 @@ function element(tag, className = "", text = "") {
   return node;
 }
 
+// Runs a chat command against the editing profile's saved data via the runtime dispatch, as a
+// sandbox viewer (no live data is changed) — lets the streamer preview command output without Twitch.
+async function runCommandTest() {
+  const input = document.getElementById("commandTestInput");
+  const output = document.getElementById("commandTestOutput");
+  const raw = input.value.trim();
+  if (!raw) { input.focus(); return; }
+  const [word, ...rest] = raw.replace(/^!/, "").split(/\s+/);
+  output.hidden = false;
+  output.className = "command-test-output";
+  output.textContent = "Running…";
+  try {
+    const response = await fetch("/api/runtime/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "command",
+        profileId: profilesData.activeProfileId,
+        command: word,
+        arg: rest.join(" "),
+        viewerId: "__command_test__",
+        viewerName: "Command Tester"
+      })
+    });
+    const result = await response.json();
+    if (!response.ok || result.ok === false) {
+      output.classList.add("error");
+      output.textContent = (result.errors || [result.error || "Command failed."]).join(" ");
+      return;
+    }
+    const lines = Array.isArray(result.messages) ? result.messages : [];
+    output.textContent = lines.length ? lines.join("\n") : "(no output for this command)";
+  } catch (error) {
+    output.classList.add("error");
+    output.textContent = error.message;
+  }
+}
+
 function makeField(labelText, type, value, onInput, options = {}) {
   const label = element("label", "field");
   label.append(element("span", "", labelText));
@@ -4300,6 +4338,8 @@ for (const id of ["profileGameName", "profileAdminName", "profileRedemptionName"
 document.getElementById("saveProfileButton").addEventListener("click", saveSystemProfile);
 document.getElementById("saveAppearanceButton").addEventListener("click", saveSystemProfile);
 document.getElementById("resetProfileButton").addEventListener("click", resetSystemProfile);
+document.getElementById("commandTestButton").addEventListener("click", runCommandTest);
+document.getElementById("commandTestInput").addEventListener("keydown", event => { if (event.key === "Enter") runCommandTest(); });
 document.getElementById("regenerateSetupButton").addEventListener("click", () => generateStreamerBotSetup().catch(error => showNotice(error.message, "error")));
 document.getElementById("saveMessagesButton").addEventListener("click", saveSystemProfile);
 document.getElementById("resetAllMessagesButton").addEventListener("click", resetAllMessages);
