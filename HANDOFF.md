@@ -468,6 +468,28 @@ DataPath/
 
 ## Session Log
 
+### 2026-06-29 — Claude (claude-opus-4-8) — Autonomous: command tester, inline login polish, feature writeups
+
+Ran unsupervised (maintainer at work, no approvals). Banked each piece as its own commit; skipped
+anything needing a product decision and wrote those up instead.
+
+- **Command tester** (`e6cd7aa`) — "Test a command" box on the Game Profile page runs any chat command
+  through `/api/runtime/action` against the editing profile's saved data as a **sandbox viewer**
+  (`__command_test__`), so no live data changes. Frontend-only (endpoint already existed). Verified in
+  preview: known words return replies, unknown words error cleanly, no console errors. Addresses the
+  "test feature on commands" request.
+- **Inline Twitch login polish** (`e8c78df`) — split the device flow into `TwitchAuth.RequestDeviceCode`
+  + `PollDeviceToken` (LoginDeviceFlow composes them) and added `/api/twitch/login/start` +
+  `/api/twitch/login/poll`. The host opens the pre-filled activate page; the panel shows the user code
+  and polls instead of holding one blocking request. **Additive + safe:** the old blocking
+  `/api/twitch/login` is untouched and the frontend falls back to it when `start` returns
+  `inline=false` (self-host w/ secret), so login can't break. Verified live: `/start` returns a real
+  code, `/poll` returns pending/expired correctly. Only the human-authorize step is unverified (reuses
+  the proven `PollDeviceToken`). **Worth a real login test when you're back.**
+- **Feature writeups** — `docs/feature-requests-analysis.md`: account linking (recommend Helix
+  resolve-at-add, `altUserId→mainUserId`; need decision: per-profile vs global) and cross-profile
+  currencies (3 interpretations — need you to pick intent). Not implemented; both need your call.
+
 ### 2026-06-29 — Claude (claude-opus-4-8) — Twitch login: Device Code Flow (zero-config distribution) — IN PROGRESS
 
 **Problem (user-reported):** when anyone other than the dev tries to log in, they hit
