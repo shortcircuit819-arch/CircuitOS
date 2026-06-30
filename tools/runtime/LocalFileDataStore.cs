@@ -256,8 +256,38 @@ internal sealed class LocalFileDataStore : ILocalDataStore
     public void WriteProfileData(string profileId, string key, JsonNode value)
     {
         var path = KeyToProfilePath(GetProfilePath(profileId), key) ?? throw new InvalidDataException($"Unsupported profile data key: {key}");
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, value.ToJsonString(JsonUtil.IndentedOptions), new UTF8Encoding(false));
+        WriteFileAtomic(path, value, keepRollingBackup: key == DataKeys.Inventory);
+    }
+
+    public void WriteOverlayState(string profileId, JsonObject state)
+    {
+        var overlayDir = Path.Combine(GetProfilePath(profileId), "overlay");
+        WriteFileAtomic(Path.Combine(overlayDir, "overlay-state.json"), state, keepRollingBackup: false);
+    }
+
+    // Crash-safe write: serialize to a temp file, re-parse to validate, then atomically swap into
+    // place (File.Replace on NTFS is atomic). A direct File.WriteAllText can leave a half-written,
+    // unparseable file if the process dies mid-write — unacceptable for live inventory. When
+    // keepRollingBackup is set, the prior contents are preserved one-deep as <name>.bak so a bad
+    // save is recoverable without unbounded per-pull backup growth.
+    private static void WriteFileAtomic(string path, JsonNode value, bool keepRollingBackup)
+    {
+        var directory = Path.GetDirectoryName(path)!;
+        Directory.CreateDirectory(directory);
+        var temporary = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            File.WriteAllText(temporary, value.ToJsonString(JsonUtil.IndentedOptions), new UTF8Encoding(false));
+            ParseFile(temporary); // validate the bytes on disk before swapping
+            if (File.Exists(path) && keepRollingBackup)
+                File.Replace(temporary, path, path + ".bak");
+            else
+                File.Move(temporary, path, overwrite: true); // atomic same-volume swap (MoveFileEx)
+        }
+        finally
+        {
+            if (File.Exists(temporary)) File.Delete(temporary);
+        }
     }
     // One-time backfill so every profile has an explicit `active` flag: pre-feature installs
     // (no flag anywhere) treat the editing-current profile as the live one, matching the old

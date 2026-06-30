@@ -20,6 +20,7 @@
   <ItemGroup>
     <PackageReference Include="Appwrite" Version="5.1.0" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3650.58" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
   </ItemGroup>
   <Target Name="RemoveUnusedWebView2WpfReference" BeforeTargets="ResolveAssemblyReferences">
     <ItemGroup>

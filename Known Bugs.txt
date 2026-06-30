@@ -3,6 +3,13 @@
 -[FIXED IN SOURCE 0.7] Creating a new profile / first-run draft was blocked by live-profile command collisions, which prevented saving the new profile/catalog and made the next startup look like a new instance. First-run now saves drafts without command-collision blocking; collisions are still enforced when making the profile live.
 -[FIXED + LIVE VERIFIED IN SOURCE 0.7] Native multi-profile routing works with multiple live rewards. Managed rewards fulfill normally; attach-only rewards now record/chat without attempting Twitch fulfillment/cancel, avoiding the 403 for rewards not created by this app.
 -[FIXED IN SOURCE 0.7] Variants could pull twice with duplicate-looking labels, creating messages like "shiny shiny". Runtime and paste-ready Streamer.bot redeem code now trim variant labels and dedupe them case-insensitively before building the display name.
--Dupe protection isn't working in current stable .6.0.8 patch
+-Dupe protection isn't working in current stable .6.0.8 patch (note: the native 0.7 RedemptionEngine dup-protection is correct + tested; this is the Streamer.bot .txt path. Port the engine fix to StreamerbotReedeem.txt if Streamer.bot stays supported.)
 -[DEFERRED VISUAL BUG IN SOURCE 0.7] Overview Pull Rates slider fill can still visually drift from the handle in the admin app. User chose to skip for now and continue with the next 0.7 item.
+-[FIXED IN SOURCE 0.7] Native Twitch redemptions did not drive the OBS overlay — overlay-state.json was only written by the Streamer.bot action, so a fully-native streamer got a dead lower-third. DispatchRuntimeAction now writes overlay-state.json (same shape as the action) on every native pull. Smoke-tested.
+-[FIXED IN SOURCE 0.7] Native !salvage mutated inventory in memory but never persisted it (only the redeem branch wrote inventory). Salvage command now persists when SalvageResult.Mutated. Smoke-tested.
+-[FIXED IN SOURCE 0.7] Native inventory writes were a raw File.WriteAllText (no atomicity, no backup) — a crash mid-write could corrupt inventory.json. WriteProfileData now writes atomically (tmp → validate → swap) with a rolling .bak for inventory.
+-[FIXED IN SOURCE 0.7] EventSub could silently stop receiving redemptions if the socket half-died (no keepalive timeout). Reads now time out at keepalive+grace and force a reconnect; duplicate notifications are dropped by message_id.
+-[FIXED IN SOURCE 0.7] Chat commands had no throttle (could blow Twitch's send rate limit). Added a per-viewer 3s cooldown.
+-[FIXED IN SOURCE 0.7] Twitch tokens were stored in plaintext. Access/refresh tokens are now encrypted at rest with Windows DPAPI (CurrentUser); legacy plaintext files still load and re-save encrypted.
+-[FIXED IN SOURCE 0.7] Local API had no Host-header validation (DNS-rebinding surface). Now rejects non-loopback Host headers.
 

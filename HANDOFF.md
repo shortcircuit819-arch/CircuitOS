@@ -468,6 +468,49 @@ DataPath/
 
 ## Session Log
 
+### 2026-06-29 — Claude (claude-opus-4-8) — 0.7 review + reliability/security hardening
+
+**Goal:** Full review of the 0.7 source after cutting the release, then fix what the review surfaced.
+Folded into 0.7.0 (the tag was local-only, never distributed), so the EXE/dist were rebuilt.
+
+**P0 found and fixed — native redemptions didn't drive the OBS overlay.** `overlay-state.json` was
+only ever written by `StreamerbotReedeem.txt`; the native `DispatchRuntimeAction` redeem path wrote
+inventory + chat but never overlay state. A fully-native streamer (the whole 0.7 pitch) got a dead
+lower-third. `CircuitService.DispatchRuntimeAction` now writes `overlay-state.json` (byte-compatible
+shape) on every native pull, via a new `ILocalDataStore.WriteOverlayState`. In cloud mode the host
+passes the local store explicitly (new optional `CircuitService` ctor param) so it still works.
+
+**Other fixes (all in `tools/runtime/`):**
+- **Native `!salvage` never persisted** — the command branch mutated inventory in memory only.
+  Now persists when `SalvageResult.Mutated`.
+- **Inventory writes weren't atomic** — `LocalFileDataStore.WriteProfileData` did a raw
+  `File.WriteAllText`. Now atomic (tmp → re-parse validate → `File.Move`/`File.Replace`) with a
+  rolling `.bak` for inventory. New `WriteOverlayState` is atomic too (no backup — display data).
+- **EventSub had no keepalive timeout** — a half-dead socket blocked `ReceiveAsync` forever and
+  redemptions silently stopped. Reads now time out at `keepalive_timeout_seconds + 5s` grace and
+  force a reconnect. `keepalive_timeout_seconds` is read from `session_welcome`.
+- **No redemption dedup** — Twitch can replay; now de-duped by `metadata.message_id` (bounded set).
+- **Chat commands had no throttle** — added a per-viewer 3s cooldown (recorded only when we actually
+  reply, so non-commands don't burn it). Protects Twitch's ~20-msg/30s send limit.
+- **Tokens stored in plaintext** — `TwitchTokens` now DPAPI-encrypts access/refresh at rest
+  (CurrentUser scope, app entropy). Legacy plaintext files still load (`"protected"` flag) and
+  re-save encrypted, so no forced re-login. Added `System.Security.Cryptography.ProtectedData 9.0.0`
+  to the runtime + smoke-test csproj.
+- **No Host-header validation** — added a loopback-only `IsAllowedHost` allowlist on the local API
+  (DNS-rebinding defense-in-depth).
+
+**Tests:** extended `TestRuntimeDispatch` to assert (1) `overlay-state.json` is written with the
+right viewer/part/version, and (2) native salvage persists the consumed duplicates. Full smoke suite
+green, runtime builds 0/0.
+
+**Still open (deferred, low-risk):** Overview slider fill drift (visual); per-profile overlay URLs
+(overlay statics still publish only to the active profile — a live-but-not-editing profile's native
+pull writes its overlay state, but its statics aren't served yet); per-profile reward cost (sync is
+still the 100 placeholder until you Edit); porting the dup-protection fix into `StreamerbotReedeem.txt`
+if Streamer.bot stays a supported path.
+
+---
+
 ### 2026-06-29 — Claude (claude-sonnet-4-6) — C4: per-state overlay color overrides
 
 **Goal:** Complete the last remaining item on the 0.7 UI.md punch list — overlay editor state customization.

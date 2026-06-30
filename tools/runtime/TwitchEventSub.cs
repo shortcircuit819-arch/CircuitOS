@@ -22,6 +22,15 @@ internal sealed class TwitchEventSub
     private readonly Action<ChatMessage>? _onChat;
     private readonly Action<string> _log;
 
+    // Twitch may replay a notification; the spec requires dedup by metadata.message_id. We keep the
+    // recently-seen ids (with arrival time) and drop repeats so a replay can't double-process a pull.
+    private readonly Dictionary<string, DateTime> _seenMessageIds = new(StringComparer.Ordinal);
+    // Twitch closes the socket if it sends nothing for keepalive_timeout_seconds. If the connection
+    // half-dies (no FIN), ReceiveAsync would block forever; we time out reads at keepalive + grace and
+    // force a reconnect. Default to Twitch's 10s until session_welcome tells us the real value.
+    private int _keepaliveSeconds = 10;
+    private const int KeepaliveGraceSeconds = 5;
+
     public TwitchEventSub(TwitchSession session, TwitchHelix helix, Action<RedemptionEvent> onRedemption, Action<ChatMessage>? onChat, Action<string> log)
     {
         _session = session;
@@ -54,7 +63,8 @@ internal sealed class TwitchEventSub
     }
 
     // Connects, handles messages until the socket closes or a reconnect is requested.
-    // Returns a reconnect URL when Twitch sends session_reconnect, otherwise null.
+    // Returns a reconnect URL when Twitch sends session_reconnect, otherwise null. Throws
+    // TimeoutException if no message arrives within the keepalive window so RunAsync reconnects.
     private async Task<string?> ConnectAndListenAsync(string url, CancellationToken cancel)
     {
         using var socket = new ClientWebSocket();
@@ -68,7 +78,7 @@ internal sealed class TwitchEventSub
             WebSocketReceiveResult result;
             do
             {
-                result = await socket.ReceiveAsync(buffer, cancel);
+                result = await ReceiveWithKeepaliveAsync(socket, buffer, cancel);
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
                     try { await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", cancel); } catch { }
@@ -85,14 +95,40 @@ internal sealed class TwitchEventSub
         return null;
     }
 
+    // A single ReceiveAsync bounded by the keepalive window. If nothing (event OR keepalive) arrives
+    // in time, the connection is presumed dead: abort the socket and throw so RunAsync reconnects.
+    private async Task<WebSocketReceiveResult> ReceiveWithKeepaliveAsync(ClientWebSocket socket, byte[] buffer, CancellationToken cancel)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+        timeout.CancelAfter(TimeSpan.FromSeconds(_keepaliveSeconds + KeepaliveGraceSeconds));
+        try
+        {
+            return await socket.ReceiveAsync(buffer, timeout.Token);
+        }
+        catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
+        {
+            try { socket.Abort(); } catch { }
+            throw new TimeoutException($"No EventSub message within {_keepaliveSeconds + KeepaliveGraceSeconds}s (keepalive missed).");
+        }
+    }
+
     private string? HandleMessage(JsonObject message)
     {
-        var type = message["metadata"]?["message_type"]?.ToString();
+        var metadata = message["metadata"] as JsonObject;
+        var type = metadata?["message_type"]?.ToString();
         var payload = message["payload"] as JsonObject;
+
+        // Drop replays: Twitch can redeliver a message; a repeated message_id means we already saw it.
+        var messageId = metadata?["message_id"]?.ToString();
+        if (!string.IsNullOrEmpty(messageId) && !RememberMessageId(messageId!))
+            return null;
+
         switch (type)
         {
             case "session_welcome":
-                var sessionId = (payload?["session"] as JsonObject)?["id"]?.ToString();
+                var session = payload?["session"] as JsonObject;
+                if (session?["keepalive_timeout_seconds"]?.GetValue<int>() is int ka && ka > 0) _keepaliveSeconds = ka;
+                var sessionId = session?["id"]?.ToString();
                 if (!string.IsNullOrEmpty(sessionId)) Subscribe(sessionId!);
                 break;
             case "session_reconnect":
@@ -101,11 +137,27 @@ internal sealed class TwitchEventSub
                 _log("EventSub subscription was revoked by Twitch (token/scope change?). Re-login may be needed.");
                 break;
             case "notification":
-                HandleNotification(message["metadata"]?["subscription_type"]?.ToString(), payload);
+                HandleNotification(metadata?["subscription_type"]?.ToString(), payload);
                 break;
-            // session_keepalive: nothing to do; the socket staying open is the signal.
+            // session_keepalive: nothing to do; the read succeeding is itself the liveness signal.
         }
         return null;
+    }
+
+    // Records a message id; returns false if it was already seen (a replay). Prunes ids older than
+    // 10 minutes so the set stays bounded over a long stream.
+    private bool RememberMessageId(string messageId)
+    {
+        var now = DateTime.UtcNow;
+        if (_seenMessageIds.Count > 256)
+        {
+            var cutoff = now.AddMinutes(-10);
+            foreach (var stale in _seenMessageIds.Where(kv => kv.Value < cutoff).Select(kv => kv.Key).ToList())
+                _seenMessageIds.Remove(stale);
+        }
+        if (_seenMessageIds.ContainsKey(messageId)) return false;
+        _seenMessageIds[messageId] = now;
+        return true;
     }
 
     private void Subscribe(string sessionId)

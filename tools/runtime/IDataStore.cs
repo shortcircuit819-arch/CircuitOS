@@ -48,6 +48,12 @@ internal interface ILocalDataStore : IDataStore
     string DataPath { get; }
     // Folder holding timestamped config backups for the active profile.
     string BackupPath { get; }
+
+    // Atomically writes the OBS overlay state file (profiles/<id>/overlay/overlay-state.json)
+    // that overlay.js polls. Display data, written on every pull — no backup is kept. This is a
+    // local-filesystem concept (OBS reads it via file://), so it lives on ILocalDataStore even
+    // when game data is served from the cloud.
+    void WriteOverlayState(string profileId, JsonObject state);
 }
 
 internal static class DataKeys

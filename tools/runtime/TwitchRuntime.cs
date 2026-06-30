@@ -8,6 +8,13 @@ namespace CircuitOS.Runtime;
 // pull dispatch then fulfils (or cancels/refunds on failure). Hosting-free.
 internal static class TwitchRuntime
 {
+    // Per-viewer chat-command cooldown. Chat commands are driven by chat volume (unbounded), and each
+    // reply is a Helix send subject to Twitch's ~20-msg/30s limit — a busy chat spamming !inventory
+    // would drop messages. We ignore a viewer's commands within this window. EventSub delivers chat
+    // serially on one socket, so a plain dictionary is safe (no concurrent access).
+    private static readonly Dictionary<string, DateTime> _lastChatCommand = new(StringComparer.Ordinal);
+    private const int ChatCommandCooldownSeconds = 3;
+
     // Starts the listener on a background task. Returns null when Twitch isn't configured (no
     // credentials/login), so the app simply runs without it. The task ends when `cancel` fires.
     public static Task? TryStart(IDataStore store, CircuitService service, string dataRoot, Action<string> log, CancellationToken cancel)
@@ -284,6 +291,14 @@ internal static class TwitchRuntime
         var parts = text[1..].Split(' ', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 0) return;
 
+        // Throttle per viewer so chat spam can't blow Twitch's chat send rate limit. Checked before
+        // we send, recorded only once we actually reply — random non-commands don't burn the cooldown.
+        var now = DateTime.UtcNow;
+        if (!string.IsNullOrWhiteSpace(message.UserId)
+            && _lastChatCommand.TryGetValue(message.UserId, out var last)
+            && (now - last).TotalSeconds < ChatCommandCooldownSeconds)
+            return;
+
         try
         {
             var result = service.DispatchRuntimeAction(new JsonObject
@@ -296,6 +311,7 @@ internal static class TwitchRuntime
             });
             if (result.Status != 200) return;                       // not one of our commands → ignore
             if (result.Body?["messages"] is not JsonArray lines) return;
+            RecordChatCommand(message.UserId, now);
             foreach (var line in lines)
             {
                 var reply = line?.ToString();
@@ -305,6 +321,18 @@ internal static class TwitchRuntime
         catch (Exception ex)
         {
             log($"Chat command error: {ex.Message}");
+        }
+    }
+
+    private static void RecordChatCommand(string userId, DateTime now)
+    {
+        if (string.IsNullOrWhiteSpace(userId)) return;
+        _lastChatCommand[userId] = now;
+        if (_lastChatCommand.Count > 512)
+        {
+            var cutoff = now.AddMinutes(-5);
+            foreach (var stale in _lastChatCommand.Where(kv => kv.Value < cutoff).Select(kv => kv.Key).ToList())
+                _lastChatCommand.Remove(stale);
         }
     }
 

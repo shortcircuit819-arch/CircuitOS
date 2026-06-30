@@ -136,7 +136,10 @@ internal static class Program
             }
             store = new AppwriteDataStore(opts, tenant, localStore.ActiveProfileId);
         }
-        var service = new CircuitService(store, options.ActionPath);
+        // Pass the local store explicitly for overlay output: in cloud mode `store` is Appwrite and
+        // can't write the local overlay-state.json that OBS reads, but the desktop host always has a
+        // local store. This keeps native pulls driving the overlay in both modes.
+        var service = new CircuitService(store, options.ActionPath, localStore);
         var overlayDataPath = localStore.DataPath;
         _sessionMode = args.Contains("--cloud") ? "cloud" : "local";
         _sessionTwitch = TwitchTokens.TryLoad(options.DataPath);
@@ -277,6 +280,14 @@ internal static class Program
         try
         {
             var request = context.Request;
+            // Defense-in-depth against DNS-rebinding: the server is loopback-only, but a malicious page
+            // can rebind its hostname to 127.0.0.1 and reach it with a foreign Host header. Only accept
+            // requests addressed to localhost/loopback so a rebound origin can't drive the local API.
+            if (!IsAllowedHost(request))
+            {
+                await SendJsonAsync(context, 403, new { ok = false, errors = new[] { "Forbidden host." } });
+                return;
+            }
             var path = request.Url?.AbsolutePath ?? "/";
             if (request.HttpMethod == "GET" && path == "/api/health")
                 await SendJsonAsync(context, 200, new
@@ -411,6 +422,26 @@ internal static class Program
         {
             context.Response.Close();
         }
+    }
+
+    // Accept only loopback Host headers. HttpListener already binds 127.0.0.1, but the Host header is
+    // attacker-controlled (DNS rebinding), so we validate the hostname the request claims to address.
+    private static bool IsAllowedHost(HttpListenerRequest request)
+    {
+        var host = request.UserHostName;
+        if (string.IsNullOrEmpty(host)) return false;
+        // Strip the port: "[::1]:8787" -> "[::1]", "127.0.0.1:8787" -> "127.0.0.1".
+        if (host.StartsWith('['))
+        {
+            var close = host.IndexOf(']');
+            if (close > 0) host = host[1..close];
+        }
+        else
+        {
+            var colon = host.IndexOf(':');
+            if (colon > 0) host = host[..colon];
+        }
+        return host is "127.0.0.1" or "localhost" or "::1";
     }
 
     private static ServiceResult ListTwitchRewards()

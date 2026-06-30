@@ -5,7 +5,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <!-- The runtime is net9.0-windows; this harness links its sources as net9.0 to stay test-host
+         agnostic. DPAPI (CA1416) is Windows-only by design and the suite only runs on Windows. -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
+  </ItemGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="..\runtime\JsonUtil.cs" Link="JsonUtil.cs" />

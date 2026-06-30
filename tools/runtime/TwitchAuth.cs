@@ -2,13 +2,16 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 
 namespace CircuitOS.Runtime;
 
-// Cached Twitch tokens + identity, persisted to <dataRoot>/twitch-tokens.local.json
-// (gitignored). Plaintext for dev; Windows DPAPI encryption is a hardening follow-up.
+// Cached Twitch tokens + identity, persisted to <dataRoot>/twitch-tokens.local.json (gitignored).
+// The access/refresh tokens are encrypted at rest with Windows DPAPI (CurrentUser scope) so a stolen
+// file can't be replayed on another machine/account. Legacy plaintext files still load (then re-save
+// encrypted on the next write), so an in-place upgrade doesn't force a re-login.
 internal sealed record TwitchTokens(
     string AccessToken,
     string RefreshToken,
@@ -18,6 +21,9 @@ internal sealed record TwitchTokens(
     string DisplayName)
 {
     public const string FileName = "twitch-tokens.local.json";
+
+    // App-specific DPAPI entropy — binds the ciphertext to CircuitOS in addition to the user account.
+    private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("CircuitOS.TwitchTokens.v1");
 
     public static TwitchTokens? TryLoad(string dataRoot)
     {
@@ -29,9 +35,11 @@ internal sealed record TwitchTokens(
             if (json is null) return null;
             var userId = json["userId"]?.ToString();
             if (string.IsNullOrWhiteSpace(userId)) return null;
+            var encrypted = json["protected"] is JsonValue p && p.TryGetValue<bool>(out var on) && on;
+            string Field(string name) => encrypted ? Unprotect(json[name]?.ToString()) : json[name]?.ToString() ?? "";
             return new TwitchTokens(
-                json["accessToken"]?.ToString() ?? "",
-                json["refreshToken"]?.ToString() ?? "",
+                Field("accessToken"),
+                Field("refreshToken"),
                 DateTimeOffset.TryParse(json["expiresAt"]?.ToString(), out var dt) ? dt : DateTimeOffset.MinValue,
                 userId!,
                 json["login"]?.ToString() ?? "",
@@ -44,14 +52,33 @@ internal sealed record TwitchTokens(
     {
         var json = new JsonObject
         {
-            ["accessToken"] = AccessToken,
-            ["refreshToken"] = RefreshToken,
+            ["protected"] = true,
+            ["accessToken"] = Protect(AccessToken),
+            ["refreshToken"] = Protect(RefreshToken),
             ["expiresAt"] = ExpiresAt.ToString("O"),
             ["userId"] = UserId,
             ["login"] = Login,
             ["displayName"] = DisplayName
         };
         File.WriteAllText(Path.Combine(dataRoot, FileName), json.ToJsonString(JsonUtil.IndentedOptions), new UTF8Encoding(false));
+    }
+
+    private static string Protect(string plaintext)
+    {
+        if (string.IsNullOrEmpty(plaintext)) return "";
+        var cipher = ProtectedData.Protect(Encoding.UTF8.GetBytes(plaintext), Entropy, DataProtectionScope.CurrentUser);
+        return Convert.ToBase64String(cipher);
+    }
+
+    private static string Unprotect(string? base64)
+    {
+        if (string.IsNullOrEmpty(base64)) return "";
+        try
+        {
+            var bytes = ProtectedData.Unprotect(Convert.FromBase64String(base64), Entropy, DataProtectionScope.CurrentUser);
+            return Encoding.UTF8.GetString(bytes);
+        }
+        catch { return ""; }
     }
 }
 

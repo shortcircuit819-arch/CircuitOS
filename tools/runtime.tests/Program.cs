@@ -101,7 +101,7 @@ try
 
     TestActiveProfilesAndCollisions(service, store, defaultProfile);
     TestTwitchRewardPersistence(service, store);
-    TestRuntimeDispatch(service, store);
+    TestRuntimeDispatch(service, store, testPath);
     TestPullEngine();
     TestRedemptionEngine();
     TestCommandEngine();
@@ -199,7 +199,7 @@ static void TestActiveProfilesAndCollisions(CircuitService service, IDataStore s
 
 // Verifies the shared PullEngine: tier-weighted distribution, variant rate + prefix,
 // dup protection, and equal-odds fallback. Deterministic via seeded RNGs.
-static void TestRuntimeDispatch(CircuitService service, IDataStore store)
+static void TestRuntimeDispatch(CircuitService service, IDataStore store, string dataRoot)
 {
     var profileId = "dispatch-" + Guid.NewGuid().ToString("N")[..8];
     store.CreateProfile(profileId, "Second Game");
@@ -229,6 +229,7 @@ static void TestRuntimeDispatch(CircuitService service, IDataStore store)
                 ["displayName"] = "Starter Collection",
                 ["type"] = "permanent",
                 ["weight"] = 100,
+                ["salvageValue"] = 1,
                 ["parts"] = new JsonArray
                 {
                     new JsonObject { ["id"] = "starter_alpha", ["name"] = "Alpha" },
@@ -276,7 +277,43 @@ static void TestRuntimeDispatch(CircuitService service, IDataStore store)
         ?? throw new InvalidOperationException("Redemption dispatch should write inventory for the selected profile.");
     Require(secondInventory["viewer-b"] is JsonObject, "Redemption dispatch should create viewer inventory inside the selected profile.");
 
-    Console.WriteLine("Runtime dispatch: command + redemption both resolve to the intended live profile and persist profile-scoped inventory.");
+    // A native redemption must drive the OBS overlay: overlay-state.json is written to the target
+    // profile's overlay folder with the same shape the Streamer.bot action produces.
+    var overlayStatePath = Path.Combine(dataRoot, "profiles", profileId, "overlay", "overlay-state.json");
+    Require(File.Exists(overlayStatePath), "Redemption dispatch should write overlay-state.json for the overlay.");
+    var overlayState = JsonNode.Parse(File.ReadAllText(overlayStatePath)) as JsonObject
+        ?? throw new InvalidOperationException("overlay-state.json should be a JSON object.");
+    Require(overlayState["viewerName"]?.ToString() == "Viewer B", "Overlay state should carry the redeeming viewer's name.");
+    Require(!string.IsNullOrWhiteSpace(overlayState["partName"]?.ToString()), "Overlay state should carry the pulled part name.");
+    Require(overlayState["version"]?.GetValue<int>() == 1, "Overlay state should be schema version 1.");
+
+    // A native !salvage mutates inventory (consumes duplicates); the dispatch must persist it —
+    // previously the command path mutated in memory and dropped the change.
+    var seeded = store.ReadProfileData(profileId, DataKeys.Inventory) ?? new JsonObject();
+    seeded["viewer-c"] = new JsonObject
+    {
+        ["displayName"] = "Viewer C",
+        ["components"] = new JsonObject { ["starter_alpha"] = 3 }
+    };
+    store.WriteProfileData(profileId, DataKeys.Inventory, seeded);
+
+    var salvageResult = service.DispatchRuntimeAction(new JsonObject
+    {
+        ["action"] = "command",
+        ["profileId"] = profileId,
+        ["command"] = "salvage2",
+        ["arg"] = "all",
+        ["viewerId"] = "viewer-c",
+        ["viewerName"] = "Viewer C"
+    });
+    Require(salvageResult.Status == 200, "Salvage command dispatch should succeed.");
+    var afterSalvage = store.ReadProfileData(profileId, DataKeys.Inventory)
+        ?? throw new InvalidOperationException("Inventory should exist after salvage.");
+    var salvagedComponents = (afterSalvage["viewer-c"] as JsonObject)?["components"] as JsonObject;
+    Require(salvagedComponents?["starter_alpha"]?.GetValue<int>() == 1,
+        "Native salvage must persist the consumed duplicates (starter_alpha should drop from 3 to 1).");
+
+    Console.WriteLine("Runtime dispatch: command + redemption resolve to the live profile, drive the overlay state, and persist inventory (incl. salvage).");
 }
 
 static void TestTwitchRewardPersistence(CircuitService service, IDataStore store)

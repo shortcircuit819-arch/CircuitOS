@@ -49,12 +49,17 @@ internal sealed partial class CircuitService
     // fall back gracefully when it is null. See docs/0.7-cloud-foundation.md.
     private readonly IDataStore _store;
     private readonly ILocalDataStore? _localStore;
+    // Local store used to write the OBS overlay state file. Falls back to the data store when it
+    // is itself local; in cloud mode the host passes the local store explicitly so the overlay
+    // (which OBS reads from a local file) still updates on native pulls.
+    private readonly ILocalDataStore? _overlayStore;
     private readonly string _actionPath;
 
-    public CircuitService(IDataStore store, string actionPath)
+    public CircuitService(IDataStore store, string actionPath, ILocalDataStore? overlayStore = null)
     {
         _store = store;
         _localStore = store as ILocalDataStore;
+        _overlayStore = overlayStore ?? _localStore;
         _actionPath = Path.GetFullPath(actionPath);
     }
 
@@ -258,18 +263,28 @@ internal sealed partial class CircuitService
             var targetCommand = ResolveCommandField(commands, commandName);
             if (string.IsNullOrWhiteSpace(targetCommand)) return Error([$"Command '{commandName}' was not found in profile '{profileId}'."]);
 
-            var result = targetCommand switch
+            IReadOnlyList<string> result;
+            if (targetCommand == "salvage")
             {
-                "inventory" => CommandEngine.Inventory(catalog, inventory, ctx, viewerId, viewerName, now),
-                "missing" => CommandEngine.Missing(catalog, inventory, ctx, viewerId, viewerName, now),
-                "duplicates" => CommandEngine.Duplicates(catalog, inventory, ctx, viewerId, viewerName, now),
-                "balance" => [CommandEngine.Balance(inventory, ctx, viewerId, viewerName)],
-                "collection" => CommandEngine.CollectionDetail(catalog, inventory, ctx, viewerId, viewerName, JsonUtil.String(request, "arg"), now),
-                "leaderboard" => CommandEngine.Leaderboard(catalog, inventory, ctx, viewerId, viewerName, JsonUtil.String(request, "arg"), now),
-                "salvage" =>
-                    [CommandEngine.Salvage(catalog, inventory, ctx, viewerId, viewerName, JsonUtil.String(request, "arg")).Message],
-                _ => ["Unsupported command."]
-            };
+                // Salvage mutates inventory (consumes duplicates, credits currency); persist when it
+                // actually changed — otherwise the native !salvage silently lost the write.
+                var salvage = CommandEngine.Salvage(catalog, inventory, ctx, viewerId, viewerName, JsonUtil.String(request, "arg"));
+                if (salvage.Mutated) WriteProfileData(profileId, DataKeys.Inventory, inventory);
+                result = [salvage.Message];
+            }
+            else
+            {
+                result = targetCommand switch
+                {
+                    "inventory" => CommandEngine.Inventory(catalog, inventory, ctx, viewerId, viewerName, now),
+                    "missing" => CommandEngine.Missing(catalog, inventory, ctx, viewerId, viewerName, now),
+                    "duplicates" => CommandEngine.Duplicates(catalog, inventory, ctx, viewerId, viewerName, now),
+                    "balance" => [CommandEngine.Balance(inventory, ctx, viewerId, viewerName)],
+                    "collection" => CommandEngine.CollectionDetail(catalog, inventory, ctx, viewerId, viewerName, JsonUtil.String(request, "arg"), now),
+                    "leaderboard" => CommandEngine.Leaderboard(catalog, inventory, ctx, viewerId, viewerName, JsonUtil.String(request, "arg"), now),
+                    _ => ["Unsupported command."]
+                };
+            }
             return Ok(new JsonObject
             {
                 ["ok"] = true,
@@ -312,6 +327,7 @@ internal sealed partial class CircuitService
                 rng,
                 dupProtectionTurns > 0 ? (int)dupProtectionTurns : 0);
             WriteProfileData(profileId, DataKeys.Inventory, inventory);
+            WriteOverlayState(profileId, redemption, viewerName, now);
             if (cooldownSeconds > 0 && !string.IsNullOrWhiteSpace(viewerId)) _lastRedeem[cooldownKey] = now;
             var announcements = BuildRedeemAnnouncements(messages, redemption, viewerName);
             return Ok(new JsonObject
@@ -681,6 +697,43 @@ internal sealed partial class CircuitService
     private void WriteProfileData(string profileId, string key, JsonNode value)
     {
         _store.WriteProfileData(profileId, key, value);
+    }
+
+    // Writes the OBS overlay state for a native pull — the same shape the Streamer.bot redeem action
+    // produces, so overlay.js renders native and Streamer.bot redemptions identically. Display data:
+    // best-effort, never throws into the redemption path (a failed overlay write must not fail a pull).
+    private void WriteOverlayState(string profileId, RedemptionResult redemption, string viewerName, DateTimeOffset now)
+    {
+        if (_overlayStore is null) return;
+        try
+        {
+            const string isoMs = "yyyy-MM-ddTHH:mm:ss.fffZ";
+            var variantLabels = new JsonArray(redemption.Pull.VariantLabels.Select(v => JsonValue.Create(v)).ToArray());
+            var state = new JsonObject
+            {
+                ["version"] = 1,
+                ["updatedAtUtc"] = now.UtcDateTime.ToString(isoMs),
+                ["visibleUntilUtc"] = now.UtcDateTime.AddSeconds(20).ToString(isoMs),
+                ["viewerName"] = viewerName,
+                ["partName"] = redemption.Pull.DisplayPartName,
+                ["collectionKey"] = redemption.CollectionKey,
+                ["collectionName"] = redemption.CollectionName,
+                ["ownedCount"] = redemption.OwnedAfter,
+                ["totalCount"] = redemption.TotalParts,
+                ["quantity"] = redemption.Quantity,
+                ["isDuplicate"] = redemption.IsDuplicate,
+                ["newlyCompleted"] = redemption.NewlyCompleted,
+                ["rareLabel"] = redemption.RareLabel ?? "",
+                ["featuredBoost"] = redemption.ActiveBoostName ?? "",
+                ["variantLabels"] = variantLabels,
+                ["tierLabel"] = redemption.Pull.TierLabel ?? ""
+            };
+            _overlayStore.WriteOverlayState(profileId, state);
+        }
+        catch
+        {
+            // Overlay state is disposable display data; never let it break a recorded pull.
+        }
     }
 
     private static ServiceResult Ok(JsonObject body) => new(200, body);
