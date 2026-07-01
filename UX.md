@@ -15,7 +15,7 @@ everything around Streamer.bot, and dangles cloud mode as a place you can't reac
 - [x] **Messages page is Streamer.bot-only in its wording.** Reworded: "the lines your bot posts in chat… Native Twitch applies them as soon as you save; if you use Streamer.bot, regenerate its actions."
 - [x] **Game Profile help leads with Streamer.bot.** Now "…the overlay, chat replies, and (if you use it) Streamer.bot."
 - [x] **Nav treats Streamer.bot as co-equal.** Now labelled "Streamer.bot · optional".
-- [ ] **Cloud mode is a dead-end (bigger, deferred):** no UI to enable cloud or enter Appwrite creds — it's `--cloud` only. Near-term = stop the UI advertising it (above). Real fix = a Settings page (Cloud toggle + Appwrite connection form + Test connection + restart-to-apply), built **when cloud is productized** (deployment shape still undecided). Also the natural home for data-folder/port/hidden-card prefs.
+- [x] **Cloud mode is now reachable — new Settings page.** Local/Cloud choice, Appwrite connection form (write-only API key), Test connection, and restart-to-apply. Startup reads the saved choice and falls back to local with a reason if cloud can't start. (User confirmed cloud is a wanted feature, 2026-06-29.) Still a future home for data-folder/port/hidden-card prefs.
 
 ## Tier 2 — Jargon a non-technical streamer won't parse
 

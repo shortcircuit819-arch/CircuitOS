@@ -15,7 +15,8 @@ const viewTitles = {
   boost: "Featured Boost",
   overlay: "Overlay Editor",
   appearance: "Appearance",
-  profiles: "Profiles"
+  profiles: "Profiles",
+  settings: "Settings"
 };
 
 const platformName = "CircuitOS";
@@ -1536,6 +1537,127 @@ function renderAll() {
   renderViewOnDemand(activeView);
 }
 
+async function renderSettings() {
+  const cards = document.getElementById("settingsBackendCards");
+  const errorBox = document.getElementById("settingsCloudError");
+  document.getElementById("settingsRestartNote").hidden = true;
+  try {
+    const data = await (await fetch("/api/settings", { cache: "no-store" })).json();
+    if (data.cloudError) {
+      errorBox.hidden = false;
+      errorBox.textContent = `Cloud mode couldn't start, so CircuitOS is running locally: ${data.cloudError}`;
+    } else {
+      errorBox.hidden = true;
+    }
+    const running = data.dataBackend;                      // what's actually live now
+    const chosen = data.cloudEnabled ? "cloud" : "local";  // the saved choice
+    cards.replaceChildren(
+      backendCard("local", "Local (this PC)", "Everything stays in your CircuitOS data folder. No account needed — this is the default.", chosen, running),
+      backendCard("cloud", "Cloud (Appwrite)", "Sync your data to your own Appwrite project so it follows you across machines.", chosen, running)
+    );
+    const a = data.appwrite || {};
+    document.getElementById("appwriteEndpoint").value = a.endpoint || "";
+    document.getElementById("appwriteProject").value = a.projectId || "";
+    document.getElementById("appwriteDatabase").value = a.databaseId || "";
+    document.getElementById("appwriteCollection").value = a.collectionId || "";
+    const keyInput = document.getElementById("appwriteApiKey");
+    keyInput.value = "";
+    keyInput.placeholder = a.hasApiKey ? "Saved — paste to replace" : "Paste your API key";
+    document.getElementById("appwriteTestResult").hidden = true;
+  } catch (error) {
+    showNotice(error.message, "error");
+  }
+}
+
+function backendCard(id, title, desc, chosen, running) {
+  const card = element("button", "settings-backend-card");
+  card.type = "button";
+  if (id === chosen) card.classList.add("selected");
+  card.append(element("strong", "", title), element("span", "", desc));
+  const tags = element("div", "settings-backend-tags");
+  if (id === running) tags.append(element("span", "settings-tag running", "Running now"));
+  if (id === chosen && id !== running) tags.append(element("span", "settings-tag pending", "Restart to apply"));
+  card.append(tags);
+  card.addEventListener("click", () => chooseBackend(id));
+  return card;
+}
+
+async function chooseBackend(backend) {
+  try {
+    const resp = await fetch("/api/settings/mode", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dataBackend: backend })
+    });
+    const result = await resp.json();
+    if (!resp.ok || !result.ok) throw new Error((result.errors || ["Could not change data storage."]).join(" "));
+    await renderSettings();
+    const note = document.getElementById("settingsRestartNote");
+    if (result.restartRequired) {
+      note.hidden = false;
+      note.className = "notice";
+      note.textContent = `Saved. Restart CircuitOS to switch to ${backend === "cloud" ? "cloud" : "local"} storage.`;
+    } else {
+      showNotice("Data storage setting saved.", "success");
+    }
+  } catch (error) {
+    showNotice(error.message, "error");
+  }
+}
+
+function appwriteFormBody() {
+  return {
+    endpoint: document.getElementById("appwriteEndpoint").value.trim(),
+    projectId: document.getElementById("appwriteProject").value.trim(),
+    apiKey: document.getElementById("appwriteApiKey").value,
+    databaseId: document.getElementById("appwriteDatabase").value.trim(),
+    collectionId: document.getElementById("appwriteCollection").value.trim()
+  };
+}
+
+async function saveAppwriteConnection() {
+  const resp = await fetch("/api/settings/appwrite", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(appwriteFormBody())
+  });
+  const result = await resp.json();
+  if (!resp.ok || !result.ok) throw new Error((result.errors || ["Save failed."]).join(" "));
+  return result;
+}
+
+async function saveAppwriteConnectionAndNotify() {
+  try {
+    await saveAppwriteConnection();
+    await renderSettings();
+    showNotice("Appwrite connection saved.", "success");
+  } catch (error) {
+    showNotice(error.message, "error");
+  }
+}
+
+// Saves the on-screen values first (so we test exactly what's shown), then asks the server to connect.
+async function testAppwriteConnection() {
+  const box = document.getElementById("appwriteTestResult");
+  const button = document.getElementById("testAppwriteButton");
+  box.hidden = false;
+  box.className = "settings-test-result";
+  box.textContent = "Testing connection…";
+  button.disabled = true;
+  try {
+    await saveAppwriteConnection();
+    const resp = await fetch("/api/settings/appwrite/test", { method: "POST" });
+    const result = await resp.json();
+    box.classList.add(result.ok ? "ok" : "error");
+    box.textContent = result.message || (result.ok ? "Connected." : "Connection failed.");
+    document.getElementById("appwriteApiKey").value = "";
+    document.getElementById("appwriteApiKey").placeholder = "Saved — paste to replace";
+  } catch (error) {
+    box.classList.add("error");
+    box.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function renderViewOnDemand(view) {
   if (view === "viewers") renderViewerInspector();
   if (view === "collections") renderCollectionList("permanent");
@@ -1543,6 +1665,7 @@ function renderViewOnDemand(view) {
   if (view === "overlay") { renderOverlayEditor(); scaleOverlayPreview(); }
   if (view === "profiles") { renderProfilesSummary(); renderProfiles(); }
   if (view === "ratelab") renderRateLab();
+  if (view === "settings") renderSettings();
 }
 
 async function loadProfiles() {
@@ -4379,6 +4502,8 @@ document.getElementById("saveProfileButton").addEventListener("click", saveSyste
 document.getElementById("saveAppearanceButton").addEventListener("click", saveSystemProfile);
 document.getElementById("resetProfileButton").addEventListener("click", resetSystemProfile);
 document.getElementById("commandTestButton").addEventListener("click", runCommandTest);
+document.getElementById("testAppwriteButton").addEventListener("click", testAppwriteConnection);
+document.getElementById("saveAppwriteButton").addEventListener("click", saveAppwriteConnectionAndNotify);
 document.getElementById("commandTestInput").addEventListener("keydown", event => { if (event.key === "Enter") runCommandTest(); });
 document.getElementById("regenerateSetupButton").addEventListener("click", () => generateStreamerBotSetup().catch(error => showNotice(error.message, "error")));
 document.getElementById("saveMessagesButton").addEventListener("click", saveSystemProfile);

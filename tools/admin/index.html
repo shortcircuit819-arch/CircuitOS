@@ -327,6 +327,7 @@ Item Three</textarea></label>
             <button class="nav-button" data-view="backups">Backups</button>
           </div>
         </details>
+        <button class="nav-button" data-view="settings">Settings</button>
       </nav>
 
       <div class="sidebar-footer">
@@ -1009,6 +1010,43 @@ Item Three</textarea></label>
         </div>
         <div id="profilesSummary" class="profile-summary"></div>
         <div id="profileGrid" class="profile-grid"></div>
+      </section>
+
+      <section id="settingsView" class="view">
+        <div class="section-toolbar">
+          <div>
+            <div class="panel-kicker">APP SETTINGS</div>
+            <h2>Settings</h2>
+            <p>Choose where CircuitOS keeps your data. <strong>Local</strong> stores everything on this PC (the default). <strong>Cloud</strong> syncs it to your own Appwrite project so it follows you across machines.</p>
+          </div>
+        </div>
+        <div id="settingsCloudError" class="notice error" hidden></div>
+        <div class="settings-layout">
+          <article class="panel">
+            <div class="panel-kicker">DATA STORAGE</div>
+            <h2>Where your data lives</h2>
+            <div id="settingsBackendCards" class="settings-backend"></div>
+            <div id="settingsRestartNote" class="notice" hidden></div>
+          </article>
+
+          <article class="panel" id="settingsCloudPanel">
+            <div class="panel-kicker">CLOUD CONNECTION</div>
+            <h2>Appwrite Connection</h2>
+            <p class="panel-note">Bring your own Appwrite project — Appwrite Cloud or self-hosted. These details are stored only on this PC and are never shared. <a href="https://cloud.appwrite.io" target="_blank" rel="noopener">Get an Appwrite project</a>.</p>
+            <div class="settings-form">
+              <label class="field"><span>Endpoint</span><input id="appwriteEndpoint" type="text" placeholder="https://nyc.cloud.appwrite.io/v1" autocomplete="off"></label>
+              <label class="field"><span>Project ID</span><input id="appwriteProject" type="text" autocomplete="off"></label>
+              <label class="field"><span>API key</span><input id="appwriteApiKey" type="password" placeholder="Paste to set or replace" autocomplete="off"></label>
+              <label class="field"><span>Database ID</span><input id="appwriteDatabase" type="text" placeholder="circuitos" autocomplete="off"></label>
+              <label class="field"><span>Table ID</span><input id="appwriteCollection" type="text" placeholder="profile_data" autocomplete="off"></label>
+            </div>
+            <div class="settings-actions">
+              <button id="testAppwriteButton" class="button secondary" type="button">Test connection</button>
+              <button id="saveAppwriteButton" class="button primary" type="button">Save connection</button>
+            </div>
+            <div id="appwriteTestResult" class="settings-test-result" hidden></div>
+          </article>
+        </div>
       </section>
     </main>
   </div>

@@ -412,6 +412,23 @@ input.invalid { border-color: var(--danger); }
 .command-tester input { flex: 1; }
 .command-test-output { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line); background: rgba(0,10,20,0.35); border-radius: 4px; font-size: 13px; line-height: 1.5; color: var(--text); white-space: pre-wrap; word-break: break-word; }
 .command-test-output.error { border-color: var(--red); color: #ff9aa0; }
+.settings-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .settings-layout { grid-template-columns: 1fr; } }
+.settings-backend { display: grid; gap: 10px; margin-top: 12px; }
+.settings-backend-card { display: grid; gap: 4px; text-align: left; padding: 14px; border: 1px solid var(--line); border-radius: 6px; background: rgba(0,10,20,0.25); cursor: pointer; }
+.settings-backend-card:hover { border-color: var(--red-border); }
+.settings-backend-card.selected { border-color: var(--red); background: var(--red-soft); }
+.settings-backend-card strong { color: var(--text); font-size: 14px; }
+.settings-backend-card span { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.settings-backend-tags { display: flex; gap: 6px; margin-top: 4px; }
+.settings-tag { font-size: 9px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; }
+.settings-tag.running { color: #7ee0a8; background: rgba(50,200,120,0.14); }
+.settings-tag.pending { color: #ffd27e; background: rgba(255,190,80,0.14); }
+.settings-form { display: grid; gap: 10px; margin-top: 12px; }
+.settings-actions { display: flex; gap: 8px; margin-top: 14px; }
+.settings-test-result { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 4px; background: rgba(0,10,20,0.35); font-size: 13px; line-height: 1.5; color: var(--text); }
+.settings-test-result.ok { border-color: #32c878; color: #9ff0c2; }
+.settings-test-result.error { border-color: var(--red); color: #ff9aa0; }
 .color-field { display: grid; grid-template-columns: 42px 1fr; align-items: center; gap: 9px; padding: 9px; border: 1px solid var(--line); background: rgba(0,10,20,0.25); }
 .color-field input[type="color"] { width: 42px; height: 36px; padding: 2px; cursor: pointer; }
 .color-field span { color: var(--muted); font-size: 11px; }
