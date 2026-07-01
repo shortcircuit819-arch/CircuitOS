@@ -1,0 +1,27 @@
+# Normalize line endings so commits stop rewriting CRLF<->LF and diffs stay clean.
+# Text files are stored LF in the repo; Windows working copies get CRLF on checkout.
+* text=auto eol=lf
+
+# Source + docs — explicitly text (LF in repo).
+*.cs      text eol=lf
+*.csproj  text eol=lf
+*.js      text eol=lf
+*.css     text eol=lf
+*.html    text eol=lf
+*.json    text eol=lf
+*.md      text eol=lf
+*.txt     text eol=lf
+*.ps1     text eol=lf
+*.gitignore text eol=lf
+*.gitattributes text eol=lf
+
+# Binaries — never touch these.
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.webp    binary
+*.ico     binary
+*.exe     binary
+*.zip     binary
+*.dll     binary

@@ -17,6 +17,11 @@ appwrite.local.json
 # Local secrets — Twitch OAuth app credentials + cached tokens (NEVER commit)
 twitch.local.json
 twitch-tokens.local.json
+twitch-bot-tokens.local.json
+
+# Machine-specific runtime settings (data backend choice etc.) — lives in the data root, not the repo
+circuitos-settings.json
+data/circuitos-settings.json
 
 # Local dev-preview config (machine-specific absolute paths)
 .claude/launch.json
