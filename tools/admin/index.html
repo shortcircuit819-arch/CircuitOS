@@ -14,7 +14,7 @@
         <div>
           <div class="brand-kicker">CIRCUITOS FIRST RUN</div>
           <h1 id="wizardTitle">Build Your Collection Game</h1>
-          <p>Start blank or use Circuit Components Starter, then generate the matching Streamer.bot actions.</p>
+          <p>Start blank or use the Circuit Components starter. Once setup is done, connect Twitch and you're live.</p>
         </div>
       </header>
 
@@ -51,17 +51,17 @@
         <div class="wizard-step-heading">
           <div class="panel-kicker">GAME IDENTITY</div>
           <h2>Name the experience</h2>
-          <p>These terms drive the editor, chat messages, and generated Streamer.bot code.</p>
+          <p>These names appear in the editor, your overlay, and chat. "Redemption name" is the channel-point reward viewers redeem to pull; the singular/plural just keep chat messages reading naturally.</p>
         </div>
         <div class="wizard-field-grid">
-          <label class="field"><span>Game name</span><input id="wizardGameName" maxlength="80"></label>
-          <label class="field"><span>Control panel name</span><input id="wizardAdminName" maxlength="80"></label>
-          <label class="field"><span>Redemption name</span><input id="wizardRedemptionName" maxlength="80"></label>
-          <label class="field"><span>Item singular</span><input id="wizardItemSingular" maxlength="80"></label>
-          <label class="field"><span>Item plural</span><input id="wizardItemPlural" maxlength="80"></label>
-          <label class="field"><span>Collection singular</span><input id="wizardCollectionSingular" maxlength="80"></label>
-          <label class="field"><span>Collection plural</span><input id="wizardCollectionPlural" maxlength="80"></label>
-          <label class="field"><span>Currency name</span><input id="wizardCurrencyName" maxlength="80"></label>
+          <label class="field"><span>Game name</span><input id="wizardGameName" maxlength="80" placeholder="e.g. Card Quest"></label>
+          <label class="field"><span>Control panel name</span><input id="wizardAdminName" maxlength="80" placeholder="e.g. Card Quest Control"></label>
+          <label class="field"><span>Redemption name</span><input id="wizardRedemptionName" maxlength="80" placeholder="e.g. Pull a Card"></label>
+          <label class="field"><span>Item singular</span><input id="wizardItemSingular" maxlength="80" placeholder="e.g. card"></label>
+          <label class="field"><span>Item plural</span><input id="wizardItemPlural" maxlength="80" placeholder="e.g. cards"></label>
+          <label class="field"><span>Collection singular</span><input id="wizardCollectionSingular" maxlength="80" placeholder="e.g. set"></label>
+          <label class="field"><span>Collection plural</span><input id="wizardCollectionPlural" maxlength="80" placeholder="e.g. sets"></label>
+          <label class="field"><span>Currency name</span><input id="wizardCurrencyName" maxlength="80" placeholder="e.g. Coins"></label>
           <label class="field wizard-color-field"><span>Accent color</span><input id="wizardAccent" type="color" value="#ff1a24"></label>
         </div>
       </section>
@@ -870,7 +870,7 @@ Item Three</textarea></label>
         <div class="collection-browser-toolbar">
           <label class="collection-search">
             <span>Search collections or items</span>
-            <input id="collectionSearch" type="search" placeholder="Search by collection, key, item, or ID">
+            <input id="collectionSearch" type="search" placeholder="Search collections or items">
           </label>
           <span id="collectionListSummary" class="collection-list-summary"></span>
           <button id="expandCollectionsButton" class="button secondary small" type="button">Expand All</button>
@@ -896,7 +896,7 @@ Item Three</textarea></label>
             <div>
               <div class="panel-kicker">FEATURED STREAM</div>
               <h2>Boost Controls</h2>
-              <p>Multipliers change relative collection weight while enabled.</p>
+              <p>A boost temporarily makes chosen collections more likely to be pulled — handy for featuring a set during a special stream. Turn it on, then set how much each collection is boosted.</p>
             </div>
             <label class="toggle">
               <input id="boostEnabled" type="checkbox">
@@ -1017,7 +1017,7 @@ Item Three</textarea></label>
           <div>
             <div class="panel-kicker">APP SETTINGS</div>
             <h2>Settings</h2>
-            <p>Choose where CircuitOS keeps your data. <strong>Local</strong> stores everything on this PC (the default). <strong>Cloud</strong> syncs it to your own Appwrite project so it follows you across machines.</p>
+            <p>Choose where CircuitOS keeps your data. Most streamers can stay on <strong>Local</strong> — it keeps everything on this PC and needs no account. <strong>Cloud</strong> is an advanced option for people comfortable setting up their own Appwrite project, so their data follows them across machines.</p>
           </div>
         </div>
         <div id="settingsCloudError" class="notice error" hidden></div>

@@ -17,13 +17,13 @@ everything around Streamer.bot, and dangles cloud mode as a place you can't reac
 - [x] **Nav treats Streamer.bot as co-equal.** Now labelled "Streamer.bot · optional".
 - [x] **Cloud mode is now reachable — new Settings page.** Local/Cloud choice, Appwrite connection form (write-only API key), Test connection, and restart-to-apply. Startup reads the saved choice and falls back to local with a reason if cloud can't start. (User confirmed cloud is a wanted feature, 2026-06-29.) Still a future home for data-folder/port/hidden-card prefs.
 
-## Tier 2 — Jargon a non-technical streamer won't parse
+## Tier 2 — Jargon a non-technical streamer won't parse — DONE 2026-07-01
 
-- [ ] **Wizard "Game identity" step** dumps 9 fields with no examples — Item singular/plural, Collection singular/plural, Redemption name, Currency name. Add example placeholders + a one-line "what's a redemption name."
-- [ ] **"Stable IDs are generated automatically"** (wizard) — drop the ID jargon.
-- [ ] **Events use UTC** ("inside their UTC window") — streamers think local time. Show local equivalent / explain.
-- [ ] **"Featured Boost" is unexplained** — nav + "Multipliers change relative collection weight." Add plain "what/when."
-- [ ] **Leaky internals:** Collections search "…by collection, key, item, or ID"; Collections help says "parts." Use the user's own item/collection terms; drop key/ID.
+- [x] **Wizard "Game identity" step** now has example placeholders on every field and a plain-language line explaining redemption name + why singular/plural exist. Also dropped the Streamer.bot framing from the wizard intro.
+- [x] **"Stable IDs are generated automatically"** → "Just type your starter items — one per line."
+- [x] **Events UTC** — reworded: "…add their items to pulls only while enabled and within their scheduled window. Times are in UTC — set them a little wide if you're unsure of your offset." (A true local-time picker with conversion is a deeper follow-up if wanted.)
+- [x] **"Featured Boost"** now explained in plain terms ("temporarily makes chosen collections more likely to be pulled — handy for featuring a set…").
+- [x] **Leaky internals:** search placeholder → "Search collections or items". (Collections help is already rendered with the user's own item/collection terms in `renderProfile`, so "parts" was only the static fallback — no change needed.)
 
 ## Tier 3 — Inconsistencies & polish
 

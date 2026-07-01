@@ -360,7 +360,7 @@ function applySystemProfile() {
   document.getElementById("collectionHealthTitle").textContent = `${titleCase(systemProfile.collectionSingular)} Health`;
   document.getElementById("editCollectionsButton").textContent = `Edit ${titleCase(systemProfile.collectionPlural)}`;
   document.getElementById("collectionsHelp").textContent = `Edit permanent ${systemProfile.collectionSingular} rates, ${systemProfile.currencyName} values, labels, and ${systemProfile.itemPlural}.`;
-  document.getElementById("eventsHelp").textContent = `Event ${systemProfile.collectionPlural} only affect pulls while enabled and inside their UTC window.`;
+  document.getElementById("eventsHelp").textContent = `Event ${systemProfile.collectionPlural} add their items to pulls only while enabled and within their scheduled window. Times are in UTC — set them a little wide if you're unsure of your offset.`;
   document.getElementById("addCollectionButton").textContent = `Add ${titleCase(systemProfile.collectionSingular)}`;
   document.getElementById("importCollectionButton").textContent = `Import ${titleCase(systemProfile.itemPlural)}`;
   document.getElementById("importEventButton").textContent = `Import ${titleCase(systemProfile.itemPlural)}`;
@@ -1139,7 +1139,7 @@ function updateWizardCollectionStep() {
   document.getElementById("wizardStarterSummary").hidden = blank;
   document.getElementById("wizardCollectionHeading").textContent = blank ? "Create the first collection" : "Review the included starter catalog";
   document.getElementById("wizardCollectionHelp").textContent = blank
-    ? "Enter one starter item per line. Stable IDs are generated automatically."
+    ? "Just type your starter items — one per line."
     : "Circuit Components can be renamed, expanded, or replaced after setup.";
   if (!blank) renderWizardStarterSummary();
 }
