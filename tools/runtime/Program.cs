@@ -362,6 +362,8 @@ internal static class Program
                 await SendResultAsync(context, SetDataBackend(await ReadBodyAsync(request)));
             else if (request.HttpMethod == "POST" && path == "/api/settings/open-folder")
                 await SendResultAsync(context, OpenDataFolder());
+            else if (request.HttpMethod == "POST" && path == "/api/settings/backup-retention")
+                await SendResultAsync(context, SetBackupRetention(await ReadBodyAsync(request)));
             else if (request.HttpMethod == "POST" && path == "/api/twitch/login/start")
                 await SendResultAsync(context, StartDeviceLogin());
             else if (request.HttpMethod == "POST" && path == "/api/twitch/login/poll")
@@ -510,8 +512,25 @@ internal static class Program
         cloudEnabled = AppSettings.CloudEnabled(_dataRoot),
         cloudError = _cloudError,
         dataRoot = _dataRoot,
+        backupRetention = AppSettings.GetInt(_dataRoot, "backupRetention", LocalFileDataStore.DefaultBackupRetention),
         appwrite = AppwriteOptions.RedactedStatus(_dataRoot)
     };
+
+    // Sets how many config backups to keep per file type (0 = keep all). Enforced on the next save.
+    private static ServiceResult SetBackupRetention(JsonObject body)
+    {
+        try
+        {
+            var retention = (int)JsonUtil.Long(body, "retention");
+            if (retention is < 0 or > 5000) throw new InvalidDataException("Backup retention must be between 0 and 5000 (0 = keep all).");
+            AppSettings.Set(_dataRoot, "backupRetention", retention);
+            return new ServiceResult(200, new JsonObject { ["ok"] = true, ["backupRetention"] = retention });
+        }
+        catch (Exception ex)
+        {
+            return new ServiceResult(400, new JsonObject { ["ok"] = false, ["errors"] = new JsonArray(ex.Message) });
+        }
+    }
 
     // Opens the data folder in the system file explorer (desktop app only).
     private static ServiceResult OpenDataFolder()

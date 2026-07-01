@@ -14,6 +14,10 @@ internal sealed class LocalFileDataStore : ILocalDataStore
         ("system-profile", DataKeys.Profile, "System Profile"),
     ];
 
+    // Keep at most this many timestamped config backups per file type by default (0 = keep all).
+    // Overridable via the backupRetention app setting. Stops config-backups from growing unbounded.
+    public const int DefaultBackupRetention = 30;
+
     private static readonly string[] BackgroundNames = ["bg.png", "bg.jpg", "bg.gif", "bg.webp"];
     private static readonly (string Name, string Mime)[] BackgroundCandidates =
     [
@@ -93,7 +97,23 @@ internal sealed class LocalFileDataStore : ILocalDataStore
         {
             if (File.Exists(temporary)) File.Delete(temporary);
         }
+        // A backup was just created — trim old ones so the folder doesn't grow forever.
+        if (backup is not null) PruneBackups(AppSettings.GetInt(_rootDataPath, "backupRetention", DefaultBackupRetention));
         return backup;
+    }
+
+    // Trims each managed backup file type to the `keep` most recent (0 = keep all). Only touches
+    // recognized managed config backups — never inventory or other files. Best-effort per file.
+    internal void PruneBackups(int keep)
+    {
+        if (keep <= 0) return;
+        foreach (var group in ListBackups().GroupBy(entry => entry.Key))
+        {
+            foreach (var stale in group.OrderByDescending(entry => entry.FileName).Skip(keep))
+            {
+                try { File.Delete(Path.Combine(BackupPath, stale.FileName)); } catch { }
+            }
+        }
     }
 
     public DataFileInfo? GetInfo(string key)

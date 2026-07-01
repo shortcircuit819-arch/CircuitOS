@@ -107,6 +107,7 @@ try
     TestCommandEngine();
     TestAppwriteOptions();
     TestTwitchOptions();
+    TestBackupRetention();
 
     Console.WriteLine("Smoke tests passed: first run is safe, generated Streamer.bot C# is structurally valid, the pull + redemption + command engines behave, and the Appwrite + Twitch config loaders behave.");
     return 0;
@@ -199,6 +200,32 @@ static void TestActiveProfilesAndCollisions(CircuitService service, IDataStore s
 
 // Verifies the shared PullEngine: tier-weighted distribution, variant rate + prefix,
 // dup protection, and equal-odds fallback. Deterministic via seeded RNGs.
+static void TestBackupRetention()
+{
+    var dir = Path.Combine(Path.GetTempPath(), "CircuitOSBackupRetention-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(dir);
+    try
+    {
+        var store = new LocalFileDataStore(dir);
+        var node = new JsonObject { ["schemaVersion"] = 1, ["collections"] = new JsonObject() };
+        // First write creates the file (no backup); each later write backs up the prior content.
+        for (var i = 0; i < 8; i++)
+            store.WriteAtomic(DataKeys.Catalog, node, "components", $"20260101_0000{i:00}_000");
+        var before = store.ListBackups().Count(b => b.Key == DataKeys.Catalog);
+        Require(before == 7, $"Expected 7 catalog backups before pruning, got {before}.");
+        store.PruneBackups(3);
+        var after = store.ListBackups().Count(b => b.Key == DataKeys.Catalog);
+        Require(after == 3, $"Retention should keep 3 backups, kept {after}.");
+        store.PruneBackups(0);
+        Require(store.ListBackups().Count(b => b.Key == DataKeys.Catalog) == 3, "Retention 0 (keep all) must not delete backups.");
+        Console.WriteLine("Backup retention: backups accumulate, PruneBackups trims to the N most recent, 0 keeps all.");
+    }
+    finally
+    {
+        try { Directory.Delete(dir, recursive: true); } catch { }
+    }
+}
+
 static void TestRuntimeDispatch(CircuitService service, IDataStore store, string dataRoot)
 {
     var profileId = "dispatch-" + Guid.NewGuid().ToString("N")[..8];

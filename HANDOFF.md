@@ -463,6 +463,23 @@ DataPath/
 
 ## Session Log
 
+### 2026-07-01 — Claude (claude-opus-4-8) — Backend: config backup retention (no release)
+
+Config saves dropped a timestamped backup every time and never cleaned up, so `config-backups/`
+grew unbounded. Added a retention policy:
+- `LocalFileDataStore.PruneBackups(keep)` trims each managed backup type (components / featured-boost /
+  discord-role-awards / system-profile) to the N most recent by filename timestamp; only touches
+  recognized managed config backups, never inventory. `WriteAtomic` calls it after creating a backup,
+  reading the count from the `backupRetention` app setting (default `DefaultBackupRetention = 30`,
+  0 = keep all).
+- `GET /api/settings` returns `backupRetention`; `POST /api/settings/backup-retention` sets it
+  (validated 0..5000). Uses the generalized `AppSettings` KV store, so setting it preserves the cloud
+  choice (verified live).
+- Smoke test `TestBackupRetention` (fresh temp store): 7 backups accumulate → PruneBackups(3) keeps 3
+  → PruneBackups(0) keeps all. Linked `AppSettings.cs` into the test csproj. Build 0/0, suite green.
+
+Enforced automatically with the default — no UI needed; a Settings toggle can wire the endpoint later.
+
 ### 2026-07-01 — Claude (claude-opus-4-8) — Housekeeping + retired the Dev UI Bench (no release)
 
 Docs/repo cleanup, no code behavior change.

@@ -16,6 +16,7 @@
     <Compile Include="Program.cs" />
     <Compile Include="..\runtime\JsonUtil.cs" Link="JsonUtil.cs" />
     <Compile Include="..\runtime\IDataStore.cs" Link="IDataStore.cs" />
+    <Compile Include="..\runtime\AppSettings.cs" Link="AppSettings.cs" />
     <Compile Include="..\runtime\LocalFileDataStore.cs" Link="LocalFileDataStore.cs" />
     <Compile Include="..\runtime\PullEngine.cs" Link="PullEngine.cs" />
     <Compile Include="..\runtime\RedemptionEngine.cs" Link="RedemptionEngine.cs" />
