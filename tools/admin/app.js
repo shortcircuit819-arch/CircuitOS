@@ -544,7 +544,7 @@ async function saveSystemProfile() {
       const backupCount = await _saveCatalogData();
       showNotice(`Profile and catalog saved. ${backupCount} backup files created.`, "success");
     } else {
-      showNotice("Game profile saved. Streamer.bot actions updated.", "success");
+      showNotice("Game profile saved.", "success");
     }
   } catch (error) {
     showNotice(error.message, "error");
@@ -769,7 +769,7 @@ function renderTwitchSettings() {
   utilities.replaceChildren();
   const utilityCards = [
     { title: "Channel Rewards", detail: liveProfiles.length ? "Manage rewards below." : "Mark a profile Live first." },
-    { title: "Native Mode", detail: cloud ? "Cloud bridge is active." : "Local preview. Launch cloud mode to go live." },
+    { title: "Native Mode", detail: cloud ? "Cloud bridge is active." : "You're in local mode — redemptions and chat go live right here, no extra setup." },
     { title: "Streamer.bot", detail: "Fallback setup remains available whenever you need pasted actions." }
   ];
   for (const card of utilityCards) {
@@ -1281,8 +1281,8 @@ async function completeFirstRun() {
     if (!response.ok) throw new Error((result.errors || ["First-run setup failed."]).join(" "));
     closeFirstRunWizard();
     await loadConfiguration(true);
-    switchView("setup");
-    showNotice("First-run setup complete. Install the generated Streamer.bot actions next.", "success");
+    switchView("twitch");
+    showNotice("Setup complete! Next: connect your Twitch account to go live. (Prefer Streamer.bot? Its setup is on the Streamer.bot page.)", "success");
   } catch (error) {
     wizardSetError(error.message);
   } finally {

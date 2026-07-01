@@ -319,7 +319,7 @@ Item Three</textarea></label>
           </div>
         </details>
         <button class="nav-button" data-view="twitch">Twitch</button>
-        <button class="nav-button" data-view="setup">Streamer.bot</button>
+        <button class="nav-button" data-view="setup">Streamer.bot <span class="nav-hint">optional</span></button>
         <details class="nav-group" id="toolsNav">
           <summary>Tools</summary>
           <div class="nav-group-items">
@@ -366,7 +366,7 @@ Item Three</textarea></label>
               </div>
               <span id="profileStatus" class="metric-chip"></span>
             </div>
-            <p class="profile-help">These choices shape the names, chat commands, and generated Streamer.bot setup for your experience.</p>
+            <p class="profile-help">These choices shape the names and chat commands across your game — the overlay, chat replies, and (if you use it) Streamer.bot.</p>
             <div class="profile-fields">
               <label class="field"><span>Game name</span><input id="profileGameName" type="text" maxlength="80"></label>
               <label class="field"><span>Panel nickname</span><input id="profileAdminName" type="text" maxlength="80" title="Name shown in the sidebar under your game name. Also used as the control panel title."></label>
@@ -451,7 +451,7 @@ Item Three</textarea></label>
           <div>
             <div class="panel-kicker">CHAT OUTPUT</div>
             <h2>Message Templates</h2>
-            <p>Use only the placeholders shown for each message. Changes are applied to newly generated Streamer.bot actions.</p>
+            <p>These are the lines your bot posts in chat. Use only the placeholders shown for each message. Native Twitch applies them as soon as you save; if you use Streamer.bot, regenerate its actions after saving.</p>
           </div>
           <span id="messageStatus" class="metric-chip"></span>
           <button id="resetAllMessagesButton" class="button secondary">Reset All Messages</button>
@@ -461,7 +461,7 @@ Item Three</textarea></label>
           <summary>How message templates work</summary>
           <div class="message-guide-body">
             <p>Write the sentence exactly as viewers should see it. Placeholder chips insert live values such as the viewer name, item, progress, or balance.</p>
-            <p>Click a chip to insert it at the cursor. Hover or focus a chip to see what it means. Keep the braces intact, and regenerate the Streamer.bot actions after saving.</p>
+            <p>Click a chip to insert it at the cursor. Hover or focus a chip to see what it means. Keep the braces intact. Native Twitch uses your changes right after you save; regenerate the Streamer.bot actions only if you use that path.</p>
           </div>
         </details>
         <div id="messageList" class="message-list"></div>
