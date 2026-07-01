@@ -468,6 +468,18 @@ DataPath/
 
 ## Session Log
 
+### 2026-06-29 — Claude (claude-opus-4-8) — Renumber 0.7.1 → 0.7.0.1 (restore four-part scheme)
+
+Renumber only — **no code reverted**, all 0.7 fixes stay. The three-part `0.7.0` / `0.7.1` deviated
+from the project's four-part scheme (`0.6.0.8`) and over-claimed / burned runway; neither was
+distributed (dev builds only). Now a single **0.7.0.1** for the whole 0.7 line to date.
+- Version strings set to `0.7.0.1` in all 5 locations (csproj ×3, `/api/health`, integrationVersion,
+  circuitosVersion, README).
+- Consolidated `v0.7.0.md` + `v0.7.1.md` → one `docs/patch-notes/v0.7.0.1.md`; deleted the two.
+- Deleted tags `v0.7.0` and `v0.7.1`; created `v0.7.0.1`. EXE + dist rebuilt at 0.7.0.1.
+- Going forward: fixes accumulate under 0.7.0.1; next bump is 0.7.0.2 etc. (see the versioning-cadence
+  preference — bump only on a release, not per fix).
+
 ### 2026-06-29 — Claude (claude-opus-4-8) — HOTFIX: zero-config login killed the native listener
 
 **User report:** on 0.7.1, logged in + refreshed, but commands, redemptions, AND overlay all dead.
