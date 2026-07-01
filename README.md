@@ -1,9 +1,10 @@
 # CircuitOS
 
-CircuitOS is a configurable Twitch collection-game platform powered by
-Streamer.bot. Circuit Components is the included starter profile, while the
-editor and generated actions support custom games, terminology, collections,
-themes, messages, events, and currencies.
+CircuitOS is a configurable Twitch collection-game platform with **native Twitch
+integration — no code to paste**. Circuit Components is the included starter
+profile, while the editor supports custom games, terminology, collections,
+themes, messages, events, and currencies. Streamer.bot is supported as an
+optional alternative.
 
 Current application version: **0.7.0.2**
 
@@ -28,7 +29,15 @@ Current application version: **0.7.0.2**
 - Configuration backup, validation, comparison, download, and recovery center
 - Privacy-safe diagnostics report for tester and support workflows
 - Editable branding, terminology, colors, commands, and chat messages
-- Guided first-run setup with generated paste-ready Streamer.bot C# actions
+- Guided first-run setup, then one-click Twitch connect to go live
+- **Native Twitch integration (zero-config):** one-click Twitch login with no
+  developer account or config files; CircuitOS creates and manages the
+  channel-point reward and handles redemptions, chat commands, and pull
+  announcements directly via EventSub — no code to paste
+- Optional cloud data backend from the Settings page (bring-your-own Appwrite),
+  with local storage the default
+- Per-pull-state overlay colors (rare, complete, duplicate) and an in-app
+  command tester for previewing chat output
 - Bulk names/CSV importer for permanent and event collections with automatic IDs and preview validation
 - Collapsible, searchable editor designed for large catalogs
 - OBS lower-quarter display for successful pulls
@@ -36,9 +45,8 @@ Current application version: **0.7.0.2**
 - Persistent CircuitOS attribution and official application branding
 - Multiple independent game profiles — each with its own catalog, inventory, branding, and overlay config
 - Switch active profiles from the admin panel without mixing data
-- Auto-migration: existing data moves into the default profile folder on first 0.5 launch
 - Export any active profile as a portable `.circuitmodule` bundle; import modules as new profiles
-- `IDataStore` abstraction layer — data access is interface-driven, making the 0.7 cloud migration a swap rather than a rewrite
+- Streamer.bot supported as an optional alternative (paste-ready C# actions still generated)
 
 ## Versioning Policy
 
@@ -103,26 +111,28 @@ must be updated together when cutting a release: `CircuitOS.Runtime.csproj`
 - Backward-compatible catalog rules — `variants` and `tiers` are optional and
   absent collections behave exactly as before ✓
 
-### 0.7 - Cloud Platform + Twitch Integration *(in progress — unreleased desktop bridge)*
+### 0.7 - Native Twitch + Cloud Foundation *(shipping — current milestone, 0.7.0.2)*
 
-*CircuitOS transitions from a local Windows app to a hosted web platform in this release.*
+*Native Twitch integration, plus the foundation for cloud sync. Local storage remains the default.*
 
-**Progress (unreleased; default behavior remains local and unchanged):** the source now has a
-desktop-on-cloud bridge behind a `--cloud` switch. Appwrite stores catalog/profile/boost/inventory
-data, cloud profile management works, and cloud saves create a recovery point. Direct Twitch OAuth
-login/logout works in-app and keys cloud data to the streamer's Twitch user id. Native Twitch work has also moved into the admin bridge: the Twitch Settings page can create/sync channel-point rewards, list and attach existing Twitch rewards, edit managed reward title/cost, persist reward ids per live profile, delete synced CircuitOS-managed rewards, run EventSub WebSocket redemption intake, send chat announcements, and use shared pull/redemption/command engines covered by smoke tests. The current pre-release focus is live Twitch verification, UI polish from `UI.md`, hosted admin/overlay planning, and folding cloud mode into a shipped 0.7 release. See `docs/0.7-cloud-foundation.md` and `docs/patch-notes/0.7-dev-progress.md`.
+**Shipped (0.7.0.x):** native Twitch is the zero-config one-stop shop — **one-click Twitch login**
+(device flow, no developer account or config files), CircuitOS creates and manages the channel-point
+reward, and **redemptions, chat commands, and pull announcements run directly through EventSub** with
+no code to paste. A **Settings page** adds an optional cloud data backend (bring-your-own Appwrite,
+keyed to your Twitch id) with a safe fallback to local. Multiple simultaneously-live profiles,
+per-pull-state overlay colors, shared pull/redemption/command engines, and reward
+create/attach/sync/edit/delete all landed. See `docs/patch-notes/v0.7.0.2.md`.
 
-- Data migrates from local JSON files to Appwrite (database now; file storage still planned for
-  cloud overlay/background assets)
-- Streamers log in with Twitch OAuth; the desktop bridge uses direct Twitch OAuth today, while the
-  future hosted version may revisit Auth0 or another account layer
-- **Native Twitch is the one-stop shop: zero-config, no code to paste.** CircuitOS
-  creates and manages the channel-point reward via the Twitch API and handles
-  redemptions through EventSub. The desktop bridge currently uses EventSub WebSocket and admin-driven reward list/attach/sync/edit/delete with in-page permission guidance; hosted webhook/function architecture remains a later deployment option.
-- Streamer.bot remains supported as an *optional* alternative (MixItUp planned for
-  0.8); they forward to the same shared pull logic and are never required
-- Admin panel accessible from any browser on any device
-- OBS overlay served from a cloud URL
+- Native Twitch: zero-config login, reward management, EventSub redemptions, chat commands, and chat
+  announcements — no code to paste ✓
+- Optional cloud data backend (bring-your-own Appwrite) from Settings; local is the default ✓
+- Streamer.bot remains supported as an *optional* alternative (MixItUp planned for 0.8) ✓
+- `IDataStore` abstraction — data access is interface-driven, so the cloud path is a swap not a rewrite ✓
+
+**Still ahead / deferred to a later phase:** a self-updating installer (Velopack + GitHub Releases,
+see `docs/updater-velopack-plan.md`), and a true *hosted* cloud — admin panel from any browser,
+cloud-served overlay, one backend for all users. Hosted cloud is a security/infrastructure decision,
+analyzed in `docs/feature-requests-analysis.md`.
 
 ### 0.8 - Additional Bot Support
 
