@@ -468,6 +468,34 @@ DataPath/
 
 ## Session Log
 
+### 2026-07-01 — Claude (claude-opus-4-8) — Cut 0.7.0.2 (cloud Settings page + new-user UX pass)
+
+Release cut bundling everything since 0.7.0.1. **No code reverted; version bumped 0.7.0.1 → 0.7.0.2.**
+
+**Settings page (new):** app-level Settings view with a Local/Cloud data-backend choice, an Appwrite
+connection form (write-only API key, Test connection), an About panel (version / storage / data
+folder + Open-folder), and a Preferences panel (relocated the Hide-System-Check toggle). Backend:
+`AppSettings` (persists the backend choice), `AppwriteOptions.Save`/`RedactedStatus`, graceful cloud
+startup (reads the saved choice, connectivity-probes, falls back to local with `/api/health.cloudError`
+if it can't start), and `/api/settings*` endpoints. Cloud is now reachable without the `--cloud` flag —
+framed as advanced/self-host (bring-your-own Appwrite). Hosted-cloud-for-everyone remains a future
+infra decision.
+
+**UX pass (UX.md tiers 1–3, all done):** de-Streamer.bot'd the new-user flow (first-run → Twitch,
+Streamer.bot marked optional, native "go live locally" copy corrected), plain-language wizard/help
+(field examples, redemption-name/singular-plural explained, boost/events/search de-jargoned), and
+consistency/polish (naming, confirm-button match, onboarding-framed Twitch permissions card, health
+table no longer truncates).
+
+**Also landed earlier this session (already in 0.7.0.1 or on main):** the zero-config native-listener
+hotfix, command tester, inline device login. **Deferred (in `docs/feature-requests-analysis.md`):** bot
+chat account, cross-profile currency (shops/2.0), per-state overlay images, and the **Velopack + GitHub
+Releases installer/updater** (chosen direction; gated on creating the GitHub repo — that's the next
+build once the repo exists).
+
+Version → 0.7.0.2 in all 5 locations; `docs/patch-notes/v0.7.0.2.md` added; EXE + dist rebuilt; tag
+`v0.7.0.2`.
+
 ### 2026-06-29 — Claude (claude-opus-4-8) — Renumber 0.7.1 → 0.7.0.1 (restore four-part scheme)
 
 Renumber only — **no code reverted**, all 0.7 fixes stay. The three-part `0.7.0` / `0.7.1` deviated
