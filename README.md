@@ -167,7 +167,6 @@ analyzed in `docs/feature-requests-analysis.md`.
 - `data/system-profile.template.json`: portable branding profile template
 - `streamerbot-actions/`: paste-ready Streamer.bot C# source
 - `tools/admin/`: administration interface and local runtime
-- `tools/dev-ui-bench/`: dev-only UI planning workbench for exporting wiring tickets
 - `tools/runtime/`: .NET application source
 - `tools/package/`: repeatable release, update, and signing scripts
 - `dist/CircuitOS-Release/`: inspectable fresh-install package
@@ -177,8 +176,7 @@ analyzed in `docs/feature-requests-analysis.md`.
 - `docs/`: setup, operation, safety, and feature documentation
 
 For a safe manual UI and patch-fix workflow, see
-`docs/maintainer-quick-fixes.md`. For the dev-only UI planning workbench, see
-`docs/dev-ui-bench.md`.
+`docs/maintainer-quick-fixes.md`.
 
 ## Safety Principles
 

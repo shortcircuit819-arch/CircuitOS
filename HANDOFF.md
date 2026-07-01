@@ -43,8 +43,6 @@ CircuitStreamSystem/
 │   ├── styles.css
 │   └── runtime/CircuitOS.exe   Published binary (copy here after dotnet publish)
 │
-├── tools/dev-ui-bench/     Dev-only static UI planner; exports wiring tickets
-│
 ├── streamerbot-actions/    Paste-ready C# for Streamer.bot (plain .txt files)
 │   ├── StreamerbotReedeem.txt       Main pull + inventory write
 │   ├── StreamerbotCatalogCommands.txt
@@ -408,12 +406,9 @@ Appwrite: nyc region, project `6a3b1af3002de5ef906b`, db `6a3b1b19000359f605af`,
 
 **Setup docs:** `docs/0.7-cloud-foundation.md`, `0.7-appwrite-dev-setup.md`, `0.7-twitch-auth-setup.md`.
 
-**Dev UI planning:** `tools/dev-ui-bench/` is a static, proposal-only visual editor. It can import/paste
-current `tools/admin/index.html` layout scaffolds into an editable canvas for app screens and first-run
-welcome steps, supports direct selection, label edits, hide/show intent, size presets, and drag reorder
-intent, and can import/paste the full `tools/admin/styles.css` into an isolated canvas so screens use the
-real app grid/panel/table styling. Overview runtime containers are hydrated with fake data for visual
-accuracy. It does not edit production source or user/profile data.
+**Dev UI Bench — RETIRED 2026-07-01.** The proposal-only `tools/dev-ui-bench/` visual editor (built
+2026-06-27) was removed: the direct-edit + live-preview workflow superseded it and it had drifted from
+the current UI. The three 06-27 build entries remain in the session log below as history; the tool is gone.
 
 **Remaining 0.7:** live-verify cloud/Twitch with the user's credentials as needed; complete the active
 `UI.md` launch punch list; add Twitch settings/status UX; persist reward-id ↔ profile mapping; decide
@@ -467,6 +462,19 @@ DataPath/
 ---
 
 ## Session Log
+
+### 2026-07-01 — Claude (claude-opus-4-8) — Housekeeping + retired the Dev UI Bench (no release)
+
+Docs/repo cleanup, no code behavior change.
+- **README** refreshed to shipped reality (native-Twitch-first framing, 0.7 features listed, roadmap =
+  0.7.0.2 shipped with hosted phase deferred).
+- **HANDOFF** pre-0.7 session log moved to `HANDOFF-archive.md` (~2422 → ~1500 lines); top identity +
+  Current State refreshed to 0.7.0.2.
+- **Known Bugs.txt** trimmed to the two open items; shipped fixes point to patch notes.
+- Removed a stray empty `backups/` folder.
+- **Retired the Dev UI Bench** (`tools/dev-ui-bench/` + `docs/dev-ui-bench.md` deleted, README/HANDOFF
+  references scrubbed) — superseded by the direct-edit + live-preview workflow and drifting from the UI.
+  The user chose to retire it. The 06-27 build entries remain below, banner-annotated as history.
 
 ### 2026-07-01 — Claude (claude-opus-4-8) — Background scaffolding + roadmap de-risking (no release)
 
@@ -718,6 +726,9 @@ notes refer to the previous list, not the current one.
 and the Overview card/rate-editing issues because they are visible, low-risk, and directly affect first-run trust.
 
 ---
+
+> **NOTE: The Dev UI Bench described in the next three 06-27 entries was RETIRED and deleted on
+> 2026-07-01** (superseded by direct editing + live preview). Kept here as history only.
 
 ### 2026-06-27 — Codex — CircuitOS UI Bench dev tool scaffold
 
