@@ -55,7 +55,7 @@
         </div>
         <div class="wizard-field-grid">
           <label class="field"><span>Game name</span><input id="wizardGameName" maxlength="80" placeholder="e.g. Card Quest"></label>
-          <label class="field"><span>Control panel name</span><input id="wizardAdminName" maxlength="80" placeholder="e.g. Card Quest Control"></label>
+          <label class="field"><span>Panel nickname</span><input id="wizardAdminName" maxlength="80" placeholder="e.g. Card Quest Control" title="Shown in the sidebar under your game name."></label>
           <label class="field"><span>Redemption name</span><input id="wizardRedemptionName" maxlength="80" placeholder="e.g. Pull a Card"></label>
           <label class="field"><span>Item singular</span><input id="wizardItemSingular" maxlength="80" placeholder="e.g. card"></label>
           <label class="field"><span>Item plural</span><input id="wizardItemPlural" maxlength="80" placeholder="e.g. cards"></label>
@@ -334,7 +334,7 @@ Item Three</textarea></label>
         <span class="connection-dot"></span>
         <div>
           <small id="runtimeVersion">Version...</small>
-          <button type="button" id="sessionMode" class="session-mode">Connecting...</button>
+          <button type="button" id="sessionMode" class="session-mode" title="Account, data location, and Twitch login">Connecting...</button>
         </div>
         <div id="sessionPanel" class="session-panel" hidden></div>
       </div>
@@ -351,7 +351,7 @@ Item Three</textarea></label>
           <button id="importButton" class="button secondary">Import</button>
           <button id="exportButton" class="button secondary">Export</button>
           <button id="reloadButton" class="button secondary" title="Reload everything from disk (catalog, profile, viewers, roles, backups)">Refresh</button>
-          <button id="saveButton" class="button primary">Save</button>
+          <button id="saveButton" class="button primary" title="Save catalog changes — collections, items, rates, and boost">Save</button>
         </div>
       </header>
 

@@ -553,7 +553,7 @@ async function saveSystemProfile() {
 }
 
 function resetSystemProfile() {
-  if (!window.confirm("Replace the profile form with the Circuit Components defaults? This will not save until you choose Save System Profile.")) return;
+  if (!window.confirm("Reset the game profile to the built-in Circuit Components defaults? Nothing is saved until you choose Save.")) return;
   systemProfile = clone(defaultSystemProfile);
   profileDirty = true;
   setupBundle = null;
@@ -787,8 +787,12 @@ function renderTwitchSettings() {
   permissionAction.type = "button";
   permissionAction.addEventListener("click", loginTwitch);
   permissionsCard.append(
-    element("strong", "", tokenExpired ? "Permissions Need Refresh" : "Permissions"),
-    element("span", "", tokenExpired ? "Your token looks expired. Refresh login before syncing rewards or listening for chat." : "If reward sync, redemptions, or chat replies fail after an update, refresh login so Twitch can grant the newest scopes."),
+    element("strong", "", tokenExpired ? "Permissions Need Refresh" : twitch ? "Permissions" : "Permissions CircuitOS uses"),
+    element("span", "", tokenExpired
+      ? "Your token looks expired. Refresh login before syncing rewards or listening for chat."
+      : twitch
+        ? "If reward sync, redemptions, or chat replies stop working after an update, refresh your login so Twitch can grant the newest permissions."
+        : "When you connect, CircuitOS asks Twitch for just these:"),
     permissionsList,
     permissionAction
   );

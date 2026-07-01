@@ -25,15 +25,15 @@ everything around Streamer.bot, and dangles cloud mode as a place you can't reac
 - [x] **"Featured Boost"** now explained in plain terms ("temporarily makes chosen collections more likely to be pulled — handy for featuring a set…").
 - [x] **Leaky internals:** search placeholder → "Search collections or items". (Collections help is already rendered with the user's own item/collection terms in `renderProfile`, so "parts" was only the static fallback — no change needed.)
 
-## Tier 3 — Inconsistencies & polish
+## Tier 3 — Inconsistencies & polish — DONE 2026-07-01
 
-- [ ] **Same field, two names:** "Control panel name" (wizard) vs "Panel nickname" (profile). Pick one.
-- [ ] **Confirm names a button that doesn't exist:** reset says "choose Save System Profile"; button is "Save."
-- [ ] **"Local data" / "Connecting…" footer button** — unclear it's clickable / what it opens.
-- [ ] **Dev troubleshooting shown pre-login** on the Twitch page (scope-refresh note).
-- [ ] **Cryptic ALL-CAPS kickers** (ECONOMY PULSE, CATALOG REACH, DISTRIBUTION CHECK, RECOVERY CONTROL).
-- [ ] **Multiple "Save" buttons** (global vs per-page) — unclear which persists what.
-- [ ] **Collection Health table truncates names** ("Advanced Collecti…").
+- [x] **Same field, two names:** wizard now uses "Panel nickname" to match the profile (with a tooltip).
+- [x] **Confirm names a button that doesn't exist:** reset-profile confirm now says "…choose Save" (matches the button) and reads plainly.
+- [x] **"Local data" / footer button** — already carries a dynamic "Click for session details" tooltip conveying it's clickable; added a static fallback too. Acceptable.
+- [x] **Dev troubleshooting shown pre-login** — the Twitch permissions card now reads as onboarding before login ("Permissions CircuitOS uses… asks Twitch for just these"), and only shows the refresh-scopes troubleshooting once logged in.
+- [x] **Multiple "Save" buttons** — topbar Save now has a tooltip ("Save catalog changes — collections, items, rates, and boost"); per-page buttons are already contextually labelled (e.g. "Save Profile").
+- [x] **Collection Health table truncates names** — widened the name column and tightened the numeric columns; names fit without clipping.
+- [~] **Cryptic ALL-CAPS kickers** (ECONOMY PULSE, CATALOG REACH, DISTRIBUTION CHECK, RECOVERY CONTROL) — left as intentional brand flavor; each panel also has a plain `<h2>` title, so meaning isn't lost. Revisit only if it tests poorly.
 
 ## Keep (good non-technical writing — the bar for the rest)
 Action Center health summary; Rate Lab "?" help-tips; Backups "Viewer inventory is safe" copy.
