@@ -6,7 +6,7 @@ profile, while the editor supports custom games, terminology, collections,
 themes, messages, events, and currencies. Streamer.bot is supported as an
 optional alternative.
 
-Current application version: **0.7.0.2**
+Current application version: **0.7.1**
 
 ## Current Features
 

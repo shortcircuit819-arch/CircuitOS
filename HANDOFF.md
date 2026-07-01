@@ -12,7 +12,7 @@ the end of every working session before stopping.
 |-------|-------|
 | Project | CircuitOS — configurable Twitch collection-game platform |
 | Default game | Circuit Components (electronics-themed) |
-| Current version | **0.7.0.2** (shipped — native Twitch + optional cloud). Local mode is the default and unchanged. |
+| Current version | **0.7.1** (shipped — native Twitch, optional cloud, per-state overlay images, backup retention). Local mode is the default and unchanged. |
 | Phase | **0.7 — Native Twitch + Cloud Foundation — shipping.** Zero-config Twitch login (device flow, no dev account), CircuitOS-managed channel-point reward, native EventSub redemptions + chat commands + pull announcements. Settings page with an optional cloud data backend (bring-your-own Appwrite, safe fallback to local). Multiple live profiles, per-state overlay colors, shared PullEngine/RedemptionEngine/CommandEngine (smoke-tested), reliability/security hardening. Still ahead: Velopack + GitHub installer/updater (gated on creating the repo — `docs/updater-velopack-plan.md`), and a true *hosted* cloud (security/infra decision — `docs/feature-requests-analysis.md`). Deferred features: bot chat account, cross-profile currency (shops/2.0), per-state overlay images. |
 | Repo root | `C:\Dev\CircuitStreamSystem` |
 | Live data path | `C:\Users\nicho\Documents\CircuitOS\Data` (profiles under `Data\profiles\<id>`; active profile `circuit-components`) |
@@ -358,7 +358,7 @@ Get approval on both before writing a line of 0.5 code.
 
 | Field | Value |
 |-------|-------|
-| Released version | **0.7.0.2** (shipped — native Twitch, zero-config login, optional cloud, full new-user UX pass). Tags `v0.7.0.1`, `v0.7.0.2`. |
+| Released version | **0.7.1** (native Twitch, zero-config login, optional cloud, per-state overlay images, backup retention, full new-user UX pass). Tags `v0.7.0.1`, `v0.7.0.2`, `v0.7.1`. |
 | In development | **0.7 continued** — next up: Velopack + GitHub installer/updater (gated on the repo). Hosted cloud + deferred features tracked in `docs/`. Local mode remains the default. |
 | Active profile data path | `C:\Users\nicho\Documents\CircuitOS\Data\profiles\circuit-components` |
 | Data root | `C:\Users\nicho\Documents\CircuitOS\Data` (holds `appwrite.local.json`, `twitch.local.json`, `twitch-tokens.local.json`) |
@@ -462,6 +462,20 @@ DataPath/
 ---
 
 ## Session Log
+
+### 2026-07-01 — Claude (claude-opus-4-8) — Per-state overlay images + cut 0.7.1
+
+**Per-state overlay images:** streamers can upload a background image/GIF per pull state
+(rare/complete/duplicate), falling back to the global background. `SaveBackground` gained a `slot`
+(global = `bg.<ext>`, states = `bg-<slot>.<ext>`), `/api/overlay-image?state=` routes it, serving is
+generalized by exact stem. `overlay.js` `applyStateColors → applyStateOverrides` now applies color set
++ background per state and resets to global on normal (also fixes a latent per-state-color "sticking"
+bug). Admin State Overrides panel gains a per-state background upload. Verified in preview.
+
+**Cut 0.7.1** (bumps the third version part — sub-feature milestone): rolls up everything since
+0.7.0.2 (per-state overlay images + backup retention on top of the cloud Settings page and new-user
+UX pass). Version → 0.7.1 in all 5 locations; `docs/patch-notes/v0.7.1.md` added; EXE + dist rebuilt;
+tag `v0.7.1`. No code reverted.
 
 ### 2026-07-01 — Claude (claude-opus-4-8) — Backend: config backup retention (no release)
 

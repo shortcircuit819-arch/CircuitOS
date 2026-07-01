@@ -639,7 +639,7 @@ internal sealed partial class CircuitService
         };
         return Ok(new JsonObject
         {
-            ["ok"] = true, ["integrationPlatform"] = "CircuitOS", ["integrationVersion"] = "0.7.0.2",
+            ["ok"] = true, ["integrationPlatform"] = "CircuitOS", ["integrationVersion"] = "0.7.1",
             ["dataPath"] = DisplayDataPath, ["profileConfigured"] = _store.Exists(DataKeys.Profile), ["actions"] = actions,
             ["checklist"] = ToJsonArray(new[]
             {
