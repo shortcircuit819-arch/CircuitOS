@@ -72,6 +72,34 @@ shows a celebratory GIF instead of the normal background.
 
 Fully testable in preview. Parked (features on back burner as of 2026-06-29).
 
+## 4. Hosted cloud (one backend for everyone) — analyzed 2026-07-01
+
+**The question:** "can't I just use my own Appwrite connection for all users? The tables are keyed by
+userId anyway." The data model *is* multi-tenant (every row is keyed by `userId` = Twitch id +
+`profileId`), so one project *can* hold everyone's data. The blocker is **auth, not the schema.**
+
+**Why you can't just ship your key:** `AppwriteDataStore` connects with a **server API key** — a
+master key that can read/modify/delete *every* row for *every* user and touch the whole project.
+That's fine today because each user brings their *own* project + key (a leak only hurts them). Ship
+*your* key in the desktop app and any user can extract it (same lesson as the Twitch client secret) →
+one leak = everyone's data readable/wipeable + your bill. **Never ship a master key in a client.**
+
+**The two correct designs (both = the "hosted phase"):**
+1. **User-scoped auth + row-level permissions.** Bridge "logged in with Twitch" → an Appwrite session
+   (Appwrite Custom Token, minted by a Function), give every row per-user read/write permissions, and
+   have the client use the *user's session* — never an admin key. Requires reworking `AppwriteDataStore`
+   off the server key onto the client/session model + a Twitch→Appwrite token bridge.
+2. **Thin backend/function layer.** The app calls your hosted Function/API (which holds the key
+   server-side) and does reads/writes on behalf of the authenticated user. Key never leaves the server.
+
+**The three hats you'd be putting on** (it's a business decision, not a config flip): **cost** (you pay
+for everyone's usage), **uptime** (everyone's data depends on your project), **responsibility/privacy**
+(you hold all users' data; a leak is on you).
+
+**Recommendation:** legitimate eventual direction, schema is ready — but it's a security-sensitive
+design project, not a switch. Ship position stays: **Local default + bring-your-own-Appwrite (advanced)**,
+which is what 0.7.0.2 does. Build hosted cloud as its own milestone with the auth designed properly.
+
 ## Status
 
 - Built this session: command tester (`e6cd7aa`), inline Twitch login polish (`e8c78df`).

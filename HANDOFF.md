@@ -468,6 +468,26 @@ DataPath/
 
 ## Session Log
 
+### 2026-07-01 — Claude (claude-opus-4-8) — Background scaffolding + roadmap de-risking (no release)
+
+Autonomous, low-risk-only pass while the user was at work. No behavior changes on critical paths, no
+version bump.
+
+- **AppSettings generalized** to a small key/value store (`GetString/GetBool/GetInt/Set`) so future
+  Settings options (backup retention, start-with-Windows, update channel) get a home without new
+  files. Cloud behavior unchanged; `Set` now preserves other keys. Build 0/0; settings round-trip
+  verified in preview.
+- **Repo-push prep:** added `.gitattributes` (normalizes line endings — kills the CRLF churn) and
+  extended `.gitignore` (`circuitos-settings.json`, future `twitch-bot-tokens.local.json`).
+- **Design capture:** `docs/feature-requests-analysis.md` §4 "Hosted cloud" — why you can't ship a
+  master key, the two correct auth designs (user-session + row permissions, or a function layer), and
+  the cost/uptime/privacy hats. `docs/updater-velopack-plan.md` — the full actionable Velopack +
+  GitHub Releases integration checklist (Step 0 repo → app code → vpk build → signing), so it's fast
+  once the repo exists.
+
+**Next when the user's ready:** create the GitHub repo (gates the Velopack updater), then execute
+`docs/updater-velopack-plan.md`. Hosted cloud is its own future milestone (§4).
+
 ### 2026-07-01 — Claude (claude-opus-4-8) — Cut 0.7.0.2 (cloud Settings page + new-user UX pass)
 
 Release cut bundling everything since 0.7.0.1. **No code reverted; version bumped 0.7.0.1 → 0.7.0.2.**
