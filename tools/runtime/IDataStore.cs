@@ -19,7 +19,9 @@ internal interface IDataStore
     BackupFileEntry FindBackup(string fileName);
     JsonObject ReadBackupJson(string fileName);
 
-    void SaveBackground(byte[] bytes, string extension);
+    // slot = "" for the global background (bg.<ext>), or a state name (rare/complete/duplicate) for a
+    // per-state background (bg-<slot>.<ext>).
+    void SaveBackground(byte[] bytes, string extension, string slot);
     (string FilePath, string ContentType)? FindBackground();
 
     IReadOnlyList<ProfileInfo> ListProfiles();

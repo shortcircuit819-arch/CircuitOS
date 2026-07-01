@@ -26,7 +26,7 @@ internal sealed partial class CircuitService
         return Ok(new JsonObject { ["ok"] = true, ["backup"] = backup, ["config"] = JsonUtil.Clone(config) });
     }
 
-    public ServiceResult SaveOverlayBackground(byte[] bytes, string contentType)
+    public ServiceResult SaveOverlayBackground(byte[] bytes, string contentType, string state)
     {
         var mimeToExt = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -36,8 +36,11 @@ internal sealed partial class CircuitService
         var mime = contentType.Split(';')[0].Trim();
         if (!mimeToExt.TryGetValue(mime, out var ext))
             return Error(["Unsupported image type. Use PNG, JPEG, GIF, or WebP."]);
-        _store.SaveBackground(bytes, ext);
-        return Ok(new JsonObject { ["ok"] = true, ["url"] = "/overlay-bg", ["filename"] = $"bg.{ext}" });
+        // Empty/unknown state = the global background; rare/complete/duplicate = per-state overrides.
+        var slot = state?.Trim().ToLowerInvariant() is "rare" or "complete" or "duplicate" ? state!.Trim().ToLowerInvariant() : "";
+        _store.SaveBackground(bytes, ext, slot);
+        var filename = string.IsNullOrEmpty(slot) ? $"bg.{ext}" : $"bg-{slot}.{ext}";
+        return Ok(new JsonObject { ["ok"] = true, ["filename"] = filename });
     }
 
     private static JsonObject ReadLocalJsonFile(string path)

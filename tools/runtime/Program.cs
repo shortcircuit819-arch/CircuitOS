@@ -446,7 +446,8 @@ internal static class Program
             else if (request.HttpMethod == "POST" && path == "/api/overlay-image")
             {
                 var (bytes, contentType) = await ReadRawBodyAsync(request);
-                await SendResultAsync(context, service.SaveOverlayBackground(bytes, contentType));
+                var state = request.QueryString["state"] ?? "";
+                await SendResultAsync(context, service.SaveOverlayBackground(bytes, contentType, state));
             }
             else if (request.HttpMethod == "GET" && path == "/overlay-bg")
                 await SendOverlayBackgroundAsync(context, service.Store);
@@ -1377,6 +1378,20 @@ internal static class Program
         catch { }
     }
 
+    // Matches only the global (bg.<ext>) and per-state (bg-rare/complete/duplicate.<ext>) overlay
+    // background files, by exact stem — so a request can't traverse to arbitrary files.
+    private static bool IsOverlayBackground(string fileName, out string contentType)
+    {
+        contentType = "";
+        foreach (var (ext, mime) in new[] { (".png", "image/png"), (".jpg", "image/jpeg"), (".gif", "image/gif"), (".webp", "image/webp") })
+        {
+            if (!fileName.EndsWith(ext, StringComparison.OrdinalIgnoreCase)) continue;
+            var stem = fileName[..^ext.Length].ToLowerInvariant();
+            if (stem is "bg" or "bg-rare" or "bg-complete" or "bg-duplicate") { contentType = mime; return true; }
+        }
+        return false;
+    }
+
     private static async Task SendOverlayFileAsync(
         HttpListenerContext context, string overlayPath, string dataPath, string fileName)
     {
@@ -1390,16 +1405,12 @@ internal static class Program
         var dataMimes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["overlay-state.json"] = "application/json; charset=utf-8",
-            ["overlay-config.json"] = "application/json; charset=utf-8",
-            ["bg.png"] = "image/png",
-            ["bg.jpg"] = "image/jpeg",
-            ["bg.gif"] = "image/gif",
-            ["bg.webp"] = "image/webp"
+            ["overlay-config.json"] = "application/json; charset=utf-8"
         };
 
         string filePath;
         string contentType;
-        if (dataMimes.TryGetValue(fileName, out contentType!))
+        if (dataMimes.TryGetValue(fileName, out contentType!) || IsOverlayBackground(fileName, out contentType))
             filePath = Path.Combine(dataPath, "overlay", fileName);
         else if (staticMimes.TryGetValue(fileName, out contentType!))
             filePath = Path.Combine(overlayPath, fileName);

@@ -161,16 +161,17 @@ internal sealed class LocalFileDataStore : ILocalDataStore
 
     // ── Binary blob (overlay background) ────────────────────────────────────
 
-    public void SaveBackground(byte[] bytes, string extension)
+    public void SaveBackground(byte[] bytes, string extension, string slot)
     {
+        var baseName = string.IsNullOrEmpty(slot) ? "bg" : $"bg-{slot}";
         var overlayDir = Path.Combine(_profileDataPath, "overlay");
         Directory.CreateDirectory(overlayDir);
-        foreach (var name in BackgroundNames)
+        foreach (var ext in new[] { "png", "jpg", "gif", "webp" })
         {
-            var old = Path.Combine(overlayDir, name);
+            var old = Path.Combine(overlayDir, $"{baseName}.{ext}");
             if (File.Exists(old)) File.Delete(old);
         }
-        File.WriteAllBytes(Path.Combine(overlayDir, $"bg.{extension}"), bytes);
+        File.WriteAllBytes(Path.Combine(overlayDir, $"{baseName}.{extension}"), bytes);
     }
 
     public (string FilePath, string ContentType)? FindBackground()

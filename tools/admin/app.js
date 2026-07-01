@@ -4285,6 +4285,67 @@ function buildBgImageField(cfg) {
   return wrap;
 }
 
+// Per-state background upload (rare/complete/duplicate). Empty = the state uses the global background.
+function buildStateBgField(state, stateLabel) {
+  const wrap = element("div", "overlay-bg-field");
+  const titleRow = element("div", "overlay-bg-title-row");
+  titleRow.append(element("span", "overlay-bg-label", `${stateLabel} background`));
+  const controls = element("div", "overlay-bg-controls");
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.accept = "image/png,image/jpeg,image/gif,image/webp";
+  fileInput.style.display = "none";
+  const uploadBtn = element("button", "button secondary small", "Upload");
+  uploadBtn.type = "button";
+  uploadBtn.addEventListener("click", () => fileInput.click());
+  const clearBtn = element("button", "button secondary small", "Clear");
+  clearBtn.type = "button";
+  const status = element("span", "overlay-bg-status");
+  const slot = () => (overlayConfig.stateColors[state] ||= {});
+  function updateStatus() {
+    const val = slot().backgroundImage || "";
+    status.textContent = val ? "Custom image" : "Uses global";
+    clearBtn.hidden = !val;
+  }
+  updateStatus();
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    uploadBtn.disabled = true;
+    uploadBtn.textContent = "Uploading…";
+    try {
+      const buffer = await file.arrayBuffer();
+      const response = await fetch(`/api/overlay-image?state=${encodeURIComponent(state)}`, {
+        method: "POST", headers: { "Content-Type": file.type }, body: buffer
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok) throw new Error((result.errors || ["Upload failed."]).join(" "));
+      slot().backgroundImage = result.filename;
+      overlayDirty = true;
+      document.getElementById("saveOverlayButton").disabled = false;
+      updateStatus();
+      updateOverlayPreview();
+      showNotice(`${stateLabel} image uploaded. Save to apply it to the overlay.`, "success");
+    } catch (error) {
+      showNotice(error.message, "error");
+    } finally {
+      uploadBtn.disabled = false;
+      uploadBtn.textContent = "Upload";
+      fileInput.value = "";
+    }
+  });
+  clearBtn.addEventListener("click", () => {
+    slot().backgroundImage = "";
+    overlayDirty = true;
+    document.getElementById("saveOverlayButton").disabled = false;
+    updateStatus();
+    updateOverlayPreview();
+  });
+  controls.append(uploadBtn, clearBtn, status, fileInput);
+  wrap.append(titleRow, controls);
+  return wrap;
+}
+
 function renderStateColorFields() {
   const container = document.getElementById("overlayStateColorsFields");
   const note = document.getElementById("overlayStateColorsNote");
@@ -4303,7 +4364,8 @@ function renderStateColorFields() {
   container.replaceChildren(
     overlayField(`${stateLabel} accent`, "color", sc.accentColor || overlayConfig.appearance?.accentColor || "#ff1821", v => { overlayConfig.stateColors[state].accentColor = v; }),
     overlayField(`${stateLabel} label`, "color", sc.labelColor || overlayConfig.appearance?.labelColor || "#ff3b43", v => { overlayConfig.stateColors[state].labelColor = v; }),
-    overlayField(`${stateLabel} bar fill`, "color", sc.barColor || overlayConfig.appearance?.barColor || "#ff1821", v => { overlayConfig.stateColors[state].barColor = v; })
+    overlayField(`${stateLabel} bar fill`, "color", sc.barColor || overlayConfig.appearance?.barColor || "#ff1821", v => { overlayConfig.stateColors[state].barColor = v; }),
+    buildStateBgField(state, stateLabel)
   );
 }
 

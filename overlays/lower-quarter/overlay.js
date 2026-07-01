@@ -73,7 +73,8 @@ function normalizeStateColor(sc) {
   return {
     accentColor: validColor(sc?.accentColor, ""),
     labelColor: validColor(sc?.labelColor, ""),
-    barColor: validColor(sc?.barColor, "")
+    barColor: validColor(sc?.barColor, ""),
+    backgroundImage: String(sc?.backgroundImage || "")
   };
 }
 
@@ -196,15 +197,17 @@ function applyOverlayConfig(config) {
   document.querySelector(".circuit-mark").hidden = !config.content.showCircuitOSBranding;
 }
 
-function applyStateColors(stateName, config) {
-  if (stateName === "normal") return;
-  const sc = config.stateColors?.[stateName];
-  if (!sc) return;
+// Applies the color set AND background for the active pull state. For "normal" (or any state without
+// its own override) it resets to the global values — so overrides never "stick" from a prior pull.
+function applyStateOverrides(stateName, config) {
   const root = document.documentElement;
+  const sc = (stateName !== "normal" && config.stateColors?.[stateName]) || {};
   const accentColor = validColor(sc.accentColor, "") || config.appearance.accentColor;
   const labelColor = validColor(sc.labelColor, "") || config.appearance.labelColor;
   const barColor = validColor(sc.barColor, "") || config.appearance.barColor;
   applyColorSet(root, accentColor, labelColor, barColor);
+  const stateBg = stateName !== "normal" ? String(sc.backgroundImage || "") : "";
+  root.style.setProperty("--bg-image", cssUrl(stateBg || config.appearance.backgroundImage || ""));
 }
 
 async function loadOverlayConfig() {
@@ -298,7 +301,7 @@ function renderState(state) {
   if (isDuplicate && (isRare || isComplete)) addTag(`DUPLICATE x${quantity}`);
 
   const activeStateName = isRare ? "rare" : isComplete ? "complete" : isDuplicate ? "duplicate" : "normal";
-  applyStateColors(activeStateName, overlayConfig || defaultOverlayConfig);
+  applyStateOverrides(activeStateName, overlayConfig || defaultOverlayConfig);
 
   progressBar.style.width = "0%";
   tracker.classList.remove("hiding");

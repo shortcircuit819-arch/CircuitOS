@@ -313,7 +313,7 @@ internal sealed class AppwriteDataStore : IDataStore
 
     // ── Pending Phase 2b: overlay-background Storage ────────────────────────────
     public (string FilePath, string ContentType)? FindBackground() => null;            // → Storage URL
-    public void SaveBackground(byte[] bytes, string extension) =>
+    public void SaveBackground(byte[] bytes, string extension, string slot) =>
         throw new NotImplementedException("Overlay-background storage needs an Appwrite Storage bucket (Phase 2b).");
 
     // ── Helpers ────────────────────────────────────────────────────────────────
