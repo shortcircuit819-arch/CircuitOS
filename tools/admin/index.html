@@ -1046,6 +1046,26 @@ Item Three</textarea></label>
             </div>
             <div id="appwriteTestResult" class="settings-test-result" hidden></div>
           </article>
+
+          <article class="panel">
+            <div class="panel-kicker">ABOUT</div>
+            <h2>About CircuitOS</h2>
+            <div class="settings-about">
+              <div class="settings-about-row"><span>Version</span><strong id="aboutVersion">—</strong></div>
+              <div class="settings-about-row"><span>Data storage</span><strong id="aboutBackend">—</strong></div>
+              <div class="settings-about-row"><span>Data folder</span><strong id="aboutDataFolder" class="settings-path">—</strong></div>
+            </div>
+            <p class="panel-note" id="aboutUpdateNote">Updates are installed manually for now — an in-app updater is on the way.</p>
+            <div class="settings-actions">
+              <button id="openDataFolderButton" class="button secondary" type="button">Open data folder</button>
+            </div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-kicker">PREFERENCES</div>
+            <h2>Panel Preferences</h2>
+            <label class="toggle"><input id="hideSystemCheckSetting" type="checkbox"><span></span> Hide the System Check card on the Overview</label>
+          </article>
         </div>
       </section>
     </main>

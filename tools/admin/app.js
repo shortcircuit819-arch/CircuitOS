@@ -1568,6 +1568,21 @@ async function renderSettings() {
     keyInput.value = "";
     keyInput.placeholder = a.hasApiKey ? "Saved — paste to replace" : "Paste your API key";
     document.getElementById("appwriteTestResult").hidden = true;
+    // About
+    document.getElementById("aboutVersion").textContent = runtimeInfo.version || "—";
+    document.getElementById("aboutBackend").textContent = data.dataBackend === "cloud" ? "Cloud (Appwrite)" : "Local (this PC)";
+    document.getElementById("aboutDataFolder").textContent = data.dataRoot || "—";
+    document.getElementById("hideSystemCheckSetting").checked = localStorage.getItem("circuitos.hideSystemCheck") === "1";
+  } catch (error) {
+    showNotice(error.message, "error");
+  }
+}
+
+async function openDataFolder() {
+  try {
+    const resp = await fetch("/api/settings/open-folder", { method: "POST" });
+    const result = await resp.json();
+    if (!resp.ok || !result.ok) throw new Error((result.errors || ["Could not open the folder."]).join(" "));
   } catch (error) {
     showNotice(error.message, "error");
   }
@@ -4508,6 +4523,12 @@ document.getElementById("resetProfileButton").addEventListener("click", resetSys
 document.getElementById("commandTestButton").addEventListener("click", runCommandTest);
 document.getElementById("testAppwriteButton").addEventListener("click", testAppwriteConnection);
 document.getElementById("saveAppwriteButton").addEventListener("click", saveAppwriteConnectionAndNotify);
+document.getElementById("openDataFolderButton").addEventListener("click", openDataFolder);
+document.getElementById("hideSystemCheckSetting").addEventListener("change", event => {
+  if (event.target.checked) localStorage.setItem("circuitos.hideSystemCheck", "1");
+  else localStorage.removeItem("circuitos.hideSystemCheck");
+  applySystemCheckVisibility();
+});
 document.getElementById("commandTestInput").addEventListener("keydown", event => { if (event.key === "Enter") runCommandTest(); });
 document.getElementById("regenerateSetupButton").addEventListener("click", () => generateStreamerBotSetup().catch(error => showNotice(error.message, "error")));
 document.getElementById("saveMessagesButton").addEventListener("click", saveSystemProfile);

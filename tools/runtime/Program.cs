@@ -360,6 +360,8 @@ internal static class Program
                 await SendResultAsync(context, TestAppwriteSettings());
             else if (request.HttpMethod == "POST" && path == "/api/settings/mode")
                 await SendResultAsync(context, SetDataBackend(await ReadBodyAsync(request)));
+            else if (request.HttpMethod == "POST" && path == "/api/settings/open-folder")
+                await SendResultAsync(context, OpenDataFolder());
             else if (request.HttpMethod == "POST" && path == "/api/twitch/login/start")
                 await SendResultAsync(context, StartDeviceLogin());
             else if (request.HttpMethod == "POST" && path == "/api/twitch/login/poll")
@@ -507,8 +509,25 @@ internal static class Program
         dataBackend = _sessionMode,
         cloudEnabled = AppSettings.CloudEnabled(_dataRoot),
         cloudError = _cloudError,
+        dataRoot = _dataRoot,
         appwrite = AppwriteOptions.RedactedStatus(_dataRoot)
     };
+
+    // Opens the data folder in the system file explorer (desktop app only).
+    private static ServiceResult OpenDataFolder()
+    {
+        try
+        {
+            if (_headless) throw new InvalidOperationException("The data folder can only be opened from the desktop app.");
+            if (!Directory.Exists(_dataRoot)) throw new DirectoryNotFoundException("Data folder was not found.");
+            Process.Start(new ProcessStartInfo(_dataRoot) { UseShellExecute = true });
+            return new ServiceResult(200, new JsonObject { ["ok"] = true });
+        }
+        catch (Exception ex)
+        {
+            return new ServiceResult(400, new JsonObject { ["ok"] = false, ["errors"] = new JsonArray(ex.Message) });
+        }
+    }
 
     private static ServiceResult SaveAppwriteSettings(JsonObject body)
     {

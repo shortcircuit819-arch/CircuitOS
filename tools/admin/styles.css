@@ -429,6 +429,11 @@ input.invalid { border-color: var(--danger); }
 .settings-test-result { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 4px; background: rgba(0,10,20,0.35); font-size: 13px; line-height: 1.5; color: var(--text); }
 .settings-test-result.ok { border-color: #32c878; color: #9ff0c2; }
 .settings-test-result.error { border-color: var(--red); color: #ff9aa0; }
+.settings-about { display: grid; gap: 8px; margin-top: 12px; }
+.settings-about-row { display: grid; grid-template-columns: 120px 1fr; gap: 12px; align-items: baseline; font-size: 13px; }
+.settings-about-row span { color: var(--muted); }
+.settings-about-row strong { color: var(--text); }
+.settings-about-row .settings-path { font-size: 12px; word-break: break-all; color: var(--muted); }
 .color-field { display: grid; grid-template-columns: 42px 1fr; align-items: center; gap: 9px; padding: 9px; border: 1px solid var(--line); background: rgba(0,10,20,0.25); }
 .color-field input[type="color"] { width: 42px; height: 36px; padding: 2px; cursor: pointer; }
 .color-field span { color: var(--muted); font-size: 11px; }
