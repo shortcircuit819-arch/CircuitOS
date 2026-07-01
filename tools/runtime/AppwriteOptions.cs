@@ -85,4 +85,58 @@ internal sealed record AppwriteOptions(
     public string Describe() =>
         $"endpoint={Endpoint}, project={ProjectId}, db={DatabaseId}, collection={CollectionId}, " +
         $"apiKey={(string.IsNullOrEmpty(ApiKey) ? "MISSING" : $"set ({ApiKey.Length} chars)")}";
+
+    // Writes appwrite.local.json from a Settings form. The API key is write-only in the UI: a blank
+    // apiKey preserves the one already on disk, so editing the endpoint doesn't require re-pasting the
+    // key. Database/collection default to the standard names when left blank.
+    public static void Save(string dataRoot, string endpoint, string projectId, string apiKey, string databaseId, string collectionId)
+    {
+        var path = Path.Combine(dataRoot, FileName);
+        if (string.IsNullOrWhiteSpace(apiKey) && File.Exists(path))
+        {
+            try { apiKey = (JsonNode.Parse(File.ReadAllText(path)) as JsonObject)?["apiKey"]?.ToString() ?? ""; }
+            catch { }
+        }
+        var json = new JsonObject
+        {
+            ["endpoint"] = (endpoint ?? "").Trim(),
+            ["projectId"] = (projectId ?? "").Trim(),
+            ["apiKey"] = (apiKey ?? "").Trim(),
+            ["databaseId"] = string.IsNullOrWhiteSpace(databaseId) ? "circuitos" : databaseId.Trim(),
+            ["collectionId"] = string.IsNullOrWhiteSpace(collectionId) ? "profile_data" : collectionId.Trim()
+        };
+        File.WriteAllText(path, json.ToJsonString(JsonUtil.IndentedOptions), new System.Text.UTF8Encoding(false));
+    }
+
+    // Non-secret status for the Settings UI: what's configured, minus the API key (only whether one
+    // is present). Never returns the key itself.
+    public static JsonObject RedactedStatus(string dataRoot)
+    {
+        var path = Path.Combine(dataRoot, FileName);
+        var status = new JsonObject
+        {
+            ["configured"] = false,
+            ["endpoint"] = "",
+            ["projectId"] = "",
+            ["databaseId"] = "circuitos",
+            ["collectionId"] = "profile_data",
+            ["hasApiKey"] = false
+        };
+        if (!File.Exists(path)) return status;
+        try
+        {
+            var json = JsonNode.Parse(File.ReadAllText(path)) as JsonObject ?? new JsonObject();
+            var endpoint = json["endpoint"]?.ToString() ?? "";
+            var projectId = json["projectId"]?.ToString() ?? "";
+            var hasKey = !string.IsNullOrWhiteSpace(json["apiKey"]?.ToString());
+            status["endpoint"] = endpoint;
+            status["projectId"] = projectId;
+            status["databaseId"] = string.IsNullOrWhiteSpace(json["databaseId"]?.ToString()) ? "circuitos" : json["databaseId"]!.ToString();
+            status["collectionId"] = string.IsNullOrWhiteSpace(json["collectionId"]?.ToString()) ? "profile_data" : json["collectionId"]!.ToString();
+            status["hasApiKey"] = hasKey;
+            status["configured"] = !string.IsNullOrWhiteSpace(endpoint) && !string.IsNullOrWhiteSpace(projectId) && hasKey;
+        }
+        catch { }
+        return status;
+    }
 }

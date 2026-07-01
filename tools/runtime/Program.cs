@@ -71,6 +71,8 @@ internal static class Program
     private static TwitchTokens? _sessionTwitch;
     private static string _dataRoot = "";
     private static bool _headless;
+    // Set when cloud mode was requested but couldn't start (fell back to local); shown in Settings.
+    private static string? _cloudError;
     // In-flight inline (admin-panel) device logins: loginId -> the device code being polled. Lets the
     // UI show the code and poll /api/twitch/login/poll without blocking a request for the whole flow.
     private static readonly Dictionary<string, (TwitchOptions Opts, string DeviceCode, DateTimeOffset ExpiresAt)> _pendingDeviceLogins = new();
@@ -128,25 +130,40 @@ internal static class Program
         // AppwriteDataStore instead; the local store keeps serving the overlay path.
         var localStore = new LocalFileDataStore(options.DataPath);
         IDataStore store = localStore;
-        if (args.Contains("--cloud"))
+        // Cloud is requested by the --cloud flag OR the persisted Settings choice. If it can't be
+        // brought up (no/invalid Appwrite config, or unreachable), fall back to local so the app still
+        // starts — the reason is surfaced in /api/health so the Settings page can explain it.
+        var wantCloud = args.Contains("--cloud") || AppSettings.CloudEnabled(options.DataPath);
+        if (wantCloud)
         {
-            var opts = AppwriteOptions.TryLoad(options.DataPath)
-                ?? throw new InvalidOperationException($"--cloud requires {AppwriteOptions.FileName} in the data folder. See docs/0.7-appwrite-dev-setup.md.");
-            var tenant = ResolveTenant(options.DataPath);
-            if (!string.Equals(tenant, "local-dev", StringComparison.Ordinal))
+            try
             {
-                var fromTenant = "local-dev";
-                try { AppwriteDataStore.MigrateRowsToTenant(opts, fromTenant, tenant); }
-                catch (Exception ex) { Console.Error.WriteLine($"Tenant migration warning: {ex.Message}"); }
+                var opts = AppwriteOptions.TryLoad(options.DataPath)
+                    ?? throw new InvalidOperationException("Cloud mode is on but no Appwrite connection is configured. Add it under Settings.");
+                var tenant = ResolveTenant(options.DataPath);
+                if (!string.Equals(tenant, "local-dev", StringComparison.Ordinal))
+                {
+                    try { AppwriteDataStore.MigrateRowsToTenant(opts, "local-dev", tenant); }
+                    catch (Exception ex) { Console.Error.WriteLine($"Tenant migration warning: {ex.Message}"); }
+                }
+                var cloudStore = new AppwriteDataStore(opts, tenant, localStore.ActiveProfileId);
+                _ = cloudStore.Exists(DataKeys.Catalog); // connectivity probe — throws if unreachable
+                store = cloudStore;
+                _sessionMode = "cloud";
             }
-            store = new AppwriteDataStore(opts, tenant, localStore.ActiveProfileId);
+            catch (Exception ex)
+            {
+                _cloudError = ex.Message;
+                Console.Error.WriteLine($"Cloud mode unavailable — starting in local mode: {ex.Message}");
+                store = localStore;
+                _sessionMode = "local";
+            }
         }
         // Pass the local store explicitly for overlay output: in cloud mode `store` is Appwrite and
         // can't write the local overlay-state.json that OBS reads, but the desktop host always has a
         // local store. This keeps native pulls driving the overlay in both modes.
         var service = new CircuitService(store, options.ActionPath, localStore);
         var overlayDataPath = localStore.DataPath;
-        _sessionMode = args.Contains("--cloud") ? "cloud" : "local";
         _sessionTwitch = TwitchTokens.TryLoad(options.DataPath);
         _dataRoot = options.DataPath;
         _headless = options.Headless;
@@ -304,6 +321,7 @@ internal static class Program
                     runtime = ".NET",
                     version = "0.7.0.1",
                     mode = _sessionMode,
+                    cloudError = _cloudError,
                     twitch = _sessionTwitch is null ? null : new { login = _sessionTwitch.Login, displayName = _sessionTwitch.DisplayName, userId = _sessionTwitch.UserId, expiresAt = _sessionTwitch.ExpiresAt }
                 });
             else if (request.HttpMethod == "POST" && path == "/api/twitch/logout")
@@ -334,6 +352,14 @@ internal static class Program
                     await SendJsonAsync(context, 400, new { ok = false, error = ex.Message });
                 }
             }
+            else if (request.HttpMethod == "GET" && path == "/api/settings")
+                await SendJsonAsync(context, 200, GetSettings());
+            else if (request.HttpMethod == "POST" && path == "/api/settings/appwrite")
+                await SendResultAsync(context, SaveAppwriteSettings(await ReadBodyAsync(request)));
+            else if (request.HttpMethod == "POST" && path == "/api/settings/appwrite/test")
+                await SendResultAsync(context, TestAppwriteSettings());
+            else if (request.HttpMethod == "POST" && path == "/api/settings/mode")
+                await SendResultAsync(context, SetDataBackend(await ReadBodyAsync(request)));
             else if (request.HttpMethod == "POST" && path == "/api/twitch/login/start")
                 await SendResultAsync(context, StartDeviceLogin());
             else if (request.HttpMethod == "POST" && path == "/api/twitch/login/poll")
@@ -471,6 +497,89 @@ internal static class Program
         var text = $"Connect Twitch: go to {prompt.VerificationUri} and enter code {prompt.UserCode}.";
         if (_headless) Console.Out.WriteLine(text);
         else MessageBox.Show(text, "CircuitOS — Connect Twitch", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    // Settings page state: what's running now, the persisted backend choice, any cloud startup error,
+    // and the (redacted) Appwrite connection status.
+    private static object GetSettings() => new
+    {
+        ok = true,
+        dataBackend = _sessionMode,
+        cloudEnabled = AppSettings.CloudEnabled(_dataRoot),
+        cloudError = _cloudError,
+        appwrite = AppwriteOptions.RedactedStatus(_dataRoot)
+    };
+
+    private static ServiceResult SaveAppwriteSettings(JsonObject body)
+    {
+        try
+        {
+            AppwriteOptions.Save(_dataRoot,
+                JsonUtil.String(body, "endpoint"),
+                JsonUtil.String(body, "projectId"),
+                JsonUtil.String(body, "apiKey"),
+                JsonUtil.String(body, "databaseId"),
+                JsonUtil.String(body, "collectionId"));
+            return new ServiceResult(200, new JsonObject { ["ok"] = true, ["appwrite"] = AppwriteOptions.RedactedStatus(_dataRoot) });
+        }
+        catch (Exception ex)
+        {
+            return new ServiceResult(400, new JsonObject { ["ok"] = false, ["errors"] = new JsonArray(ex.Message) });
+        }
+    }
+
+    private static ServiceResult TestAppwriteSettings()
+    {
+        var (ok, message) = TestAppwriteConnection(_dataRoot);
+        return new ServiceResult(ok ? 200 : 400, new JsonObject { ["ok"] = ok, ["message"] = message });
+    }
+
+    // Persists the backend choice. Requires a configured Appwrite connection before allowing cloud.
+    // restartRequired = the choice differs from what's running, so the app must relaunch to apply it.
+    private static ServiceResult SetDataBackend(JsonObject body)
+    {
+        try
+        {
+            var backend = JsonUtil.String(body, "dataBackend").Trim().ToLowerInvariant();
+            if (backend is not ("cloud" or "local"))
+                throw new InvalidDataException("Choose either local or cloud.");
+            if (backend == "cloud" && AppwriteOptions.RedactedStatus(_dataRoot)["configured"]?.GetValue<bool>() != true)
+                throw new InvalidDataException("Add your Appwrite connection (endpoint, project, API key) before switching to cloud.");
+            AppSettings.SetCloudEnabled(_dataRoot, backend == "cloud");
+            return new ServiceResult(200, new JsonObject
+            {
+                ["ok"] = true,
+                ["dataBackend"] = backend,
+                ["restartRequired"] = !string.Equals(_sessionMode, backend, StringComparison.OrdinalIgnoreCase)
+            });
+        }
+        catch (Exception ex)
+        {
+            return new ServiceResult(400, new JsonObject { ["ok"] = false, ["errors"] = new JsonArray(ex.Message) });
+        }
+    }
+
+    // Connects to Appwrite with the saved config and confirms the configured table exists. Returns a
+    // friendly (ok, message) for the Settings "Test connection" button. Never surfaces the API key.
+    private static (bool Ok, string Message) TestAppwriteConnection(string dataRoot)
+    {
+        try
+        {
+            var opts = AppwriteOptions.TryLoad(dataRoot);
+            if (opts is null) return (false, "No Appwrite connection is configured yet — fill in the endpoint, project, and API key first.");
+            var client = new Appwrite.Client().SetEndpoint(opts.Endpoint).SetProject(opts.ProjectId).SetKey(opts.ApiKey);
+            var tablesDb = new Appwrite.Services.TablesDB(client);
+            var table = tablesDb.GetTable(opts.DatabaseId, opts.CollectionId).GetAwaiter().GetResult();
+            return (true, $"Connected. Found table '{table.Name}' with {table.Columns.Count} column(s).");
+        }
+        catch (Appwrite.AppwriteException ex)
+        {
+            return (false, $"Appwrite rejected the connection (code {ex.Code}): {ex.Message}. 403 usually means the API key is missing scopes; 404 means the database or table id is wrong.");
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Could not reach Appwrite: {ex.Message}");
+        }
     }
 
     // Inline device login, step 1: issue a device/user code for the admin panel to display. Returns
