@@ -56,6 +56,22 @@ intent is confirmed only when the shops work starts. Park until then.
 
 ---
 
+## 3. Per-state overlay images / GIFs
+
+**Goal:** upload a different background image/GIF per pull state, so e.g. completing a collection
+shows a celebratory GIF instead of the normal background.
+
+**Very doable — direct parallel to the per-state colors already shipped (C4).** Scope:
+- Storage: per-state files (`bg-rare.<ext>`, `bg-complete.<ext>`, `bg-duplicate.<ext>`) beside the
+  global `bg.<ext>`; GIFs already supported.
+- Config: add `backgroundImage` to each state override block (next to the per-state colors).
+- Upload: `/api/overlay-image` takes a `state` param; per-state slot in the State Overrides panel.
+- Render: extend `applyStateColors()` in overlay.js to also swap `--bg-image` for the active state.
+- **Default:** states without their own image fall back to the global background (upload only what you
+  want special). Confirmed as the intended behavior.
+
+Fully testable in preview. Parked (features on back burner as of 2026-06-29).
+
 ## Status
 
 - Built this session: command tester (`e6cd7aa`), inline Twitch login polish (`e8c78df`).
