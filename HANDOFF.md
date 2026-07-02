@@ -463,6 +463,23 @@ DataPath/
 
 ## Session Log
 
+### 2026-07-01 — Claude (claude-opus-4-8) — Roadmap re-worked (README, no code)
+
+Workshopped the forward roadmap with the user and rewrote the README 0.8→2.0 section. Key changes:
+- **0.8 = Design & Identity** (design-token layer + circuit-tech re-skin + Design Mode). Design-first
+  was the user's explicit call.
+- **0.9 = Distribution & Release Candidate** (Velopack installer + auto-updater + signing, folded into
+  RC hardening). Old "0.8 = MixItUp" dropped — native Twitch made more-bot-support non-core.
+- **1.0 = Signed Stable Release.**
+- **1.x band:** 1.1 hosted cloud → 1.2 analytics (standalone) → 1.3 achievements (standalone) → 1.4
+  online viewer profiles → 1.5 Twitch Extension (panel + video overlay) → 1.6 module sharing → 1.7
+  module marketplace → 1.8 viewer trading/gifting → 1.9 shops readiness.
+- **Key insight captured:** the Twitch Extension REQUIRES hosted cloud (viewers can't reach a local PC),
+  so 1.1 hosted cloud + 1.5 extension are a linked "CircuitOS on Twitch" pair. Hosted-cloud cost/process
+  discussed (self-host VPS ~€5/mo or Appwrite Cloud ~$15-50/mo; real cost is ops + the auth rework —
+  Twitch-login → per-user session + row permissions, off the master key).
+- Fixed the 0.7 section to say shipped 0.7.1 (was 0.7.0.2).
+
 ### 2026-07-01 — Claude (claude-opus-4-8) — Per-state overlay images + cut 0.7.1
 
 **Per-state overlay images:** streamers can upload a background image/GIF per pull state

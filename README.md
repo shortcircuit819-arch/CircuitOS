@@ -111,7 +111,7 @@ must be updated together when cutting a release: `CircuitOS.Runtime.csproj`
 - Backward-compatible catalog rules — `variants` and `tiers` are optional and
   absent collections behave exactly as before ✓
 
-### 0.7 - Native Twitch + Cloud Foundation *(shipping — current milestone, 0.7.0.2)*
+### 0.7 - Native Twitch + Cloud Foundation *(shipped — 0.7.1)*
 
 *Native Twitch integration, plus the foundation for cloud sync. Local storage remains the default.*
 
@@ -120,37 +120,70 @@ must be updated together when cutting a release: `CircuitOS.Runtime.csproj`
 reward, and **redemptions, chat commands, and pull announcements run directly through EventSub** with
 no code to paste. A **Settings page** adds an optional cloud data backend (bring-your-own Appwrite,
 keyed to your Twitch id) with a safe fallback to local. Multiple simultaneously-live profiles,
-per-pull-state overlay colors, shared pull/redemption/command engines, and reward
-create/attach/sync/edit/delete all landed. See `docs/patch-notes/v0.7.0.2.md`.
+per-pull-state overlay colors and images, backup retention, shared pull/redemption/command engines,
+and reward create/attach/sync/edit/delete all landed. See `docs/patch-notes/v0.7.1.md`.
 
 - Native Twitch: zero-config login, reward management, EventSub redemptions, chat commands, and chat
   announcements — no code to paste ✓
 - Optional cloud data backend (bring-your-own Appwrite) from Settings; local is the default ✓
-- Streamer.bot remains supported as an *optional* alternative (MixItUp planned for 0.8) ✓
+- Streamer.bot remains supported as an *optional* alternative ✓
 - `IDataStore` abstraction — data access is interface-driven, so the cloud path is a swap not a rewrite ✓
 
-**Still ahead / deferred to a later phase:** a self-updating installer (Velopack + GitHub Releases,
-see `docs/updater-velopack-plan.md`), and a true *hosted* cloud — admin panel from any browser,
-cloud-served overlay, one backend for all users. Hosted cloud is a security/infrastructure decision,
-analyzed in `docs/feature-requests-analysis.md`.
+**What's next:** the visual identity + Design Mode (0.8), a real installer + auto-updater (0.9), then
+hosted cloud and the "CircuitOS on Twitch" extension in the 1.x line (see below). Hosted cloud is a
+security/infrastructure decision analyzed in `docs/feature-requests-analysis.md`.
 
-### 0.8 - Additional Bot Support
+### 0.8 - Design & Identity *(next)*
 
-- MixItUp Bot integration alongside Streamer.bot and native Twitch EventSub
-- Shared platform-neutral collection rules where practical
+*Make CircuitOS look unmistakably its own — intentional, not generic.*
 
-### 0.9 - Release Candidate
+- A design-token layer and a full re-skin of the admin panel to the CircuitOS visual language:
+  hairline structure over cards, crisp geometry (no pills), a soft accent glow as the only soft
+  element, and hue-independent bones so any streamer's color theme still looks composed
+- **Design Mode** — a live, in-app visual editor to tune text, colors, spacing, and layout by hand,
+  writing to an overrides layer the app applies (no source edits, no drift)
+- Contrast-aware theming that stays readable and coherent across any accent/base combination
 
-- Feature freeze and migration coverage
-- Fresh-install and update-matrix testing
-- Onboarding, diagnostics, recovery, and documentation review
-- Signing and public-release preparation
+### 0.9 - Distribution & Release Candidate
+
+*Make it genuinely shippable to non-technical streamers, then prove it's stable.*
+
+- Velopack installer + GitHub auto-updater — replaces "extract a ZIP" with next-next-finish and silent
+  self-updates (see `docs/updater-velopack-plan.md`)
+- Code signing so installs don't trip Windows SmartScreen
+- Release-candidate hardening: feature freeze, fresh-install and update-matrix testing, onboarding /
+  diagnostics / recovery review, documentation pass
 
 ### 1.0 - Signed Stable Release
 
 - Trusted signed executable and release artifacts
+- One-click install and silent updates for non-technical users
 - Stable compatibility promises for saved data and supported integrations
 - Public installation, update, recovery, and support workflow
+
+### 1.x - Growth toward the economy
+
+*Post-1.0 feature releases. The "online/social" features (1.4–1.7) build on the 1.1 hosted backend;
+1.2 and 1.3 are standalone and can ship independently. Treat the ordering as direction, not a contract.*
+
+- **1.1 — Hosted cloud** — a secure multi-tenant backend (Twitch login → per-user session + row-level
+  permissions; never a shipped master key) so a viewer's collection can follow them with zero setup.
+  The foundation for everything "online" below. Bring-your-own Appwrite and local mode remain supported.
+- **1.2 — Streamer analytics** — insights on pulls, viewer engagement, and economy health. Standalone;
+  no hosting required.
+- **1.3 — Achievements & badges** — viewer collection milestones that later surface on their profile.
+  Standalone.
+- **1.4 — Online viewer profiles** — a viewer's inventory and collection progress, hosted and viewable.
+  Needs 1.1.
+- **1.5 — Twitch Extension** — CircuitOS on the channel page for every viewer, as a **panel** (deep:
+  full leaderboard, inventory browser, progress) and a **video overlay** (glanceable: progress and live
+  pull moments). Needs 1.1 + 1.4, plus Twitch's extension review.
+- **1.6 — Module sharing** — publish a game/catalog online, shareable by link (builds on the existing
+  `.circuitmodule` export). Needs 1.1.
+- **1.7 — Module marketplace** — browse and download others' shared modules, with discovery. Builds on 1.6.
+- **1.8 — Viewer trading & gifting** — let viewers exchange items between inventories; a strong
+  engagement driver and the most direct on-ramp to the 2.0 economy.
+- **1.9 — Shops readiness** — currency plumbing and economy scaffolding to bridge into 2.0.
 
 ### 2.0 - Shop and Currency Workshop
 
