@@ -1,9 +1,9 @@
 # Agent Instructions
 
-CircuitOS is a configurable Twitch collection-game platform powered by
-Streamer.bot. Circuit Components (electronics-themed) is the included default
-profile. This file is a quick orientation for AI agents; the detailed,
-continuously updated source of truth is **`HANDOFF.md`** — read it first.
+CircuitOS is a configurable Twitch collection-game platform with native Twitch
+integration — no code to paste. Circuit Components (electronics-themed) is the
+included default profile. This file is a quick orientation for AI agents; the
+detailed, continuously updated source of truth is **`HANDOFF.md`** — read it first.
 
 ## Project Layout
 
@@ -13,24 +13,19 @@ continuously updated source of truth is **`HANDOFF.md`** — read it first.
 - `tools/runtime/` — .NET 9 WinForms + WebView2 app (HTTP server on
   `127.0.0.1:8787`)
 - `tools/admin/` — vanilla-JS admin panel (no framework)
-- `streamerbot-actions/` — paste-ready Streamer.bot C# source (`.txt`)
 - `docs/` — user and maintainer docs, including `docs/patch-notes/`
 
 ## Current State
 
-- Released application version: **0.6.0.8**
-- Current source milestone: **0.7 — Cloud Platform + Twitch Integration** (unreleased)
-- Current working focus: verify/polish the desktop-on-cloud bridge, native Twitch flow,
-  and the manually updated `UI.md` launch punch list before packaging a 0.7 build.
+- Released application version: **0.7.2** (native Twitch; Streamer.bot integration retired)
+- Current source milestone: **0.7 — Native Twitch + Cloud Foundation** (shipped)
+- Next milestone: **0.8 — Design & Identity**
 
 See `README.md` for the feature list and full roadmap, and `docs/versioning.md`
 for the versioning scheme.
 
 ## Coding Preferences
 
-- Keep Streamer.bot C# code paste-ready and easy to troubleshoot.
-- The maintained Redemption action uses `Newtonsoft.Json`; the command actions
-  intentionally avoid it. Match the existing action's dependencies.
 - Avoid overengineering — prefer simple, reliable code.
 - Never overwrite `inventory.json` without creating a timestamped backup first;
   keep inventory writes locked, validated, and atomic.
@@ -38,6 +33,6 @@ for the versioning scheme.
 
 ## Release Discipline
 
-Every release updates the application version in five files (see
+Every release updates the application version in four files (see
 `HANDOFF.md` → Version String Locations), ships a `docs/patch-notes/` entry, and
 adds a `HANDOFF.md` session-log entry. Update packages stay data-free.

@@ -1,9 +1,7 @@
 # Collection Leaderboard
 
-The leaderboard is part of
-`streamerbot-actions/StreamerbotCatalogCommands.txt`. Point a new
-`!leaderboard` command trigger to the same Streamer.bot action used by
-`!components`, `!missing`, and `!dupes`.
+`!leaderboard` is answered natively once you connect Twitch — the same command
+family as `!components`, `!missing`, and `!dupes`.
 
 ## Usage
 

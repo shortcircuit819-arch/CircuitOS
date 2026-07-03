@@ -1,7 +1,7 @@
 # Duplicate Salvage
 
-`streamerbot-actions/StreamerbotSalvage.txt` safely converts duplicate copies
-into Scrap. It never consumes the viewer's final copy of a component.
+Salvage safely converts duplicate copies into Scrap. It never consumes the
+viewer's final copy of a component.
 
 ## Commands
 
@@ -37,18 +37,9 @@ The wallet is created only after a successful salvage:
 }
 ```
 
-The salvage action shares the redemption inventory lock. It validates the
-result, creates a timestamped backup, and atomically replaces `inventory.json`.
-If validation or saving fails, no live inventory changes are committed.
-
-## Streamer.bot Setup
-
-1. Create a C# action from `StreamerbotSalvage.txt`.
-2. Point a new `!salvage` command trigger to it.
-3. Update the shared Catalog Commands action from
-   `StreamerbotCatalogCommands.txt`.
-4. Point a new `!scrap` command trigger to the shared Catalog Commands action.
-5. Update live `components.json` with the catalog `salvageValue` fields.
+Salvage shares the redemption inventory lock. It validates the result, creates a
+timestamped backup, and atomically replaces `inventory.json`. If validation or
+saving fails, no live inventory changes are committed.
 
 The five permanent values also have code fallbacks while the live catalog is
 being upgraded. Event collections require an explicit value.

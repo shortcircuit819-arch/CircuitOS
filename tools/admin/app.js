@@ -3,7 +3,6 @@ const viewTitles = {
   branding: "Game Profile",
   messages: "Message Templates",
   twitch: "Twitch Settings",
-  setup: "Streamer.bot Setup",
   economy: "Scrap Economy",
   viewers: "Viewer Inventory",
   roles: "Discord Role Awards",
@@ -124,7 +123,6 @@ let selectedBackupPreview = null;
 let systemProfile = clone(defaultSystemProfile);
 let profileConfigured = false;
 let profileDirty = false;
-let setupBundle = null;
 let dataPath = "";
 let overlayFilePath = "";
 let runtimeInfo = { runtime: "unknown", version: "unknown" };
@@ -415,11 +413,9 @@ function renderProfile() {
     input.addEventListener("input", () => {
       systemProfile.colors[key] = input.value;
       profileDirty = true;
-      setupBundle = null;
       applySystemProfile();
       renderProfilePreview();
       updateProfileStatus();
-      renderStreamerBotSetup();
     });
     label.append(input, element("span", "", labelText));
     grid.append(label);
@@ -449,9 +445,7 @@ function renderProfile() {
       input.value = input.value.toLowerCase().replace(/[^a-z0-9_-]/g, "");
       systemProfile.commands[key] = input.value;
       profileDirty = true;
-      setupBundle = null;
       updateProfileStatus();
-      renderStreamerBotSetup();
     });
     wrapper.append(input);
     row.append(wrapper);
@@ -496,11 +490,9 @@ function updateProfileFromInputs() {
   systemProfile.redeemDupProtectionTurns = Math.max(0, Math.min(20, Number(document.getElementById("profileDupProtection").value) || 0));
   systemProfile.redemptionCost = Math.max(1, Math.min(1000000, Number(document.getElementById("profileRedemptionCost").value) || 100));
   profileDirty = true;
-  setupBundle = null;
   applySystemProfile();
   renderProfilePreview();
   updateProfileStatus();
-  renderStreamerBotSetup();
 }
 
 function validateProfileClient() {
@@ -540,7 +532,7 @@ async function saveSystemProfile() {
     profileDirty = false;
     renderAll();
     updateProfileStatus();
-    await Promise.all([refreshBackupIndex(false), generateStreamerBotSetup()]);
+    await refreshBackupIndex(false);
     if (dirty) {
       const backupCount = await _saveCatalogData();
       showNotice(`Profile and catalog saved. ${backupCount} backup files created.`, "success");
@@ -556,7 +548,6 @@ function resetSystemProfile() {
   if (!window.confirm("Reset the game profile to the built-in Circuit Components defaults? Nothing is saved until you choose Save.")) return;
   systemProfile = clone(defaultSystemProfile);
   profileDirty = true;
-  setupBundle = null;
   applySystemProfile();
   renderProfile();
 }
@@ -669,7 +660,6 @@ function renderMessages() {
     textarea.addEventListener("input", () => {
       systemProfile.messages[key] = textarea.value;
       profileDirty = true;
-      setupBundle = null;
       const errors = validateMessageTemplate(key, textarea.value);
       error.hidden = !errors.length;
       error.textContent = errors.join(" ");
@@ -677,7 +667,6 @@ function renderMessages() {
       updateCharacterCount();
       updateProfileStatus();
       updateMessageStatus();
-      renderStreamerBotSetup();
     });
     card.append(header, helpText, textarea, editorMeta, tokens, error, preview);
     list.append(card);
@@ -696,38 +685,17 @@ function updateMessageStatus() {
 function resetMessageTemplate(key) {
   systemProfile.messages[key] = defaultSystemProfile.messages[key];
   profileDirty = true;
-  setupBundle = null;
   renderMessages();
   updateProfileStatus();
-  renderStreamerBotSetup();
 }
 
 function resetAllMessages() {
   if (!window.confirm("Reset all chat messages to the CircuitOS defaults? Changes are not saved until you choose Save Messages.")) return;
   systemProfile.messages = clone(defaultSystemProfile.messages);
   profileDirty = true;
-  setupBundle = null;
   renderMessages();
   updateProfileStatus();
-  renderStreamerBotSetup();
 }
-
-async function generateStreamerBotSetup() {
-  const errors = validateProfileClient();
-  if (errors.length) throw new Error(errors.join(" "));
-  document.getElementById("setupVersion").textContent = "GENERATING";
-  const response = await fetch("/api/setup", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ profile: systemProfile })
-  });
-  const result = await response.json();
-  if (!response.ok || !result.ok) throw new Error((result.errors || ["Could not generate Streamer.bot actions."]).join(" "));
-  setupBundle = result;
-  renderStreamerBotSetup();
-  return result;
-}
-
 
 function renderTwitchSettings() {
   const status = document.getElementById("twitchStatusChip");
@@ -770,8 +738,7 @@ function renderTwitchSettings() {
   utilities.replaceChildren();
   const utilityCards = [
     { title: "Channel Rewards", detail: liveProfiles.length ? "Manage rewards below." : "Mark a profile Live first." },
-    { title: "Native Mode", detail: cloud ? "Cloud bridge is active." : "You're in local mode — redemptions and chat go live right here, no extra setup." },
-    { title: "Streamer.bot", detail: "Fallback setup remains available whenever you need pasted actions." }
+    { title: "Native Mode", detail: cloud ? "Cloud bridge is active." : "You're in local mode — redemptions and chat go live right here, no extra setup." }
   ];
   for (const card of utilityCards) {
     const item = element("div", "twitch-utility-card");
@@ -1008,75 +975,6 @@ async function deleteTwitchReward(profile, reward, button) {
     if (button) button.textContent = original;
   }
 }
-function renderStreamerBotSetup() {
-  const version = document.getElementById("setupVersion");
-  const summary = document.getElementById("setupSummary");
-  const actionsContainer = document.getElementById("setupActions");
-  const checklist = document.getElementById("setupChecklist");
-  summary.replaceChildren();
-  actionsContainer.replaceChildren();
-  checklist.replaceChildren();
-  if (!setupBundle) {
-    version.textContent = "REGENERATE";
-    summary.append(element("div", "empty-state", "Generate the Streamer.bot package after finishing the profile."));
-    return;
-  }
-
-  version.textContent = `${setupBundle.integrationPlatform || platformName} ${setupBundle.integrationVersion}`;
-  const summaryValues = [
-    ["GAME PROFILE", systemProfile.gameName],
-    ["DATA FOLDER", setupBundle.dataPath],
-    ["ACTIONS", String(setupBundle.actions?.length || 0)]
-  ];
-  for (const [label, value] of summaryValues) {
-    const item = element("div", "setup-summary-item");
-    item.append(element("span", "", label), element("strong", "", value));
-    summary.append(item);
-  }
-
-  (setupBundle.actions || []).forEach((action, index) => {
-    const card = element("article", "setup-action");
-    const header = element("div", "setup-action-header");
-    const step = element("div", "setup-step");
-    step.append(element("span", "", String(index + 1)));
-    const copy = element("div");
-    copy.append(element("h2", "", action.name), element("p", "", action.description));
-    const toggle = element("button", "button secondary", "Show C#");
-    toggle.addEventListener("click", () => {
-      card.classList.toggle("open");
-      toggle.textContent = card.classList.contains("open") ? "Hide C#" : "Show C#";
-    });
-    header.append(step, copy, toggle);
-    const triggers = element("div", "setup-triggers");
-    for (const trigger of action.triggers || []) triggers.append(element("span", "setup-trigger", trigger));
-    for (const reference of action.references || []) triggers.append(element("span", "setup-trigger setup-reference", `Reference: ${reference}`));
-    const code = element("div", "setup-code");
-    const textarea = document.createElement("textarea");
-    textarea.readOnly = true;
-    textarea.value = action.source;
-    textarea.setAttribute("aria-label", `${action.name} generated C#`);
-    const codeActions = element("div", "setup-code-actions");
-    const copyButton = element("button", "button primary", "Copy C#");
-    copyButton.addEventListener("click", () => copyGeneratedCode(action.name, textarea));
-    codeActions.append(element("span", "setup-trigger", "Execute C# sub-action"), copyButton);
-    code.append(textarea, codeActions);
-    card.append(header, triggers, code);
-    actionsContainer.append(card);
-  });
-
-  for (const item of setupBundle.checklist || []) checklist.append(element("div", "setup-check", item));
-}
-
-async function copyGeneratedCode(actionName, textarea) {
-  try {
-    await navigator.clipboard.writeText(textarea.value);
-  } catch {
-    textarea.select();
-    if (!document.execCommand("copy")) throw new Error("Clipboard access was unavailable.");
-    textarea.setSelectionRange(0, 0);
-  }
-  showNotice(`${actionName} C# copied. Paste it into a Streamer.bot Execute C# sub-action.`, "success");
-}
 
 const wizardProfileFields = {
   gameName: "wizardGameName",
@@ -1287,7 +1185,7 @@ async function completeFirstRun() {
     closeFirstRunWizard();
     await loadConfiguration(true);
     switchView("twitch");
-    showNotice("Setup complete! Next: connect your Twitch account to go live. (Prefer Streamer.bot? Its setup is on the Streamer.bot page.)", "success");
+    showNotice("Setup complete! Next: connect your Twitch account to go live.", "success");
   } catch (error) {
     wizardSetError(error.message);
   } finally {
@@ -1390,7 +1288,6 @@ async function loadConfiguration(force = false) {
   applySystemProfile();
   await loadProfiles().catch(() => {});
   renderAll();
-  generateStreamerBotSetup().catch(error => showNotice(error.message, "error"));
   if (!profileConfigured) {
     initializeFirstRunWizard();
   }
@@ -1536,7 +1433,6 @@ function renderAll() {
   renderPatchNotes();
   renderBackups();
   renderTwitchSettings();
-  renderStreamerBotSetup();
   renderBoost();
   renderViewOnDemand(activeView);
 }
@@ -4592,7 +4488,6 @@ document.getElementById("hideSystemCheckSetting").addEventListener("change", eve
   applySystemCheckVisibility();
 });
 document.getElementById("commandTestInput").addEventListener("keydown", event => { if (event.key === "Enter") runCommandTest(); });
-document.getElementById("regenerateSetupButton").addEventListener("click", () => generateStreamerBotSetup().catch(error => showNotice(error.message, "error")));
 document.getElementById("saveMessagesButton").addEventListener("click", saveSystemProfile);
 document.getElementById("resetAllMessagesButton").addEventListener("click", resetAllMessages);
 document.querySelectorAll("[data-wizard-preset]").forEach(button => {

@@ -11,8 +11,7 @@ simple browser-side behavior, documentation, and narrowly understood bug fixes.
 - `tools/admin/app.js`: browser behavior, rendering, validation, and API calls
 - `tools/runtime/`: the packaged Windows application's .NET source
 - `tools/admin/CircuitAdmin.ps1`: legacy local server and matching API behavior
-- `streamerbot-actions/`: generated Streamer.bot C# source templates
-- `tools/runtime.tests/Program.cs`: first-run and generated-code smoke tests
+- `tools/runtime.tests/Program.cs`: first-run and engine smoke tests
 - `tools/package/Build-CircuitOSPackage.ps1`: validated release packaging
 - `data/`: starter data only; never substitute a viewer's live inventory here
 
@@ -31,7 +30,6 @@ Stop and use a full development/test pass if a change affects:
 - `inventory.json`, backups, locks, salvage balances, or completion tracking
 - Catalog, profile, or inventory schema fields
 - Collection weighting, pull odds, event eligibility, or boosts
-- Generated Streamer.bot C#
 - API request or response formats
 - First-run setup, restores, or migrations
 
@@ -117,22 +115,6 @@ looking for an HTML element that does not exist or whose ID does not match.
 - Check the existing responsive rules near the bottom of `styles.css`.
 - Do not remove `min-width: 0` from grid or flex children without testing overflow.
 
-## Streamer.bot Template Fixes
-
-The four distributed templates are in `streamerbot-actions/`. Generated code is
-created from these files, so fix the template rather than editing generated code.
-
-For brace-related bugs:
-
-1. Confirm each method closes before the next method declaration.
-2. Confirm the final brace closes `CPHInline`.
-3. Run the .NET smoke test described below.
-4. Generate the action in CircuitOS and compile that generated output in
-   Streamer.bot before releasing.
-
-Avoid Newtonsoft in command actions unless it is already required. Redemption
-currently requires the Streamer.bot references listed in its setup card.
-
 ## Version Rules
 
 - Within a milestone, iterate the four-part version: a sub-feature bumps the
@@ -141,13 +123,12 @@ currently requires the Streamer.bot references listed in its setup card.
   `0.7` — only once the current milestone is fully satisfactory.
 - Do not use `1.0` until the signed stable release.
 
-For every application version bump, update all five locations:
+For every application version bump, update all four locations:
 
 1. `tools/runtime/CircuitOS.Runtime.csproj` Version, FileVersion, AssemblyVersion
 2. `tools/runtime/Program.cs` health-response version
-3. `tools/runtime/CircuitService.Core.cs` `integrationVersion`
-4. `tools/runtime/CircuitService.Modules.cs` `circuitosVersion`
-5. `README.md` current application version
+3. `tools/runtime/CircuitService.Modules.cs` `circuitosVersion`
+4. `README.md` current application version
 
 The package builder deliberately fails when executable and source versions do
 not match.
@@ -158,13 +139,13 @@ Install the official .NET 9 SDK from Microsoft first. From the project root:
 
 ```powershell
 dotnet run --project tools\runtime.tests\CircuitOS.Runtime.SmokeTests.csproj `
-  -c Release -- data streamerbot-actions
+  -c Release -- data
 ```
 
 Expected result:
 
 ```text
-Smoke tests passed: first run is safe and generated Streamer.bot C# is structurally valid.
+Smoke tests passed: first run is safe, the pull + redemption + command engines behave, and the Appwrite + Twitch config loaders behave.
 ```
 
 Publish the Windows executable:
@@ -192,8 +173,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File tools\package\Build-CircuitOSPackage.ps1
 ```
 
-The builder validates version consistency, required UI, redemption C# structure,
-user-data boundaries, checksum manifests, and ZIP creation. Do not distribute a
+The builder validates version consistency, required UI, user-data boundaries,
+checksum manifests, and ZIP creation. Do not distribute a
 release if this command reports an error.
 
 Release files:
@@ -205,9 +186,8 @@ Release files:
 
 - Application opens directly from `CircuitOS.exe`.
 - Version shown in CircuitOS matches the intended release.
-- Overview, Profile Settings, Collections, Events, and Streamer.bot Setup open.
+- Overview, Profile Settings, Collections, Events, and Twitch open.
 - Browser/developer console has no errors.
-- Generated redemption C# compiles in Streamer.bot.
 - Fresh ZIP has starter data but no `Data/system-profile.json`.
 - Update ZIP has no `Data` folder.
 - Existing live `inventory.json` was never used or modified during testing.

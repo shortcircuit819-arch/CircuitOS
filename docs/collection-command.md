@@ -1,7 +1,7 @@
 # Collection Command
 
-Create a Streamer.bot command trigger for `!collection` and run the C# action in
-`streamerbot-actions/StreamerbotCollection.txt`.
+`!collection` is answered natively once you connect Twitch. Name the command in
+the Game Profile; CircuitOS handles the rest.
 
 Examples:
 
@@ -9,8 +9,7 @@ Examples:
 - `!collection quantum`
 - `!collection Broken Collection`
 
-The action reads the command value from `rawInput`, with fallbacks for `input0`
-and `argument0`. It resolves both catalog keys and display names.
+It resolves both catalog keys and display names.
 
 The command reports:
 
@@ -22,5 +21,5 @@ The command reports:
 - Duplicate quantities
 
 The command reads `components.json` dynamically and does not write to
-`inventory.json`. Collections added to the catalog become available without
-adding another hard-coded command branch.
+`inventory.json`. Collections added to the catalog become available
+automatically.

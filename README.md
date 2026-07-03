@@ -3,10 +3,9 @@
 CircuitOS is a configurable Twitch collection-game platform with **native Twitch
 integration — no code to paste**. Circuit Components is the included starter
 profile, while the editor supports custom games, terminology, collections,
-themes, messages, events, and currencies. Streamer.bot is supported as an
-optional alternative.
+themes, messages, events, and currencies.
 
-Current application version: **0.7.1**
+Current application version: **0.7.2**
 
 ## Current Features
 
@@ -46,7 +45,6 @@ Current application version: **0.7.1**
 - Multiple independent game profiles — each with its own catalog, inventory, branding, and overlay config
 - Switch active profiles from the admin panel without mixing data
 - Export any active profile as a portable `.circuitmodule` bundle; import modules as new profiles
-- Streamer.bot supported as an optional alternative (paste-ready C# actions still generated)
 
 ## Versioning Policy
 
@@ -64,13 +62,12 @@ CircuitOS uses intentional pre-release versioning:
   migration testing, installer/update testing, and release-candidate validation.
 - **2.0** is reserved for the Shop and Currency Workshop architecture.
 
-Application version, data-schema version, and Streamer.bot integration version
-are tracked separately. A UI release does not automatically change the data or
-integration version. The application version string lives in five places that
-must be updated together when cutting a release: `CircuitOS.Runtime.csproj`
-(`<Version>`/`<FileVersion>`/`<AssemblyVersion>`), `Program.cs` (`/api/health`),
-`CircuitService.Core.cs` (`integrationVersion`), `CircuitService.Modules.cs`
-(`circuitosVersion`), and this `README.md`.
+Application version and data-schema version are tracked separately. A UI release
+does not automatically change the data version. The application version string
+lives in four places that must be updated together when cutting a release:
+`CircuitOS.Runtime.csproj` (`<Version>`/`<FileVersion>`/`<AssemblyVersion>`),
+`Program.cs` (`/api/health`), `CircuitService.Modules.cs` (`circuitosVersion`),
+and this `README.md`.
 
 ## Roadmap
 
@@ -111,7 +108,7 @@ must be updated together when cutting a release: `CircuitOS.Runtime.csproj`
 - Backward-compatible catalog rules — `variants` and `tiers` are optional and
   absent collections behave exactly as before ✓
 
-### 0.7 - Native Twitch + Cloud Foundation *(shipped — 0.7.1)*
+### 0.7 - Native Twitch + Cloud Foundation *(shipped — 0.7.2)*
 
 *Native Twitch integration, plus the foundation for cloud sync. Local storage remains the default.*
 
@@ -121,12 +118,13 @@ reward, and **redemptions, chat commands, and pull announcements run directly th
 no code to paste. A **Settings page** adds an optional cloud data backend (bring-your-own Appwrite,
 keyed to your Twitch id) with a safe fallback to local. Multiple simultaneously-live profiles,
 per-pull-state overlay colors and images, backup retention, shared pull/redemption/command engines,
-and reward create/attach/sync/edit/delete all landed. See `docs/patch-notes/v0.7.1.md`.
+and reward create/attach/sync/edit/delete all landed. Streamer.bot was retired in 0.7.2 (native is
+the only supported path). See `docs/patch-notes/v0.7.1.md` and `docs/patch-notes/v0.7.2.md`.
 
 - Native Twitch: zero-config login, reward management, EventSub redemptions, chat commands, and chat
   announcements — no code to paste ✓
 - Optional cloud data backend (bring-your-own Appwrite) from Settings; local is the default ✓
-- Streamer.bot remains supported as an *optional* alternative ✓
+- Streamer.bot integration **retired in 0.7.2** — native Twitch is the single supported path ✓
 - `IDataStore` abstraction — data access is interface-driven, so the cloud path is a swap not a rewrite ✓
 
 **What's next:** the visual identity + Design Mode (0.8), a real installer + auto-updater (0.9), then
@@ -198,7 +196,6 @@ security/infrastructure decision analyzed in `docs/feature-requests-analysis.md`
 - `data/components.json`: master collection catalog
 - `data/inventory.json`: viewer inventory save file
 - `data/system-profile.template.json`: portable branding profile template
-- `streamerbot-actions/`: paste-ready Streamer.bot C# source
 - `tools/admin/`: administration interface and local runtime
 - `tools/runtime/`: .NET application source
 - `tools/package/`: repeatable release, update, and signing scripts
@@ -222,7 +219,7 @@ For a safe manual UI and patch-fix workflow, see
 - Do not advise users to disable antivirus protection.
 - Sign public 1.0+ releases and timestamp the signature.
 
-See `docs/distribution-and-streamerbot-setup.md` for installation and update
+See `docs/installation-and-updates.md` for installation and update
 instructions, and `docs/release-signing.md` for the signing workflow.
 
 

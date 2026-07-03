@@ -1,10 +1,6 @@
 ## Known Bugs
 
 Open:
-- Streamer.bot dupe protection: the paste-ready StreamerbotReedeem.txt path doesn't apply
-  dup-protection correctly. The native 0.7 RedemptionEngine dup-protection IS correct and tested —
-  this is only the Streamer.bot .txt path. Port the engine fix into StreamerbotReedeem.txt if
-  Streamer.bot stays a supported integration.
 - [Deferred, visual] Overview Pull Rates slider fill can drift slightly from the handle. Cosmetic;
   skipped for now.
 

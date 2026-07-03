@@ -1,8 +1,9 @@
 CIRCUITOS - START HERE
 ======================
 
-CircuitOS is a configurable Twitch collection game powered by Streamer.bot.
-Circuit Components is included as the starter profile.
+CircuitOS is a configurable Twitch collection game with native Twitch
+integration — no extra software and no code to paste. Circuit Components is
+included as the starter profile.
 
 FIRST LAUNCH
 ------------
@@ -10,7 +11,7 @@ FIRST LAUNCH
 2. Choose Blank Collection or the Circuit Components starter in the wizard.
 3. Name the game, redemption, items, collections, and currency.
 4. Create the first collection and review the setup.
-5. Complete the wizard, then install the generated Streamer.bot actions.
+5. Complete the wizard, then connect your Twitch account to go live.
 
 Branding, commands, messages, collections, rates, events, boosts, and salvage
 values remain editable after first-run setup.
@@ -18,16 +19,14 @@ values remain editable after first-run setup.
 Viewer, economy, Discord role, and backup information refreshes automatically
 while CircuitOS is open. Use Refresh Live Data for a full reload from disk.
 
-STREAMER.BOT
-------------
-1. Open Profile Settings, then Streamer.bot Setup inside CircuitOS.
-2. Follow the checklist and copy each generated C# action.
-3. Create the listed reward and command triggers in Streamer.bot.
-4. Run the inventory and balance commands, then perform one test redemption.
-
-The generated C# already contains this package's Data folder path and current
-terminology. Regenerate the actions after changing commands, messages, or the
-location of the CircuitOS folder.
+CONNECT TWITCH
+--------------
+1. Open the Twitch section inside CircuitOS.
+2. Click Connect Twitch and approve the one-time login (no developer account
+   or config files needed).
+3. CircuitOS creates and manages the channel-point reward for you.
+4. Redemptions, chat commands, and pull announcements now run automatically.
+5. Run an inventory or balance command, then perform one test redemption.
 
 FOLDERS
 -------
@@ -35,7 +34,6 @@ CircuitOS.exe        Launches CircuitOS directly.
 App                  CircuitOS interface files. Do not rename files inside it.
 Data                 Catalog, profile, boost, inventory, backups, and overlay.
 Documentation        Feature guides and optional OBS overlay instructions.
-Streamerbot Actions  Source templates used by CircuitOS Setup.
 
 DATA SAFETY
 -----------
@@ -47,6 +45,5 @@ SYSTEM REQUIREMENTS
 -------------------
 - Windows 10 or Windows 11, 64-bit
 - Microsoft Edge WebView2 Runtime (included with current Edge/Windows installs)
-- Streamer.bot for Twitch integration
 
 CircuitOS runs locally and binds its administration API only to 127.0.0.1.

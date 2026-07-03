@@ -17,9 +17,9 @@ For the default install that is:
 
 `C:\Users\nicho\Documents\CircuitOS\Data\profiles\circuit-components\overlay`
 
-You no longer create this folder or copy files by hand. The Streamer.bot
-redemption action writes `overlay-state.json` into the same folder after the
-first successful pull. (The sample `overlay-state.json` in
+You no longer create this folder or copy files by hand. CircuitOS writes
+`overlay-state.json` into the same folder after the first successful pull.
+(The sample `overlay-state.json` in
 `overlays/lower-quarter` is for local preview only — do not deploy it.)
 
 ## OBS Browser Source
@@ -35,8 +35,7 @@ Local-file path and a Copy button — use that rather than typing the path.
 5. Position the source along the bottom of the scene.
 
 The page background is transparent. The source checks for new state twice per
-second and automatically hides after the timestamp written by the redemption
-action.
+second and automatically hides after the timestamp written on the last pull.
 
 ## Preview
 
@@ -44,10 +43,9 @@ For a browser preview using the sample state, serve the source folder locally
 and open `index.html?preview=1`. Preview mode ignores the expiration timestamp.
 
 Overlay publishing is noncritical. If its directory or state file cannot be
-updated, Streamer.bot logs a warning while preserving the successful inventory
+updated, CircuitOS logs a warning while preserving the successful inventory
 save and normal redemption messages.
 
 After a test redemption, confirm that the modified time on
-`overlay\overlay-state.json` changes immediately. If it does not, the installed
-redemption action is older than the overlay publisher or Streamer.bot logged an
-overlay update warning.
+`overlay\overlay-state.json` changes immediately. If it does not, check the
+CircuitOS log for an overlay update warning.

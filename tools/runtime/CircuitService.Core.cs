@@ -45,22 +45,20 @@ internal sealed partial class CircuitService
 
     // The portable data store (local file or Appwrite). _localStore is non-null only
     // when running on the local file store; the few filesystem-bound features
-    // (Streamer.bot path injection, local overlay template, backup folder display)
-    // fall back gracefully when it is null. See docs/0.7-cloud-foundation.md.
+    // (local overlay template, backup folder display) fall back gracefully when it
+    // is null. See docs/0.7-cloud-foundation.md.
     private readonly IDataStore _store;
     private readonly ILocalDataStore? _localStore;
     // Local store used to write the OBS overlay state file. Falls back to the data store when it
     // is itself local; in cloud mode the host passes the local store explicitly so the overlay
     // (which OBS reads from a local file) still updates on native pulls.
     private readonly ILocalDataStore? _overlayStore;
-    private readonly string _actionPath;
 
-    public CircuitService(IDataStore store, string actionPath, ILocalDataStore? overlayStore = null)
+    public CircuitService(IDataStore store, ILocalDataStore? overlayStore = null)
     {
         _store = store;
         _localStore = store as ILocalDataStore;
         _overlayStore = overlayStore ?? _localStore;
-        _actionPath = Path.GetFullPath(actionPath);
     }
 
     public IDataStore Store => _store;
@@ -353,9 +351,9 @@ internal sealed partial class CircuitService
         return Error([$"Unsupported runtime action '{action}'."]);
     }
 
-    // Formats the pull result into chat announcement line(s) using the profile's message templates —
-    // the same set the Streamer.bot redemption action emits (success, rare, triple, complete, variant).
-    // Each template is skipped when blank, so streamers can turn any line off.
+    // Formats the pull result into chat announcement line(s) using the profile's message templates
+    // (success, rare, triple, complete, variant). Each template is skipped when blank, so streamers
+    // can turn any line off.
     private static List<string> BuildRedeemAnnouncements(JsonObject messages, RedemptionResult result, string viewerName)
     {
         var lines = new List<string>();
@@ -549,110 +547,6 @@ internal sealed partial class CircuitService
         });
     }
 
-    private static string EscapeCSharp(string value) => value.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "").Replace("\n", "\\n");
-
-    private string GenerateActionSource(string fileName, JsonObject profile)
-    {
-        var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            { "StreamerbotReedeem.txt", "StreamerbotCatalogCommands.txt", "StreamerbotCollection.txt", "StreamerbotSalvage.txt" };
-        if (!allowed.Contains(fileName)) throw new InvalidOperationException("Unknown Streamer.bot action source.");
-        var sourcePath = Path.GetFullPath(Path.Combine(_actionPath, fileName));
-        var root = Path.GetFullPath(_actionPath).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        if (!sourcePath.StartsWith(root, StringComparison.OrdinalIgnoreCase) || !File.Exists(sourcePath))
-            throw new FileNotFoundException($"Streamer.bot action source is unavailable: {fileName}");
-        var source = File.ReadAllText(sourcePath, Encoding.UTF8);
-        // Streamer.bot writes inventory/overlay state to a local folder; only meaningful
-        // on the local file store. In cloud mode this is a placeholder (Streamer.bot is
-        // an optional integration there — the native EventSub path is primary).
-        var escapedPath = (_localStore?.DataPath ?? DisplayDataPath).Replace("\"", "\"\"");
-        source = new Regex("string folderPath = @\"[^\"]*\";").Replace(source, $"string folderPath = @\"{escapedPath}\";", 1);
-
-        var templateFields = fileName switch
-        {
-            "StreamerbotReedeem.txt" => new Dictionary<string, string> { ["RedeemSuccessTemplate"] = "redeemSuccess", ["RarePullTemplate"] = "rarePull", ["TriplePullTemplate"] = "triplePull", ["CollectionCompleteTemplate"] = "collectionComplete", ["VariantPullTemplate"] = "variantPull" },
-            "StreamerbotCatalogCommands.txt" => new Dictionary<string, string> { ["NoInventoryTemplate"] = "noInventory", ["BalanceTemplate"] = "balance", ["NoDuplicatesTemplate"] = "noDuplicates" },
-            "StreamerbotCollection.txt" => new Dictionary<string, string> { ["CollectionUsageTemplate"] = "collectionUsage", ["CollectionSummaryTemplate"] = "collectionSummary" },
-            _ => new Dictionary<string, string> { ["SalvageUsageTemplate"] = "salvageUsage", ["NothingToSalvageTemplate"] = "nothingToSalvage", ["SalvageSuccessTemplate"] = "salvageSuccess" }
-        };
-
-        if (fileName == "StreamerbotReedeem.txt")
-        {
-            var cooldownSecs = JsonUtil.Long(profile, "redeemCooldownSeconds");
-            if (cooldownSecs < 0 || cooldownSecs > 3600) cooldownSecs = 120;
-            source = new Regex(@"const int CooldownSeconds = \d+;").Replace(source, $"const int CooldownSeconds = {cooldownSecs};", 1);
-            var dupProtectionTurns = JsonUtil.Long(profile, "redeemDupProtectionTurns");
-            if (dupProtectionTurns < 0 || dupProtectionTurns > 20) dupProtectionTurns = 0;
-            source = new Regex(@"const int DupProtectionTurns = \d+;").Replace(source, $"const int DupProtectionTurns = {dupProtectionTurns};", 1);
-        }
-
-        source = source.Replace("Circuit Components", EscapeCSharp(JsonUtil.String(profile, "gameName")))
-            .Replace("Circuit Component", EscapeCSharp(JsonUtil.String(profile, "redemptionName")))
-            .Replace("Scrap", EscapeCSharp(JsonUtil.String(profile, "currencyName")));
-        var commands = JsonUtil.Object(profile, "commands")!;
-        source = source.Replace("\"itemPlural\", \"components\"", $"\"itemPlural\", \"{EscapeCSharp(JsonUtil.String(profile, "itemPlural"))}\"")
-            .Replace("\"collectionSingular\", \"collection\"", $"\"collectionSingular\", \"{EscapeCSharp(JsonUtil.String(profile, "collectionSingular"))}\"")
-            .Replace("\"collectionCommand\", \"collection\"", $"\"collectionCommand\", \"{EscapeCSharp(JsonUtil.String(commands, "collection"))}\"")
-            .Replace("\"salvageCommand\", \"salvage\"", $"\"salvageCommand\", \"{EscapeCSharp(JsonUtil.String(commands, "salvage"))}\"")
-            .Replace("consumedComponents == 1 ? \"component\" : \"components\"", $"consumedComponents == 1 ? \"{EscapeCSharp(JsonUtil.String(profile, "itemSingular"))}\" : \"{EscapeCSharp(JsonUtil.String(profile, "itemPlural"))}\"")
-            .Replace("!salvage", "!" + JsonUtil.String(commands, "salvage"));
-
-        if (fileName == "StreamerbotCatalogCommands.txt")
-        {
-            var map = new Dictionary<string, string>
-            {
-                ["components"] = JsonUtil.String(commands, "inventory"), ["missing"] = JsonUtil.String(commands, "missing"),
-                ["dupes"] = JsonUtil.String(commands, "duplicates"), ["leaderboard"] = JsonUtil.String(commands, "leaderboard"),
-                ["scrap"] = JsonUtil.String(commands, "balance")
-            };
-            foreach (var (oldName, newName) in map)
-                source = source.Replace($"commandName != \"{oldName}\"", $"commandName != \"{newName}\"")
-                    .Replace($"commandName == \"{oldName}\"", $"commandName == \"{newName}\"");
-        }
-
-        var messages = JsonUtil.Object(profile, "messages")!;
-        foreach (var (constant, field) in templateFields)
-        {
-            var replacement = $"private const string {constant} = \"{EscapeCSharp(JsonUtil.String(messages, field))}\";";
-            source = new Regex($"private const string {Regex.Escape(constant)} = \"(?:\\\\.|[^\"])*\";").Replace(source, _ => replacement, 1);
-        }
-        return source;
-    }
-
-    public ServiceResult GetStreamerBotSetup(JsonObject? requestedProfile)
-    {
-        var profile = requestedProfile is null ? (JsonObject)GetSystemProfile()["profile"]! : NormalizeProfile(requestedProfile);
-        var errors = ValidateProfile(profile);
-        if (errors.Count > 0) return Error(errors);
-        var commands = JsonUtil.Object(profile, "commands")!;
-        JsonObject Action(string key, string name, string description, string[] triggers, string[] references, string file) => new()
-        {
-            ["key"] = key, ["name"] = name, ["description"] = description,
-            ["triggers"] = ToJsonArray(triggers), ["references"] = ToJsonArray(references),
-            ["source"] = GenerateActionSource(file, profile)
-        };
-        var actions = new JsonArray
-        {
-            Action("redeem", JsonUtil.String(profile, "redemptionName"), "Awards a weighted item, records completion, creates inventory backups, and updates the OBS overlay state.", [$"Channel Point Reward: {JsonUtil.String(profile, "redemptionName")}"], ["Newtonsoft.Json", "Microsoft.CSharp"], "StreamerbotReedeem.txt"),
-            Action("catalog", $"{JsonUtil.String(profile, "gameName")} Commands", "Handles progress, missing items, duplicates, leaderboard, and currency balance commands.", [$"!{JsonUtil.String(commands, "inventory")}", $"!{JsonUtil.String(commands, "missing")}", $"!{JsonUtil.String(commands, "duplicates")}", $"!{JsonUtil.String(commands, "leaderboard")}", $"!{JsonUtil.String(commands, "balance")}"], [], "StreamerbotCatalogCommands.txt"),
-            Action("collection", $"{JsonUtil.String(profile, "gameName")} Collection Detail", "Shows a viewer's progress in one named collection.", [$"!{JsonUtil.String(commands, "collection")}"], [], "StreamerbotCollection.txt"),
-            Action("salvage", $"{JsonUtil.String(profile, "gameName")} Salvage", $"Converts duplicate items into {JsonUtil.String(profile, "currencyName")} with inventory locking and backups.", [$"!{JsonUtil.String(commands, "salvage")}", $"!{JsonUtil.String(commands, "salvage")} <{JsonUtil.String(profile, "collectionSingular")}>"], [], "StreamerbotSalvage.txt")
-        };
-        return Ok(new JsonObject
-        {
-            ["ok"] = true, ["integrationPlatform"] = "CircuitOS", ["integrationVersion"] = "0.7.1",
-            ["dataPath"] = DisplayDataPath, ["profileConfigured"] = _store.Exists(DataKeys.Profile), ["actions"] = actions,
-            ["checklist"] = ToJsonArray(new[]
-            {
-                "Create one Streamer.bot action for each generated code block.",
-                "Add an Execute C# sub-action, replace its contents, and compile.",
-                "For Redemption, confirm Newtonsoft.Json and Microsoft.CSharp on the References tab.",
-                "Attach the listed Twitch reward or command triggers.",
-                "Run the inventory and balance commands plus one test redemption.",
-                "Confirm inventory.json and overlay\\overlay-state.json update in the data folder."
-            })
-        });
-    }
-
     private static bool TryNumber(JsonNode? node, out double value) =>
         double.TryParse(node?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out value);
     private static bool TryInteger(JsonNode? node, out long value) =>
@@ -702,8 +596,7 @@ internal sealed partial class CircuitService
         _store.WriteProfileData(profileId, key, value);
     }
 
-    // Writes the OBS overlay state for a native pull — the same shape the Streamer.bot redeem action
-    // produces, so overlay.js renders native and Streamer.bot redemptions identically. Display data:
+    // Writes the OBS overlay state for a native pull, so overlay.js can render it. Display data:
     // best-effort, never throws into the redemption path (a failed overlay write must not fail a pull).
     private void WriteOverlayState(string profileId, RedemptionResult redemption, string viewerName, DateTimeOffset now)
     {

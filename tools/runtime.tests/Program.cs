@@ -2,9 +2,9 @@ using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using CircuitOS.Runtime;
 
-if (args.Length != 2)
+if (args.Length < 1)
 {
-    Console.Error.WriteLine("Usage: CircuitOS.Runtime.SmokeTests <source-data-path> <action-path>");
+    Console.Error.WriteLine("Usage: CircuitOS.Runtime.SmokeTests <source-data-path>");
     return 2;
 }
 
@@ -19,7 +19,7 @@ try
     // Constructing the store runs the 0.5 migration, moving the flat data files into
     // profiles/default/. Read the inventory hash from there, after migration.
     var store = new LocalFileDataStore(testPath);
-    var service = new CircuitService(store, args[1]);
+    var service = new CircuitService(store);
     var profileDir = Path.Combine(testPath, "profiles", "default");
     var inventoryPath = Path.Combine(profileDir, "inventory.json");
     var inventoryHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(inventoryPath)));
@@ -78,27 +78,6 @@ try
 
     TestFirstRunAllowsDraftCommandCollisions(store, service, profile, components, boost);
 
-    var setup = service.GetStreamerBotSetup(profile);
-    Require(setup.Status == 200, "Streamer.bot action generation should succeed.");
-    var actions = setup.Body["actions"] as JsonArray
-        ?? throw new InvalidOperationException("Generated Streamer.bot actions were unavailable.");
-    Require(actions.Count == 4, "Exactly four Streamer.bot actions should be generated.");
-    foreach (var actionNode in actions)
-    {
-        var action = actionNode as JsonObject
-            ?? throw new InvalidOperationException("Generated action was invalid.");
-        var key = action["key"]?.ToString() ?? "unknown";
-        var source = action["source"]?.ToString() ?? "";
-        Require(GetBraceDepth(source) == 0, $"Generated {key} action must have balanced braces.");
-        if (key == "redeem")
-        {
-            var helperIndex = source.IndexOf("private string FormatMessage", StringComparison.Ordinal);
-            Require(helperIndex > 0, "Generated redemption action should contain FormatMessage.");
-            Require(GetBraceDepth(source, helperIndex) == 1,
-                "Generated redemption helper methods must remain at class scope.");
-        }
-    }
-
     TestActiveProfilesAndCollisions(service, store, defaultProfile);
     TestTwitchRewardPersistence(service, store);
     TestRuntimeDispatch(service, store, testPath);
@@ -109,7 +88,7 @@ try
     TestTwitchOptions();
     TestBackupRetention();
 
-    Console.WriteLine("Smoke tests passed: first run is safe, generated Streamer.bot C# is structurally valid, the pull + redemption + command engines behave, and the Appwrite + Twitch config loaders behave.");
+    Console.WriteLine("Smoke tests passed: first run is safe, the pull + redemption + command engines behave, and the Appwrite + Twitch config loaders behave.");
     return 0;
 }
 finally
@@ -305,7 +284,7 @@ static void TestRuntimeDispatch(CircuitService service, IDataStore store, string
     Require(secondInventory["viewer-b"] is JsonObject, "Redemption dispatch should create viewer inventory inside the selected profile.");
 
     // A native redemption must drive the OBS overlay: overlay-state.json is written to the target
-    // profile's overlay folder with the same shape the Streamer.bot action produces.
+    // profile's overlay folder.
     var overlayStatePath = Path.Combine(dataRoot, "profiles", profileId, "overlay", "overlay-state.json");
     Require(File.Exists(overlayStatePath), "Redemption dispatch should write overlay-state.json for the overlay.");
     var overlayState = JsonNode.Parse(File.ReadAllText(overlayStatePath)) as JsonObject
@@ -817,45 +796,3 @@ static void RequireThrows<TException>(Action action, string message) where TExce
     throw new InvalidOperationException($"{message} (did not throw)");
 }
 
-static int GetBraceDepth(string source, int? endExclusive = null)
-{
-    var depth = 0;
-    var inString = false;
-    var inChar = false;
-    var inLineComment = false;
-    var inBlockComment = false;
-    var escaped = false;
-    var limit = Math.Min(endExclusive ?? source.Length, source.Length);
-
-    for (var index = 0; index < limit; index++)
-    {
-        var current = source[index];
-        var next = index + 1 < limit ? source[index + 1] : '\0';
-        if (inLineComment)
-        {
-            if (current == '\n') inLineComment = false;
-            continue;
-        }
-        if (inBlockComment)
-        {
-            if (current == '*' && next == '/') { inBlockComment = false; index++; }
-            continue;
-        }
-        if (inString || inChar)
-        {
-            if (escaped) { escaped = false; continue; }
-            if (current == '\\') { escaped = true; continue; }
-            if (inString && current == '"') inString = false;
-            if (inChar && current == '\'') inChar = false;
-            continue;
-        }
-        if (current == '/' && next == '/') { inLineComment = true; index++; continue; }
-        if (current == '/' && next == '*') { inBlockComment = true; index++; continue; }
-        if (current == '"') { inString = true; continue; }
-        if (current == '\'') { inChar = true; continue; }
-        if (current == '{') depth++;
-        if (current == '}') depth--;
-        if (depth < 0) return depth;
-    }
-    return depth;
-}

@@ -17,14 +17,13 @@ The self-contained Windows x64 single-file application is:
 `tools\admin\runtime\CircuitOS.exe`
 
 In recipient packages the same executable is placed at the ZIP root. With no
-arguments it discovers `App`, `Data`, and `Streamerbot Actions` beside itself,
-so the recipient can launch `CircuitOS.exe` directly.
+arguments it discovers `App` and `Data` beside itself, so the recipient can
+launch `CircuitOS.exe` directly.
 
 It accepts these command-line options:
 
 - `--data <folder>`: live CircuitOS data folder
 - `--ui <folder>`: Control Core static files
-- `--actions <folder>`: maintained Streamer.bot C# sources
 - `--port <number>`: loopback HTTP port, default `8787`
 - `--headless`: run the local API without opening the CircuitOS window
 - `--no-browser`: legacy alias for `--headless`
@@ -64,8 +63,8 @@ the Evergreen Bootstrapper from Microsoft's site.
 ## Compatibility
 
 The .NET runtime preserves the existing `/api/config`, `/api/profile`,
-`/api/setup`, `/api/analytics`, `/api/roles`, `/api/backups`, `/api/save`, and
-`/api/health` contracts. `CircuitAdmin.ps1` is retained as an emergency fallback
+`/api/analytics`, `/api/roles`, `/api/backups`, `/api/save`, and `/api/health`
+contracts. `CircuitAdmin.ps1` is retained as an emergency fallback
 but is no longer the primary runtime.
 
 Inventory remains read-only to the administration runtime. Catalog, boost,

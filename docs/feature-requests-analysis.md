@@ -100,7 +100,47 @@ for everyone's usage), **uptime** (everyone's data depends on your project), **r
 design project, not a switch. Ship position stays: **Local default + bring-your-own-Appwrite (advanced)**,
 which is what 0.7.0.2 does. Build hosted cloud as its own milestone with the auth designed properly.
 
+## 5. Local ↔ Cloud sync & migration — surfaced live 2026-07-02
+
+**How it came up:** the maintainer reported "two of my local profiles are gone." They weren't — local
+and cloud are **independent `IDataStore` backends** (`LocalFileDataStore` vs `AppwriteDataStore`).
+Local held all three profiles; cloud only ever held a single older *Circuit Components* from when cloud
+was first enabled. Switching backends swaps the whole dataset, so two profiles appeared to vanish.
+Workaround was manual: export each local profile, import into cloud — which then created a **duplicate
+"Circuit Components"** (import generates a unique id but keeps the name verbatim), and two
+identically-named profiles made the profile switcher look broken (switch tracks by unique id, but every
+card/summary renders only the name, so a correct switch was visually invisible until the twin was
+deleted). Data was never at risk; a safety copy of all three profiles was made at
+`C:\Users\nicho\Documents\CircuitOS-profiles-backup-20260702_185132`.
+
+**Why this matters:** the moment hosted cloud (1.1) exists, "which copy is the real one?" becomes a
+first-class problem. It's really **three** problems, and only one blocks 1.1:
+
+1. **Source of truth (design decision).** Recommended model: **when logged in, cloud is the truth and
+   local is an offline cache.** Avoids co-equal-copy ambiguity. The alternative (reconcile two peers)
+   is much harder and not worth it for launch.
+2. **Migration (the 1.1 deliverable).** A one-click **"push local profiles to cloud"** that is
+   **identity-aware** — matches on profile id/name and updates in place instead of blind-copying into a
+   twin. This is the exact failure hit by hand above, so de-dupe is a hard requirement, not a nicety.
+3. **True bidirectional sync (defer to 1.1+ / later).** Multi-device edits, offline reconciliation,
+   per-record conflict resolution. Most streamers run one machine; do not let this block hosted cloud.
+
+**CircuitOS-specific constraint that must shape the schema *before* 1.1:** **inventory is high-churn**
+(written constantly mid-stream) while **catalog/config is low-churn** (edited occasionally). Inventory
+wants last-write-wins or append semantics, and a stale local cache must **never** clobber a live cloud
+inventory. Bake this distinction into the sync/schema design up front.
+
+**Near-term UX mitigations (cheap, worth doing before 1.1 — candidates for the 0.8 design pass):**
+- Always-visible indicator of **which backend is active** and that local ≠ cloud.
+- **Import name de-dupe:** when an imported profile name collides with an existing one, auto-suffix
+  (e.g. `Circuit Components (2)`) so no silent twins — a ~5-line fix in `CircuitService.Modules.cs`.
+- Show **Created date / short id** in the profile switcher and summary line (not just the grid card) so
+  same-named profiles are always tellable apart.
+- Hint on the active profile's card — *"Switch to another profile to delete this one"* — since the
+  active profile intentionally hides Delete and users read that as "edit only."
+
 ## Status
 
 - Built this session: command tester (`e6cd7aa`), inline Twitch login polish (`e8c78df`).
-- Awaiting a decision on the two above before implementing.
+- Awaiting a decision on §1 and §2 before implementing.
+- §5 (sync/migration) is a confirmed 1.1 requirement; the near-term UX mitigations are 0.8 candidates.

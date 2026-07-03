@@ -42,11 +42,11 @@ internal interface IDataStore
 
 // Local-filesystem extension of IDataStore. The .NET host (WinForms/HttpListener)
 // uses this; AppwriteDataStore implements only IDataStore. DataPath/BackupPath are
-// filesystem concepts consumed by Streamer.bot path injection and local overlay
-// serving — neither exists in the cloud host. See docs/0.7-cloud-foundation.md.
+// filesystem concepts consumed by local overlay serving and backup display —
+// neither exists in the cloud host. See docs/0.7-cloud-foundation.md.
 internal interface ILocalDataStore : IDataStore
 {
-    // Active profile folder; used for Streamer.bot path injection and overlay serving.
+    // Active profile folder; used for local overlay serving.
     string DataPath { get; }
     // Folder holding timestamped config backups for the active profile.
     string BackupPath { get; }

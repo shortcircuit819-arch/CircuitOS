@@ -1,16 +1,15 @@
 # Catalog Commands
 
-`streamerbot-actions/StreamerbotCatalogCommands.txt` replaces the three older
-standalone source files for:
+CircuitOS answers these chat commands natively once you connect Twitch — no setup
+beyond naming them in the Game Profile:
 
 - `!components`
 - `!missing`
 - `!dupes`
 - `!leaderboard`
 
-Create one Streamer.bot C# action from this source and point all three command
-triggers to that action. The action reads the triggering command from the
-standard `command` argument, with `commandName` as a fallback.
+Each command reads the triggering word from chat, so renaming a command in the
+Game Profile takes effect immediately.
 
 ## Event Behavior
 
@@ -22,9 +21,5 @@ standard `command` argument, with `commandName` as a fallback.
 - `!leaderboard` ranks unique permanent progress by default. Supplying a
   collection key or display name ranks that collection, including events.
 
-Long output is split into messages below 440 characters. All three modes are
-read-only and avoid Newtonsoft.
-
-The older `StreamerbotCheck.txt`, `StreamerbotMissing.txt`, and
-`StreamerbotDupes.txt` files remain as historical standalone versions, but they
-do not support event collections.
+Long output is split into messages below 440 characters. All four commands are
+read-only.

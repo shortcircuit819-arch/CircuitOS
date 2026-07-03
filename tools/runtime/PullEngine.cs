@@ -4,16 +4,12 @@ using System.Text.Json.Nodes;
 namespace CircuitOS.Runtime;
 
 // Shared pull/roll logic — the SINGLE source of truth for selecting an item from a
-// collection, with dup protection, tier weighting, and variant rolling. Ported from
-// streamerbot-actions/StreamerbotReedeem.txt so the native Twitch (EventSub) path,
-// Streamer.bot, and MixItUp all roll identically (see the integration vision in
-// docs/0.7-cloud-foundation.md). Pure over the catalog JSON; the RNG is injected so
-// tests are deterministic.
+// collection, with dup protection, tier weighting, and variant rolling. Pure over the
+// catalog JSON; the RNG is injected so tests are deterministic.
 //
-// NOTE: unlike the Streamer.bot action (which uses a second Random for variants),
-// this uses ONE injected RNG for both the tier roll and the variant rolls. The draws
-// are still independent, so the distribution is identical; a single seed just makes
-// tests reproducible.
+// NOTE: one injected RNG drives both the tier roll and the variant rolls. The draws are
+// still independent, so the distribution is unaffected; a single seed just makes tests
+// reproducible.
 internal sealed record PullOutcome(
     string PartId,
     string PartName,

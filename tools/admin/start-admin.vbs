@@ -6,8 +6,7 @@ basePath = fso.GetParentFolderName(WScript.ScriptFullName)
 runtimePath = fso.BuildPath(basePath, "runtime\CircuitOS.exe")
 command = Quote(runtimePath) & _
     " --data " & Quote("C:\Users\nicho\OneDrive\Documents\CircuitComponents") & _
-    " --ui " & Quote(basePath) & _
-    " --actions " & Quote(fso.GetAbsolutePathName(fso.BuildPath(basePath, "..\..\streamerbot-actions")))
+    " --ui " & Quote(basePath)
 shell.Run command, 1, False
 
 Function Quote(value)

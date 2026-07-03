@@ -97,8 +97,7 @@ $folders = @(
     (Join-Path $packageRoot "Data\config-backups"),
     (Join-Path $packageRoot "Data\overlay"),
     (Join-Path $packageRoot "Overlay"),
-    (Join-Path $packageRoot "Documentation"),
-    (Join-Path $packageRoot "Streamerbot Actions")
+    (Join-Path $packageRoot "Documentation")
 )
 foreach ($folder in $folders) {
     $null = New-Item -ItemType Directory -Path $folder -Force
@@ -107,7 +106,6 @@ foreach ($folder in $folders) {
 Copy-RequiredFile (Join-Path $templateRoot "START HERE.txt") (Join-Path $packageRoot "START HERE.txt")
 Copy-RequiredFile (Join-Path $templateRoot "OBS SETUP.txt") (Join-Path $packageRoot "Documentation\OBS SETUP.txt")
 Copy-RequiredFile (Join-Path $templateRoot "RELEASE SECURITY.txt") (Join-Path $packageRoot "Documentation\RELEASE SECURITY.txt")
-Copy-RequiredFile (Join-Path $templateRoot "STREAMERBOT ACTIONS.txt") (Join-Path $packageRoot "Streamerbot Actions\README.txt")
 Copy-RequiredFile (Join-Path $templateRoot "inventory.json") (Join-Path $packageRoot "Data\inventory.json")
 
 $appFiles = @("index.html", "app.js", "styles.css", "circuitos-icon.png")
@@ -128,21 +126,11 @@ foreach ($file in $dataFiles) {
 }
 Copy-RequiredFile (Join-Path $projectRoot "data\overlay-config.template.json") (Join-Path $packageRoot "Data\overlay-config.json")
 
-$actionFiles = @(
-    "StreamerbotReedeem.txt",
-    "StreamerbotCatalogCommands.txt",
-    "StreamerbotCollection.txt",
-    "StreamerbotSalvage.txt"
-)
-foreach ($file in $actionFiles) {
-    Copy-RequiredFile (Join-Path $projectRoot "streamerbot-actions\$file") (Join-Path $packageRoot "Streamerbot Actions\$file")
-}
-
 $overlayFiles = @("index.html", "styles.css", "overlay.js")
 foreach ($file in $overlayFiles) {
     # Overlay statics go in Overlay\ — this folder ships in both full and update packages
     # so updating CircuitOS always refreshes the overlay JS/CSS/HTML.
-    # Data\overlay\ directory is kept for Streamer.bot to write overlay-state.json into.
+    # Data\overlay\ directory is kept for the native overlay to write overlay-state.json into.
     Copy-RequiredFile (Join-Path $projectRoot "overlays\lower-quarter\$file") (Join-Path $packageRoot "Overlay\$file")
 }
 
@@ -168,7 +156,6 @@ $manifest = [ordered]@{
     version = $releaseVersion
     releaseChannel = "stable"
     dataSchemaVersion = 1
-    streamerbotIntegrationVersion = $releaseVersion
     publishedUtc = [DateTime]::UtcNow.ToString("o")
 }
 $manifestJson = $manifest | ConvertTo-Json -Depth 5
@@ -178,8 +165,7 @@ $updateFolders = @(
     $updateRoot,
     (Join-Path $updateRoot "App"),
     (Join-Path $updateRoot "Overlay"),
-    (Join-Path $updateRoot "Documentation"),
-    (Join-Path $updateRoot "Streamerbot Actions")
+    (Join-Path $updateRoot "Documentation")
 )
 foreach ($folder in $updateFolders) {
     $null = New-Item -ItemType Directory -Path $folder -Force
@@ -193,19 +179,12 @@ foreach ($file in Get-ChildItem -LiteralPath (Join-Path $packageRoot "App") -Fil
 foreach ($file in Get-ChildItem -LiteralPath (Join-Path $packageRoot "Documentation") -File) {
     Copy-RequiredFile $file.FullName (Join-Path $updateRoot "Documentation\$($file.Name)")
 }
-foreach ($file in Get-ChildItem -LiteralPath (Join-Path $packageRoot "Streamerbot Actions") -File) {
-    Copy-RequiredFile $file.FullName (Join-Path $updateRoot "Streamerbot Actions\$($file.Name)")
-}
 foreach ($file in Get-ChildItem -LiteralPath (Join-Path $packageRoot "Overlay") -File) {
     Copy-RequiredFile $file.FullName (Join-Path $updateRoot "Overlay\$($file.Name)")
 }
 
 $packagedHtml = [IO.File]::ReadAllText((Join-Path $packageRoot 'App\index.html'))
-$packagedRedeem = [IO.File]::ReadAllText((Join-Path $packageRoot 'Streamerbot Actions\StreamerbotReedeem.txt'))
-$helperIndex = $packagedRedeem.IndexOf('private string FormatMessage', [StringComparison]::Ordinal)
 Assert-ReleaseCondition ($packagedHtml.Contains('id="settingsNav"')) 'Settings navigation group is missing.'
-Assert-ReleaseCondition ((Get-CSharpBraceDepth $packagedRedeem) -eq 0) 'redemption C# braces are unbalanced.'
-Assert-ReleaseCondition ($helperIndex -gt 0 -and (Get-CSharpBraceDepth $packagedRedeem $helperIndex) -eq 1) 'redemption helper methods are not at class scope.'
 Assert-ReleaseCondition (-not (Test-Path -LiteralPath (Join-Path $packageRoot 'Data\system-profile.json'))) 'fresh package contains a live system profile.'
 Assert-ReleaseCondition (-not (Test-Path -LiteralPath (Join-Path $updateRoot 'Data'))) 'update package contains a Data folder.'
 

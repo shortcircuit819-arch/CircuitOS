@@ -3,24 +3,22 @@ using System.Text.Json.Nodes;
 
 namespace CircuitOS.Runtime;
 
-// The full redemption pipeline, shared across every integration (native Twitch EventSub,
-// Streamer.bot, MixItUp) so they can never drift. PullEngine.Roll is only the INNER roll
+// The full redemption pipeline. PullEngine.Roll is only the INNER roll
 // (dup-protection → tier → variant) over an already-chosen collection; RedemptionEngine adds
-// the two pieces that until now lived only in streamerbot-actions/StreamerbotReedeem.txt:
+// the two surrounding pieces:
 //
 //   1. SelectCollection — weighted collection pick + featured-boost multipliers + event-window
-//      gating (ported from RollCollection / IsCollectionActive / GetCollectionWeight).
+//      gating.
 //   2. ApplyRedemption  — the inventory read-modify-write: owned counts, completion detection
 //      and seeding, pull-streak / triple-pull tracking, and the dup-protection counter.
 //
 // Pure over the catalog/inventory JSON (System.Text.Json.Nodes); the RNG is injected so tests
 // are deterministic. Output formatting (chat templates, overlay state) and cooldown remain the
-// caller's concern — those differ per integration. Config errors throw InvalidDataException,
-// mirroring the Streamer.bot action; the caller decides how to surface them.
+// caller's concern. Config errors throw InvalidDataException; the caller decides how to surface them.
 //
 // NOTE: the legacy weight/rare-label fallbacks below (basic/power/advanced/broken/quantum) are
-// Circuit-Components parity shims, kept byte-for-byte with the action so un-upgraded catalogs
-// behave identically. Catalogs that set explicit weights and rareLabels never hit them.
+// Circuit-Components parity shims for un-upgraded catalogs. Catalogs that set explicit weights
+// and rareLabels never hit them.
 internal sealed record CollectionSelection(
     string Key,
     JsonObject Collection,
@@ -180,7 +178,7 @@ internal static class RedemptionEngine
         return new CollectionSelection(chosenKey, chosenCollection, displayName, weights[chosen] / totalWeight, appliedBoost);
     }
 
-    // ── Helpers (ported from StreamerbotReedeem.txt, JObject → JsonObject) ────────
+    // ── Helpers ──────────────────────────────────────────────────────────────────
 
     private static bool IsCollectionActive(string key, JsonObject collection, DateTimeOffset now)
     {

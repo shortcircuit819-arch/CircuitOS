@@ -7,7 +7,7 @@ using System.Text.Json.Nodes;
 
 namespace CircuitOS.Runtime;
 
-internal sealed record RuntimeOptions(string DataPath, string UiPath, string ActionPath, string OverlayPath, int Port, bool Headless)
+internal sealed record RuntimeOptions(string DataPath, string UiPath, string OverlayPath, int Port, bool Headless)
 {
     public static RuntimeOptions Parse(string[] args)
     {
@@ -32,12 +32,6 @@ internal sealed record RuntimeOptions(string DataPath, string UiPath, string Act
             Path.Combine(basePath, "..", "Data"),
             Path.Combine(uiPath, "..", "Data"),
             Path.Combine(uiPath, "..", "..", "data")) ?? Path.Combine(basePath, "Data")));
-        var actionPath = Path.GetFullPath(values.GetValueOrDefault("--actions", FindFolderContaining(
-            "StreamerbotReedeem.txt",
-            Path.Combine(basePath, "Streamerbot Actions"),
-            Path.Combine(basePath, "..", "Streamerbot Actions"),
-            Path.Combine(uiPath, "..", "Streamerbot Actions"),
-            Path.Combine(uiPath, "..", "..", "streamerbot-actions")) ?? Path.Combine(basePath, "Streamerbot Actions")));
         var overlayPath = Path.GetFullPath(values.GetValueOrDefault("--overlay", FindFolderContaining(
             "overlay.js",
             Path.Combine(basePath, "Overlay"),
@@ -48,7 +42,7 @@ internal sealed record RuntimeOptions(string DataPath, string UiPath, string Act
         var port = int.TryParse(values.GetValueOrDefault("--port", "8787"), out var parsedPort) && parsedPort is > 0 and < 65536
             ? parsedPort
             : 8787;
-        return new RuntimeOptions(dataPath, uiPath, actionPath, overlayPath, port,
+        return new RuntimeOptions(dataPath, uiPath, overlayPath, port,
             flags.Contains("--headless") || flags.Contains("--no-browser"));
     }
 
@@ -122,7 +116,7 @@ internal static class Program
         // 0.7 Phase 4 (native Twitch): open the EventSub WebSocket and process live channel-point
         // redemptions until Ctrl+C. The zero-config native path. Run from a terminal.
         if (args.Contains("--twitch-listen"))
-            return TwitchListen(options.DataPath, options.ActionPath);
+            return TwitchListen(options.DataPath);
 
         // The local file store is always created: it provides the active profile id and the
         // local folder used to serve the OBS overlay (overlay statics/state stay local even
@@ -162,7 +156,7 @@ internal static class Program
         // Pass the local store explicitly for overlay output: in cloud mode `store` is Appwrite and
         // can't write the local overlay-state.json that OBS reads, but the desktop host always has a
         // local store. This keeps native pulls driving the overlay in both modes.
-        var service = new CircuitService(store, options.ActionPath, localStore);
+        var service = new CircuitService(store, localStore);
         var overlayDataPath = localStore.DataPath;
         _sessionTwitch = TwitchTokens.TryLoad(options.DataPath);
         _dataRoot = options.DataPath;
@@ -319,7 +313,7 @@ internal static class Program
                     dataPath = overlayDataPath,
                     overlayFilePath = Path.Combine(overlayDataPath, "overlay", "index.html"),
                     runtime = ".NET",
-                    version = "0.7.1",
+                    version = "0.7.2",
                     mode = _sessionMode,
                     cloudError = _cloudError,
                     twitch = _sessionTwitch is null ? null : new { login = _sessionTwitch.Login, displayName = _sessionTwitch.DisplayName, userId = _sessionTwitch.UserId, expiresAt = _sessionTwitch.ExpiresAt }
@@ -416,11 +410,6 @@ internal static class Program
             }
             else if (request.HttpMethod == "POST" && path == "/api/first-run")
                 await SendResultAsync(context, service.CompleteFirstRun(await ReadBodyAsync(request)));
-            else if (request.HttpMethod == "POST" && path == "/api/setup")
-            {
-                var body = await ReadBodyAsync(request);
-                await SendResultAsync(context, service.GetStreamerBotSetup(body["profile"] as JsonObject));
-            }
             else if (request.HttpMethod == "POST" && path == "/api/backups")
                 await SendResultAsync(context, service.InvokeBackupOperation(await ReadBodyAsync(request)));
             else if (request.HttpMethod == "POST" && path == "/api/roles")
@@ -1299,12 +1288,12 @@ internal static class Program
     // exists, maps reward id -> profile, opens the EventSub WebSocket, and on each redemption runs
     // the shared dispatch (pull + inventory) then fulfils (or cancels/refunds on failure). Blocks
     // until Ctrl+C. Console mode — run from a terminal.
-    private static int TwitchListen(string dataRoot, string actionPath)
+    private static int TwitchListen(string dataRoot)
     {
         try
         {
             var store = new LocalFileDataStore(dataRoot);
-            var service = new CircuitService(store, actionPath);
+            var service = new CircuitService(store);
             using var cts = new CancellationTokenSource();
             Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 

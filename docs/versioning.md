@@ -1,8 +1,8 @@
 # CircuitOS Versioning
 
-CircuitOS separates application, data-schema, and Streamer.bot integration
-versions. The application version describes the shipped desktop experience;
-the other versions change only when their contracts change.
+CircuitOS separates application and data-schema versions. The application version
+describes the shipped desktop experience; the data-schema version changes only
+when its contract changes.
 
 ## Pre-1.0 Releases
 
@@ -17,9 +17,9 @@ the other versions change only when their contracts change.
   saved-data contract or introducing a major new workflow.
 - Update packages remain data-free and must preserve existing installations.
 
-The current milestone is **0.6 — Item Variants and Rarity Tiers** (complete as
-of `0.6.0.6`). The next milestone is **0.7 — Cloud Platform + Twitch
-Integration**.
+The current milestone is **0.7 — Native Twitch + Cloud Foundation** (shipped as
+`0.7.2`, which retired the Streamer.bot integration). The next milestone is
+**0.8 — Design & Identity**.
 
 ## Stable Releases
 
@@ -35,10 +35,9 @@ workflows, audit history, and economy safeguards.
 ## Release Checklist
 
 1. Select the version based on the user-visible and compatibility impact.
-2. Update the application version string in all five locations: the runtime
+2. Update the application version string in all four locations: the runtime
    `.csproj` (product/file/assembly), `Program.cs` (`/api/health`),
-   `CircuitService.Core.cs` (`integrationVersion`), `CircuitService.Modules.cs`
-   (`circuitosVersion`), and `README.md`.
+   `CircuitService.Modules.cs` (`circuitosVersion`), and `README.md`.
 3. Build and test the self-contained Windows x64 executable.
 4. Build the fresh and data-free update archives.
 5. Verify `version.json`, executable metadata, and ZIP data boundaries.

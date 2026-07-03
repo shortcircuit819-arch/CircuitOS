@@ -14,7 +14,7 @@ Control Core opens in its own window without a command prompt or browser tab.
 Close the CircuitOS window to stop its private local server.
 
 The `.cmd` launchers remain compatibility wrappers. `CircuitAdmin.ps1` is
-available only as a legacy fallback.
+retained only as a legacy fallback.
 
 ## Editable Configuration
 
@@ -42,7 +42,7 @@ available only as a legacy fallback.
 - Discord role award queue driven by recorded collection completions
 - Backup history, validation previews, downloads, comparisons, and recovery
 - Versioned branding, terminology, and live theme configuration
-- Guided Streamer.bot installation with generated paste-ready C# actions
+- One-click Twitch connect that creates the channel-point reward and goes live
 
 The overview calculates effective pull rates using active event windows and the
 current featured boost.
@@ -110,9 +110,9 @@ data keys remain unchanged. CircuitOS platform attribution remains fixed outside
 the editable profile.
 
 When no live profile exists, the editor opens the Game Profile screen as a
-first-run step. The Streamer.bot Setup screen generates four paste-ready C#
-actions using the active data path and current profile values. See
-`docs/distribution-and-streamerbot-setup.md` for the complete workflow.
+first-run step. After saving the profile, connect your Twitch account from the
+Twitch screen to create the channel-point reward and go live. See
+`docs/installation-and-updates.md` for the complete workflow.
 
 ## Message Templates
 
@@ -124,10 +124,9 @@ control, and Reset All Messages. The variant-pull message is optional — leavin
 it blank disables that extra line.
 
 Messages are stored inside `system-profile.json` and use the profile backup and
-recovery path. Saving messages regenerates the Streamer.bot setup bundle. The
-updated C# must be copied into the corresponding installed Streamer.bot actions
-before the new messages appear on stream. Standardized error messages remain
-non-editable for troubleshooting consistency.
+recovery path. Native Twitch applies saved messages immediately — the next pull
+or command uses them, with nothing to reinstall. Standardized error messages
+remain non-editable for troubleshooting consistency.
 
 ## Safety
 

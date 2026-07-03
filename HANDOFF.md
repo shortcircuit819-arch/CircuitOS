@@ -12,8 +12,8 @@ the end of every working session before stopping.
 |-------|-------|
 | Project | CircuitOS — configurable Twitch collection-game platform |
 | Default game | Circuit Components (electronics-themed) |
-| Current version | **0.7.1** (shipped — native Twitch, optional cloud, per-state overlay images, backup retention). Local mode is the default and unchanged. |
-| Phase | **0.7 — Native Twitch + Cloud Foundation — shipping.** Zero-config Twitch login (device flow, no dev account), CircuitOS-managed channel-point reward, native EventSub redemptions + chat commands + pull announcements. Settings page with an optional cloud data backend (bring-your-own Appwrite, safe fallback to local). Multiple live profiles, per-state overlay colors, shared PullEngine/RedemptionEngine/CommandEngine (smoke-tested), reliability/security hardening. Still ahead: Velopack + GitHub installer/updater (gated on creating the repo — `docs/updater-velopack-plan.md`), and a true *hosted* cloud (security/infra decision — `docs/feature-requests-analysis.md`). Deferred features: bot chat account, cross-profile currency (shops/2.0), per-state overlay images. |
+| Current version | **0.7.2** (shipped — native Twitch is the single supported path; Streamer.bot integration retired. Optional cloud, per-state overlay images, backup retention). Local mode is the default and unchanged. |
+| Phase | **0.7 — Native Twitch + Cloud Foundation — shipped (0.7.2 retired Streamer.bot).** Zero-config Twitch login (device flow, no dev account), CircuitOS-managed channel-point reward, native EventSub redemptions + chat commands + pull announcements. Settings page with an optional cloud data backend (bring-your-own Appwrite, safe fallback to local). Multiple live profiles, per-state overlay colors, shared PullEngine/RedemptionEngine/CommandEngine (smoke-tested), reliability/security hardening. Still ahead: Velopack + GitHub installer/updater (gated on creating the repo — `docs/updater-velopack-plan.md`), and a true *hosted* cloud (security/infra decision — `docs/feature-requests-analysis.md`). Deferred features: bot chat account, cross-profile currency (shops/2.0), per-state overlay images. |
 | Repo root | `C:\Dev\CircuitStreamSystem` |
 | Live data path | `C:\Users\nicho\Documents\CircuitOS\Data` (profiles under `Data\profiles\<id>`; active profile `circuit-components`) |
 
@@ -25,7 +25,7 @@ the end of every working session before stopping.
 CircuitStreamSystem/
 ├── tools/runtime/          .NET 9 Windows Forms app (HTTP server + WebView2 UI)
 │   ├── Program.cs          HttpListener on 127.0.0.1:8787, request routing
-│   ├── CircuitService.Core.cs   Config, validation, backup, Streamer.bot generation
+│   ├── CircuitService.Core.cs   Config, validation, backup, overlay state
 │   ├── CircuitService.AnalyticsRoles.cs
 │   ├── CircuitService.Backups.cs
 │   ├── CircuitService.Overlay.cs
@@ -42,12 +42,6 @@ CircuitStreamSystem/
 │   ├── app.js              ~3,800 lines — all rendering, API calls, state
 │   ├── styles.css
 │   └── runtime/CircuitOS.exe   Published binary (copy here after dotnet publish)
-│
-├── streamerbot-actions/    Paste-ready C# for Streamer.bot (plain .txt files)
-│   ├── StreamerbotReedeem.txt       Main pull + inventory write
-│   ├── StreamerbotCatalogCommands.txt
-│   ├── StreamerbotCollection.txt
-│   └── StreamerbotSalvage.txt
 │
 ├── data/                   Starter/dev JSON data (not the live data folder)
 ├── docs/                   User and maintainer documentation
@@ -71,7 +65,6 @@ CircuitStreamSystem/
 - `POST /api/twitch/reward-delete` → delete a synced CircuitOS-managed reward and clear profile mapping
 - `POST /api/twitch/reward-update` → update managed reward title/cost and sync the profile redemption name
 - `POST /api/save` → save config changes
-- `POST /api/setup` → generate Streamer.bot C# actions
 - `POST /api/overlay-config` → save overlay config
 - `POST /api/profiles` → create/switch/rename/delete/activate/deactivate profiles
 - `POST /api/runtime/action` → native runtime dispatch for redeem/command actions
@@ -89,19 +82,17 @@ CircuitStreamSystem/
 
 ## Version String Locations
 
-All five must match when cutting a release:
+All four must match when cutting a release:
 
 | File | Location | Field |
 |------|----------|-------|
 | `tools/runtime/CircuitOS.Runtime.csproj` | `<Version>`, `<FileVersion>`, `<AssemblyVersion>` | Assembly metadata |
 | `tools/runtime/Program.cs` | `/api/health` response | Runtime version shown in UI footer |
-| `tools/runtime/CircuitService.Core.cs` | `integrationVersion` in `/api/setup` response | Integration version shown on Streamer.bot tab |
 | `tools/runtime/CircuitService.Modules.cs` | `circuitosVersion` in module manifest | Version stamped into exported `.circuitmodule` files |
 | `README.md` | "Current application version" line | Documentation |
 
-The `integrationVersion` in `CircuitService.Core.cs` was historically a separate
-version (was `"1.1.1"` while the app was `"0.3.5"`). As of 0.3.6 it is kept in
-sync with the app version.
+(0.7.2 removed the fifth location — `integrationVersion` in `CircuitService.Core.cs` — along with the
+Streamer.bot integration it versioned.)
 
 ---
 
@@ -462,6 +453,54 @@ DataPath/
 ---
 
 ## Session Log
+
+### 2026-07-02 — Claude (claude-opus-4-8) — Retired Streamer.bot; cut 0.7.2
+
+**Full removal of the Streamer.bot integration** (user: "nobody uses it" — both testers are on the
+native Twitch login). Native Twitch has handled redemptions, chat commands, reward management, and the
+overlay since 0.7.0, so the SB path was pure maintenance tax (a second copy of the pull/variant/tier
+logic) and muddied the "no code to paste" story.
+
+**Removed:**
+- `streamerbot-actions/` (all templates) and `tools/package/package-files/STREAMERBOT ACTIONS.txt`.
+- `GetStreamerBotSetup()` + `GenerateActionSource()` + `EscapeCSharp()` + `integrationVersion` from
+  `CircuitService.Core.cs`; the `/api/setup` endpoint and `--actions`/action-folder resolution from
+  `Program.cs` (the `CircuitService` ctor no longer takes `actionPath`; `RuntimeOptions.ActionPath` gone).
+- Admin UI (`app.js` + `index.html`): the Streamer.bot Setup `<section>`, the nav button,
+  `generateStreamerBotSetup` / `renderStreamerBotSetup` / `copyGeneratedCode`, `setupBundle`, all call
+  sites, the first-run "Prefer Streamer.bot?" notices, and the now-dead `.setup-*` CSS in `styles.css`.
+- Smoke tests: the generated-C# assertions + the orphaned `GetBraceDepth` helper; the test now takes
+  one arg (`<source-data-path>`), no action path.
+- Installer: `Build-CircuitOSPackage.ps1` no longer bundles the Streamerbot Actions folder or the
+  `streamerbotIntegrationVersion` manifest field, and the redeem-C# release validation is dropped.
+  `START HERE.txt` / `UPDATE README.txt` / `OBS SETUP.txt` rewritten to native Twitch. `--actions`
+  dropped from `start-circuitos.vbs` and `start-admin.vbs`.
+
+**Reframed, not removed:** the shared engines are the native implementation now — PullEngine /
+RedemptionEngine / CommandEngine / IDataStore / Core.cs header comments no longer describe themselves as
+"ported from / mirroring the Streamer.bot action."
+
+**Docs:** split `distribution-and-streamerbot-setup.md` → `installation-and-updates.md` (SB half
+dropped, added a native "Go Live On Twitch" section; README link updated). De-SB'd README
+(intro/features/versioning/roadmap/important-files), the command/feature guides (catalog-commands,
+collection-command, leaderboard, salvage, featured-stream-boosts, obs-lower-quarter), configuration-editor,
+versioning, dotnet-runtime, maintainer-quick-fixes, AGENTS.md, and the open Known Bug. **Left as
+historical:** all `docs/patch-notes/*`, `HANDOFF-archive.md`, `UX.md` punch-list, `0.7-cloud-foundation.md`
+(design-era doc), and the 0.6 roadmap line — rewriting those would falsify the record.
+
+**Deliberately left (flagged for a follow-up):** `tools/admin/CircuitAdmin.ps1` — the legacy PowerShell
+emergency fallback (not shipped, not built; launched only by the `.cmd` wrappers) still carries its own
+copy of the SB generator. Frozen dead code; candidate for a separate "retire the legacy PS admin" task.
+
+**Version → 0.7.2** in the (now **four**, not five) locations: `csproj`, `Program.cs` `/api/health`,
+`CircuitService.Modules.cs` `circuitosVersion`, `README.md`. `integrationVersion` in Core.cs is gone
+with the SB feature it versioned. `docs/patch-notes/v0.7.2.md` added.
+
+**Validation (all green):** `dotnet build` of the runtime + smoke-tests projects (0 warnings, 0 errors);
+smoke tests pass (`-- data`, single arg) covering first-run, active-profile collisions, Twitch reward
+persistence, runtime dispatch, pull/redemption/command engines, Appwrite/Twitch loaders, backup
+retention; admin UI loaded headless in preview — no console errors, `app.js` executes, version footer
+reads **0.7.2**, no Streamer.bot nav/section, "Twitch" nav present. **No git commit/tag yet** (awaiting user).
 
 ### 2026-07-01 — Claude (claude-opus-4-8) — Roadmap re-worked (README, no code)
 

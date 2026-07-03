@@ -1,7 +1,7 @@
 # Featured Stream Boosts
 
-The redemption action reads `featured-boost.json` from the active CircuitOS
-`Data` folder configured in the generated Streamer.bot action.
+CircuitOS reads `featured-boost.json` from the active `Data` folder when applying
+a redemption.
 
 Normal odds remain active when the file is missing or `enabled` is `false`.
 

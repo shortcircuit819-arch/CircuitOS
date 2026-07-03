@@ -4,22 +4,20 @@ using System.Text.Json.Nodes;
 
 namespace CircuitOS.Runtime;
 
-// Shared chat-command logic, the read/query counterpart to RedemptionEngine. Ported from the
-// generated Streamer.bot command actions so the native Twitch path, Streamer.bot, and MixItUp
-// answer commands identically:
-//   - StreamerbotCatalogCommands.txt → Inventory, Missing, Duplicates, Balance, Leaderboard
-//   - StreamerbotCollection.txt       → CollectionDetail
-//   - StreamerbotSalvage.txt          → Salvage (the one WRITE command)
+// Shared chat-command logic, the read/query counterpart to RedemptionEngine. Answers the native
+// Twitch chat commands:
+//   - Inventory, Missing, Duplicates, Balance, Leaderboard
+//   - CollectionDetail
+//   - Salvage (the one WRITE command)
 //
-// The actions hand-parse JSON (they intentionally avoid Newtonsoft); here we reimplement the
-// same behavior cleanly over System.Text.Json.Nodes. Read commands return the chat line(s) to
-// send (with the same ~440-char segmentation). Salvage mutates the inventory in place and
+// Implemented over System.Text.Json.Nodes. Read commands return the chat line(s) to
+// send (with ~440-char segmentation). Salvage mutates the inventory in place and
 // reports what to persist + say. Configurable wording (terminology + message templates) comes
 // in via CommandContext so the engine stays game-agnostic; the caller builds it from the profile.
 //
-// NOTE: the wallet currency is stored under the fixed key "scrap" (matching the actions and the
-// saved inventory); CommandContext.CurrencyName is only the display label. Legacy salvageValue
-// fallbacks (basic/power/advanced/broken/quantum) mirror the action for un-upgraded catalogs.
+// NOTE: the wallet currency is stored under the fixed key "scrap" (matching the saved
+// inventory); CommandContext.CurrencyName is only the display label. Legacy salvageValue
+// fallbacks (basic/power/advanced/broken/quantum) are parity shims for un-upgraded catalogs.
 internal sealed record CommandContext(
     string GameName,
     string ItemSingular,
