@@ -106,14 +106,47 @@ static void TestCollectionPacks(CircuitService service, IDataStore store)
 {
     store.SwitchProfile("default");
 
+    // Add an event collection so we can prove events never travel (single share or share-all).
+    var catalog = store.ReadProfileData("default", DataKeys.Catalog) ?? throw new InvalidOperationException("No catalog.");
+    var collections = catalog["collections"] as JsonObject ?? throw new InvalidOperationException("No collections.");
+    collections["limited"] = new JsonObject
+    {
+        ["displayName"] = "Limited Event",
+        ["type"] = "event",
+        ["weight"] = 50,
+        ["salvageValue"] = 2,
+        ["enabled"] = false,
+        ["parts"] = new JsonArray { new JsonObject { ["id"] = "limited_x", ["name"] = "X" } }
+    };
+    // A second permanent collection so "share all" is genuinely multi-collection.
+    collections["extra"] = new JsonObject
+    {
+        ["displayName"] = "Extra Collection",
+        ["type"] = "permanent",
+        ["weight"] = 30,
+        ["salvageValue"] = 1,
+        ["parts"] = new JsonArray { new JsonObject { ["id"] = "extra_a", ["name"] = "A" } }
+    };
+    store.WriteProfileData("default", DataKeys.Catalog, catalog);
+
     var export = service.ExportCollectionPack("starter");
     Require(export.Status == 200, "Collection pack export should succeed for an existing collection.");
     var pack = export.Body;
     Require(pack["manifest"]?["format"]?.ToString() == "circuitcollection", "Pack manifest format should be circuitcollection.");
+    Require(pack["collections"] is JsonObject sc && sc.Count == 1 && sc["starter"] is not null, "Single pack should carry exactly the shared collection.");
     var packProfile = pack["profile"] as JsonObject;
     Require(packProfile is not null && packProfile["colors"] is null, "Pack must not carry the sharer's colors (theme is the importer's).");
     Require(packProfile!["commands"] is JsonObject, "Pack must carry commands.");
+
+    // Events can't be shared, and share-all excludes them.
+    Require(service.ExportCollectionPack("limited").Status != 200, "Exporting an event collection should fail.");
     Require(service.ExportCollectionPack("does-not-exist").Status != 200, "Exporting an unknown collection should fail.");
+    var all = service.ExportCollectionPack("*");
+    Require(all.Status == 200, "Share-all export should succeed.");
+    var allCollections = all.Body["collections"] as JsonObject;
+    Require(allCollections is { Count: 2 } && allCollections["starter"] is not null && allCollections["extra"] is not null && allCollections["limited"] is null,
+        "Share-all must include ALL permanent collections and exclude events.");
+    Require(all.Body["manifest"]?["collectionCount"]?.GetValue<int>() == 2, "collectionCount should match the shared set.");
 
     var imp1 = service.ImportCollectionPack(pack, "Shared Starter");
     Require(imp1.Status == 200, "Collection pack import should succeed.");
@@ -121,16 +154,22 @@ static void TestCollectionPacks(CircuitService service, IDataStore store)
     Require(imp1.Body["name"]?.ToString() == "Shared Starter", "Imported pack should use the requested name.");
     var importedCollections = store.ReadProfileData(id1, DataKeys.Catalog)?["collections"] as JsonObject;
     Require(importedCollections is { Count: 1 } && importedCollections["starter"] is not null,
-        "Imported pack profile should contain exactly the shared collection.");
+        "Imported single pack should contain exactly the shared collection.");
+
+    var impAll = service.ImportCollectionPack(all.Body, "Shared All");
+    Require(impAll.Status == 200, "Share-all import should succeed.");
+    var allImportedId = impAll.Body["id"]?.ToString() ?? "";
+    var allImported = store.ReadProfileData(allImportedId, DataKeys.Catalog)?["collections"] as JsonObject;
+    Require(allImported is { Count: 2 } && allImported["starter"] is not null && allImported["extra"] is not null && allImported["limited"] is null,
+        "Imported share-all pack should carry all permanent collections only.");
 
     var imp2 = service.ImportCollectionPack(pack, "Shared Starter");
-    Require(imp2.Status == 200, "Second pack import should succeed.");
     Require(imp2.Body["name"]?.ToString() == "Shared Starter (2)", "Duplicate import name should de-dupe to 'Shared Starter (2)'.");
 
-    try { store.DeleteProfile(id1); } catch { }
-    try { store.DeleteProfile(imp2.Body["id"]?.ToString() ?? ""); } catch { }
+    foreach (var cleanupId in new[] { id1, allImportedId, imp2.Body["id"]?.ToString() ?? "" })
+        try { store.DeleteProfile(cleanupId); } catch { }
 
-    Console.WriteLine("Collection packs: export strips theme, import builds a themed single-collection profile, and duplicate names de-dupe.");
+    Console.WriteLine("Collection packs: single + share-all round-trip, events never travel, and duplicate names de-dupe.");
 }
 
 // Verifies the active-set model (A) and command-collision guard (B): the default profile is live

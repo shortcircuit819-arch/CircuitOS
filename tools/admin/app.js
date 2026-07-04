@@ -1837,8 +1837,11 @@ async function importModule(file) {
 
 async function importCollectionPack(pack) {
   const suggested = pack.manifest?.name || "Imported Collection";
-  const collLabel = pack.manifest?.collectionName ? ` "${pack.manifest.collectionName}"` : "";
-  const name = window.prompt(`Import collection${collLabel} as a new profile that uses your current theme.\n\nName the new profile:`, suggested);
+  const count = pack.manifest?.collectionCount || 1;
+  const what = count > 1
+    ? `${count} collections`
+    : (pack.manifest?.collectionName ? `collection "${pack.manifest.collectionName}"` : "collection");
+  const name = window.prompt(`Import ${what} as a new profile that uses your current theme.\n\nName the new profile:`, suggested);
   if (name === null) return;
   const response = await fetch("/api/collection-pack/import", {
     method: "POST",
@@ -1851,9 +1854,10 @@ async function importCollectionPack(pack) {
   showNotice(`Collection pack imported as profile "${result.name}". Switch to it from the Profiles view.`, "success");
 }
 
-async function shareCollection(key, displayName) {
+async function shareCollection(key, label) {
+  const all = key === "*";
   try {
-    if (dirty && !window.confirm("You have unsaved catalog changes. Share the last saved version of this collection?")) return;
+    if (dirty && !window.confirm("You have unsaved catalog changes. Share the last saved version?")) return;
     const response = await fetch("/api/collection-pack/export", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1861,7 +1865,8 @@ async function shareCollection(key, displayName) {
     });
     const result = await response.json();
     if (!response.ok) throw new Error((result.errors || ["Share failed."]).join(" "));
-    const slug = (displayName || key).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "collection";
+    const base = all ? `${systemProfile.gameName || "collections"}-all` : (label || key);
+    const slug = base.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "collection";
     const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -1869,7 +1874,8 @@ async function shareCollection(key, displayName) {
     anchor.download = `${slug}.circuitcollection`;
     anchor.click();
     URL.revokeObjectURL(url);
-    showNotice(`Exported "${displayName || key}" as a collection pack.`, "success");
+    const count = result.manifest?.collectionCount || 1;
+    showNotice(all ? `Exported all ${count} permanent ${count === 1 ? "collection" : "collections"} as a pack.` : `Exported "${label || key}" as a collection pack.`, "success");
   } catch (error) {
     showNotice(error.message, "error");
   }
@@ -3142,11 +3148,13 @@ function buildCollectionCard(collection, query = "") {
     renderCollectionList(value.type);
   });
   heading.append(toggle);
-  const share = element("button", "button secondary small", "Share");
-  share.type = "button";
-  share.title = "Export this collection as a shareable .circuitcollection pack";
-  share.addEventListener("click", () => shareCollection(collection.key, value.displayName || collection.key));
-  heading.append(share);
+  if (value.type !== "event") {
+    const share = element("button", "button secondary small", "Share");
+    share.type = "button";
+    share.title = "Export this collection as a shareable .circuitcollection pack";
+    share.addEventListener("click", () => shareCollection(collection.key, value.displayName || collection.key));
+    heading.append(share);
+  }
   const remove = element("button", "button danger small", value.type === "event" ? "Delete Event" : "Delete");
   remove.addEventListener("click", () => {
     if (value.type !== "event" && collections.filter(item => item.value.type !== "event").length <= 1) {
@@ -4477,6 +4485,7 @@ document.getElementById("collectionImportMode").addEventListener("change", () =>
   renderCollectionImportPreview();
 });
 document.getElementById("addCollectionButton").addEventListener("click", () => addCollection("permanent"));
+document.getElementById("shareAllCollectionsButton").addEventListener("click", () => shareCollection("*", systemProfile.gameName));
 document.getElementById("addEventButton").addEventListener("click", () => addCollection("event"));
 document.getElementById("importEventButton").addEventListener("click", openEventImport);
 document.getElementById("closeEventImportButton").addEventListener("click", closeEventImport);

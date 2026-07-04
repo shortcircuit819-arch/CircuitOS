@@ -24,7 +24,7 @@ internal sealed partial class CircuitService
                 ["format"] = "circuitmodule",
                 ["version"] = "1",
                 ["name"] = profileName,
-                ["circuitosVersion"] = "0.7.3",
+                ["circuitosVersion"] = "0.7.3.1",
                 ["exportedAt"] = DateTimeOffset.UtcNow.ToString("O")
             },
             ["catalog"] = JsonNode.Parse(catalog.ToJsonString())!
@@ -83,22 +83,42 @@ internal sealed partial class CircuitService
     // brand, and overlay, so a shared collection "wears the importer's skin". Contrast with a
     // .circuitmodule, which is a whole profile (every collection + the sharer's branding).
 
+    // collectionKey = a specific key to share one collection, or "" / "*" to share ALL permanent
+    // collections at once. Event collections are stream-specific (their date windows mean nothing to a
+    // recipient), so they never travel — not singly, not in "share all".
     public ServiceResult ExportCollectionPack(string collectionKey)
     {
         collectionKey = (collectionKey ?? "").Trim();
-        if (string.IsNullOrWhiteSpace(collectionKey)) return Error(["Choose a collection to share."]);
+        var shareAll = collectionKey is "" or "*";
 
         var catalog = _store.TryRead(DataKeys.Catalog);
         if (catalog is null) return Error(["No catalog found in the active profile. Complete first-run setup before sharing."]);
         var collections = JsonUtil.Object(catalog, "collections");
-        if (collections?[collectionKey] is not JsonObject collection)
-            return Error([$"Collection '{collectionKey}' was not found. Save the catalog first if you just added it."]);
+        if (collections is null || collections.Count == 0) return Error(["There are no collections to share."]);
+
+        var shared = new JsonObject();
+        string? singleName = null;
+        if (shareAll)
+        {
+            foreach (var (key, node) in collections)
+                if (node is JsonObject c && !string.Equals(JsonUtil.String(c, "type"), "event", StringComparison.OrdinalIgnoreCase))
+                    shared[key] = c.DeepClone();
+            if (shared.Count == 0) return Error(["There are no permanent collections to share — event collections stay on your channel."]);
+        }
+        else
+        {
+            if (collections[collectionKey] is not JsonObject collection)
+                return Error([$"Collection '{collectionKey}' was not found. Save the catalog first if you just added it."]);
+            if (string.Equals(JsonUtil.String(collection, "type"), "event", StringComparison.OrdinalIgnoreCase))
+                return Error(["Event collections are stream-specific and can't be shared."]);
+            shared[collectionKey] = collection.DeepClone();
+            singleName = JsonUtil.String(collection, "displayName").Trim();
+            if (string.IsNullOrWhiteSpace(singleName)) singleName = collectionKey;
+        }
 
         var profile = _store.TryRead(DataKeys.Profile) ?? DefaultProfile();
         var gameName = JsonUtil.String(profile, "gameName").Trim();
         if (string.IsNullOrWhiteSpace(gameName)) gameName = "Shared Collection";
-        var collectionName = JsonUtil.String(collection, "displayName").Trim();
-        if (string.IsNullOrWhiteSpace(collectionName)) collectionName = collectionKey;
 
         // Carry the flavor, strip the skin: colors/brandKicker/adminName come from whoever imports it.
         var packProfile = (JsonObject)profile.DeepClone();
@@ -106,20 +126,25 @@ internal sealed partial class CircuitService
         packProfile.Remove("brandKicker");
         packProfile.Remove("adminName");
 
+        var manifest = new JsonObject
+        {
+            ["format"] = "circuitcollection",
+            ["version"] = "1",
+            ["name"] = gameName,
+            ["collectionCount"] = shared.Count,
+            ["circuitosVersion"] = "0.7.3.1",
+            ["exportedAt"] = DateTimeOffset.UtcNow.ToString("O")
+        };
+        if (!shareAll)
+        {
+            manifest["collectionKey"] = collectionKey;
+            manifest["collectionName"] = singleName;
+        }
+
         return Ok(new JsonObject
         {
-            ["manifest"] = new JsonObject
-            {
-                ["format"] = "circuitcollection",
-                ["version"] = "1",
-                ["name"] = gameName,
-                ["collectionKey"] = collectionKey,
-                ["collectionName"] = collectionName,
-                ["circuitosVersion"] = "0.7.3",
-                ["exportedAt"] = DateTimeOffset.UtcNow.ToString("O")
-            },
-            ["collectionKey"] = collectionKey,
-            ["collection"] = collection.DeepClone(),
+            ["manifest"] = manifest,
+            ["collections"] = shared,
             ["profile"] = packProfile
         });
     }
@@ -132,12 +157,16 @@ internal sealed partial class CircuitService
         if (manifest["version"]?.ToString() != "1")
             return Error([$"Unsupported collection pack version \"{manifest["version"]?.ToString()}\"."]);
 
-        if (pack["collection"] is not JsonObject collection)
+        var packCollections = pack["collections"] as JsonObject;
+        if (packCollections is null && pack["collection"] is JsonObject legacySingle)
+        {
+            // Backward-compatible with the first pack shape (single "collection" + "collectionKey").
+            var legacyKey = JsonUtil.String(pack, "collectionKey").Trim();
+            if (string.IsNullOrWhiteSpace(legacyKey)) legacyKey = "shared";
+            packCollections = new JsonObject { [legacyKey] = legacySingle.DeepClone() };
+        }
+        if (packCollections is null || packCollections.Count == 0)
             return Error(["Collection pack is missing its collection data."]);
-
-        var collectionKey = JsonUtil.String(pack, "collectionKey").Trim();
-        if (string.IsNullOrWhiteSpace(collectionKey)) collectionKey = JsonUtil.String(manifest, "collectionKey").Trim();
-        if (string.IsNullOrWhiteSpace(collectionKey)) collectionKey = "shared";
 
         var name = (requestedName ?? "").Trim();
         if (string.IsNullOrWhiteSpace(name)) name = JsonUtil.String(manifest, "name").Trim();
@@ -157,10 +186,13 @@ internal sealed partial class CircuitService
         }
         var newProfile = NormalizeProfile(merged);
 
+        var importedCollections = new JsonObject();
+        foreach (var (key, node) in packCollections)
+            if (node is JsonObject c) importedCollections[key] = c.DeepClone();
         var newCatalog = new JsonObject
         {
             ["schemaVersion"] = 1,
-            ["collections"] = new JsonObject { [collectionKey] = collection.DeepClone() }
+            ["collections"] = importedCollections
         };
 
         var id = GenerateProfileId(name);

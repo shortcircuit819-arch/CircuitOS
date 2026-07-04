@@ -12,7 +12,7 @@ the end of every working session before stopping.
 |-------|-------|
 | Project | CircuitOS — configurable Twitch collection-game platform |
 | Default game | Circuit Components (electronics-themed) |
-| Current version | **0.7.3** (shipped — native Twitch is the single supported path; Streamer.bot retired in 0.7.2. Collection packs + import de-dupe in 0.7.3. Optional cloud, per-state overlay images, backup retention). Local mode is the default and unchanged. |
+| Current version | **0.7.3.1** (shipped — native Twitch is the single supported path; Streamer.bot retired in 0.7.2. Collection packs + import de-dupe in 0.7.3; share-all-collections in 0.7.3.1. Optional cloud, per-state overlay images, backup retention). Local mode is the default and unchanged. |
 | Phase | **0.7 — Native Twitch + Cloud Foundation — shipped (0.7.2 retired Streamer.bot).** Zero-config Twitch login (device flow, no dev account), CircuitOS-managed channel-point reward, native EventSub redemptions + chat commands + pull announcements. Settings page with an optional cloud data backend (bring-your-own Appwrite, safe fallback to local). Multiple live profiles, per-state overlay colors, shared PullEngine/RedemptionEngine/CommandEngine (smoke-tested), reliability/security hardening. Still ahead: Velopack + GitHub installer/updater (gated on creating the repo — `docs/updater-velopack-plan.md`), and a true *hosted* cloud (security/infra decision — `docs/feature-requests-analysis.md`). Deferred features: bot chat account, cross-profile currency (shops/2.0), per-state overlay images. |
 | Repo root | `C:\Dev\CircuitStreamSystem` |
 | Live data path | `C:\Users\nicho\Documents\CircuitOS\Data` (profiles under `Data\profiles\<id>`; active profile `circuit-components`) |
@@ -453,6 +453,27 @@ DataPath/
 ---
 
 ## Session Log
+
+### 2026-07-04 — Claude (claude-opus-4-8) — Share-all collection packs; cut 0.7.3.1
+
+Iteration on 0.7.3 collection packs: share the WHOLE set of permanent collections as one pack.
+- `CircuitService.Modules.cs`: `ExportCollectionPack` now takes a specific key OR `""`/`"*"` = all
+  permanent collections; the pack carries a `collections{}` map (one or many) instead of a single
+  `collection`. Event collections never travel — share-all skips `type==event`, single-share of an
+  event errors. `ImportCollectionPack` reads the `collections{}` map (backward-compatible with the
+  first single-collection shape). Manifest gains `collectionCount`.
+- UI: **Share All** button in the Collections toolbar (`shareCollection("*")`); the per-collection
+  Share button now only renders on permanent collections; import prompt says "N collections" for
+  multi-collection packs.
+- Test: `TestCollectionPacks` seeds 2 permanent + 1 event collection and asserts share-all bundles both
+  permanent collections, excludes the event, and the round-trip carries them; single share still = 1.
+
+**Version → 0.7.3.1** (four-part iteration on the collection-packs sub-feature).
+`docs/patch-notes/v0.7.3.1.md` added.
+
+**Validation (all green):** runtime + tests build 0/0; smoke tests pass incl. multi-collection
+share-all + event exclusion; admin UI verified in preview — Share All button present, export/import
+round-trip, single Share only on permanent cards, no console errors.
 
 ### 2026-07-04 — Claude (claude-opus-4-8) — Collection packs + import de-dupe; cut 0.7.3
 
