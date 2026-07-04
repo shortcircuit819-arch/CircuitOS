@@ -13,9 +13,6 @@ The silent launcher starts the self-contained .NET CircuitOS application. The
 Control Core opens in its own window without a command prompt or browser tab.
 Close the CircuitOS window to stop its private local server.
 
-The `.cmd` launchers remain compatibility wrappers. `CircuitAdmin.ps1` is
-retained only as a legacy fallback.
-
 ## Editable Configuration
 
 - Permanent collection names, keys, weights, and salvage values

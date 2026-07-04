@@ -1,8 +1,7 @@
 ## Known Bugs
 
 Open:
-- [Deferred, visual] Overview Pull Rates slider fill can drift slightly from the handle. Cosmetic;
-  skipped for now.
+- None currently.
 
 ---
 Fixed bugs are recorded in the version patch notes (docs/patch-notes/) and HANDOFF.md.

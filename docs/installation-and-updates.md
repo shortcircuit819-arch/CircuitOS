@@ -44,7 +44,6 @@ identity, terminology, and theme, but cannot replace the CircuitOS attribution.
 - `tools\admin\start-circuitos.vbs` is retained for repository development.
 - Distributed copies place `CircuitOS.exe` at the package root. It discovers
   the adjacent `App` and `Data` folders automatically.
-- The `.cmd` launchers are retained as compatibility wrappers.
 
 The portable starter inventory is empty. The electronics catalog and boost are
 examples that can be replaced in the editor.
@@ -56,8 +55,7 @@ locations.
 The published `CircuitOS.exe` is a self-contained Windows x64 application. A
 recipient does not need PowerShell execution-policy changes, a .NET SDK, or a
 separate .NET runtime. It uses the Microsoft Edge WebView2 Runtime included with
-current Windows and Microsoft Edge installations. `CircuitAdmin.ps1` is kept in
-the package only as an optional legacy fallback.
+current Windows and Microsoft Edge installations.
 
 Self-contained does not mean trusted. An unsigned new executable can still
 trigger reputation or antivirus warnings. Do not instruct recipients to disable

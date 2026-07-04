@@ -454,6 +454,25 @@ DataPath/
 
 ## Session Log
 
+### 2026-07-04 — Claude (claude-opus-4-8) — Polish & cleanup (no version bump)
+
+Housekeeping batched under 0.7.3.1 (no version change):
+- **Retired the legacy PowerShell admin.** Deleted `tools/admin/CircuitAdmin.ps1` and its two broken
+  `.cmd` wrappers (`tools/start-circuitos.cmd`, `tools/start-admin-portable.cmd` — they invoked
+  `%~dp0CircuitAdmin.ps1` = `tools/CircuitAdmin.ps1`, which never existed). The .NET runtime fully
+  supersedes it. De-referenced it in `dotnet-runtime.md`, `configuration-editor.md`, and
+  `installation-and-updates.md`, and rewrote `maintainer-quick-fixes.md` → "Run the UI Locally" to
+  launch the .NET app headless (`dotnet run … --headless --data … --ui tools\admin --port 8810`).
+- **Fixed the Pull Rates slider fill drift** (Known Bugs). `.rate-slider`'s fill gradient assumed a 6px
+  thumb, but the thumb is 6px + 1px border = 8px border-box (the `* { box-sizing }` reset doesn't reach
+  `::-webkit-slider-thumb`). Corrected the calc to `(100% - 8px) + 4px`; verified in preview that the
+  fill edge now equals the thumb center exactly (350.32px at ratio 0.74 on a 476px track). Known Bugs
+  open list is now empty.
+- **UX.md:** reviewed — every Tier 1–3 item is done; the one `[~]` (ALL-CAPS kickers) is a deliberate
+  keep. No changes needed.
+
+No C# changed (no rebuild/republish needed).
+
 ### 2026-07-04 — Claude (claude-opus-4-8) — Share-all collection packs; cut 0.7.3.1
 
 Iteration on 0.7.3 collection packs: share the WHOLE set of permanent collections as one pack.

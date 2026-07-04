@@ -145,7 +145,7 @@ p { color: var(--muted); }
 
 .rate-chart { display: grid; gap: 20px; margin-top: 24px; }
 .rate-row { display: grid; grid-template-columns: 140px 1fr 56px; align-items: center; gap: 12px; }
-.rate-slider { --fill: 0; -webkit-appearance: none; appearance: none; width: 100%; height: 8px; border: 1px solid var(--red); border-radius: 4px; background: linear-gradient(90deg, var(--red) 0 calc(var(--fill) * (100% - 6px) + 3px), #03111e calc(var(--fill) * (100% - 6px) + 3px) 100%); background-clip: padding-box; cursor: ew-resize; outline: none; }
+.rate-slider { --fill: 0; -webkit-appearance: none; appearance: none; width: 100%; height: 8px; border: 1px solid var(--red); border-radius: 4px; background: linear-gradient(90deg, var(--red) 0 calc(var(--fill) * (100% - 8px) + 4px), #03111e calc(var(--fill) * (100% - 8px) + 4px) 100%); background-clip: padding-box; cursor: ew-resize; outline: none; }
 .rate-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 6px; height: 18px; margin-top: -6px; border: 1px solid var(--text); border-radius: 2px; background: var(--text); box-shadow: 0 0 6px rgba(0,0,0,0.55); cursor: ew-resize; }
 .rate-slider::-moz-range-thumb { width: 6px; height: 18px; border: 1px solid var(--text); border-radius: 2px; background: var(--text); cursor: ew-resize; }
 .rate-name { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }

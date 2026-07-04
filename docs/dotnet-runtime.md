@@ -30,7 +30,7 @@ It accepts these command-line options:
 
 Use `start-admin.vbs` for the owner's live data or `start-circuitos.vbs` for a
 portable package. These launchers start CircuitOS without displaying a command
-window. The `.cmd` launchers remain as compatibility wrappers.
+window.
 
 ## Build
 
@@ -64,8 +64,7 @@ the Evergreen Bootstrapper from Microsoft's site.
 
 The .NET runtime preserves the existing `/api/config`, `/api/profile`,
 `/api/analytics`, `/api/roles`, `/api/backups`, `/api/save`, and `/api/health`
-contracts. `CircuitAdmin.ps1` is retained as an emergency fallback
-but is no longer the primary runtime.
+contracts.
 
 Inventory remains read-only to the administration runtime. Catalog, boost,
 profile, and role-acknowledgement writes continue using validation, temporary

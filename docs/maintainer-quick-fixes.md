@@ -10,7 +10,6 @@ simple browser-side behavior, documentation, and narrowly understood bug fixes.
 - `tools/admin/styles.css`: layout, colors, spacing, scrolling, and responsive UI
 - `tools/admin/app.js`: browser behavior, rendering, validation, and API calls
 - `tools/runtime/`: the packaged Windows application's .NET source
-- `tools/admin/CircuitAdmin.ps1`: legacy local server and matching API behavior
 - `tools/runtime.tests/Program.cs`: first-run and engine smoke tests
 - `tools/package/Build-CircuitOSPackage.ps1`: validated release packaging
 - `data/`: starter data only; never substitute a viewer's live inventory here
@@ -49,14 +48,15 @@ The disposable inventory contains no live viewer data.
 
 ## Run the UI Locally
 
-Start the legacy local server without automatically opening a browser:
+Start the .NET app in headless mode — it serves the API and the static UI
+without opening the CircuitOS window:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File tools\admin\CircuitAdmin.ps1 `
-  -DataPath tools\admin\.manual-test-data `
-  -Port 8810 `
-  -NoBrowser
+dotnet run --project tools\runtime\CircuitOS.Runtime.csproj -c Release -- `
+  --headless `
+  --data tools\admin\.manual-test-data `
+  --ui tools\admin `
+  --port 8810
 ```
 
 Open `http://127.0.0.1:8810/` yourself. Keep the PowerShell window open while
@@ -77,20 +77,6 @@ Useful syntax check for `app.js` when Node.js is installed:
 ```powershell
 node --check tools\admin\app.js
 ```
-
-Useful PowerShell syntax check:
-
-```powershell
-$errors = $null
-[System.Management.Automation.Language.Parser]::ParseFile(
-  (Resolve-Path tools\admin\CircuitAdmin.ps1),
-  [ref]$null,
-  [ref]$errors
-) | Out-Null
-$errors
-```
-
-No output from `$errors` means the script parsed successfully.
 
 ## Small JavaScript Fixes
 
