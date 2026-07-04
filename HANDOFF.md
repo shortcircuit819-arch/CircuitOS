@@ -463,11 +463,12 @@ Housekeeping batched under 0.7.3.1 (no version change):
   supersedes it. De-referenced it in `dotnet-runtime.md`, `configuration-editor.md`, and
   `installation-and-updates.md`, and rewrote `maintainer-quick-fixes.md` → "Run the UI Locally" to
   launch the .NET app headless (`dotnet run … --headless --data … --ui tools\admin --port 8810`).
-- **Fixed the Pull Rates slider fill drift** (Known Bugs). `.rate-slider`'s fill gradient assumed a 6px
-  thumb, but the thumb is 6px + 1px border = 8px border-box (the `* { box-sizing }` reset doesn't reach
-  `::-webkit-slider-thumb`). Corrected the calc to `(100% - 8px) + 4px`; verified in preview that the
-  fill edge now equals the thumb center exactly (350.32px at ratio 0.74 on a 476px track). Known Bugs
-  open list is now empty.
+- **Fixed the Pull Rates slider fill drift** (Known Bugs). First tried correcting the fill-gradient
+  calc for the thumb's border-box width — that still drifted (predicting Chromium's native range-thumb
+  geometry is unreliable; commit 674dfeb). Real fix (70a9162): replaced the gradient with the thumb's
+  own **box-shadow** clipped by `overflow:hidden`, so the fill is tied to the handle by construction and
+  can't drift at any position. Verified visually in preview at 60% and max — the handle sits exactly at
+  the fill's leading edge. Known Bugs open list is now empty.
 - **UX.md:** reviewed — every Tier 1–3 item is done; the one `[~]` (ALL-CAPS kickers) is a deliberate
   keep. No changes needed.
 
