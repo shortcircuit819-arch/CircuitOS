@@ -5,7 +5,7 @@ integration — no code to paste**. Circuit Components is the included starter
 profile, while the editor supports custom games, terminology, collections,
 themes, messages, events, and currencies.
 
-Current application version: **0.7.2**
+Current application version: **0.7.3**
 
 ## Current Features
 
@@ -45,6 +45,7 @@ Current application version: **0.7.2**
 - Multiple independent game profiles — each with its own catalog, inventory, branding, and overlay config
 - Switch active profiles from the admin panel without mixing data
 - Export any active profile as a portable `.circuitmodule` bundle; import modules as new profiles
+- Share a single collection as a `.circuitcollection` pack — it imports as a new profile that adopts your own theme
 
 ## Versioning Policy
 
@@ -108,7 +109,7 @@ and this `README.md`.
 - Backward-compatible catalog rules — `variants` and `tiers` are optional and
   absent collections behave exactly as before ✓
 
-### 0.7 - Native Twitch + Cloud Foundation *(shipped — 0.7.2)*
+### 0.7 - Native Twitch + Cloud Foundation *(shipped — 0.7.3)*
 
 *Native Twitch integration, plus the foundation for cloud sync. Local storage remains the default.*
 
@@ -119,7 +120,8 @@ no code to paste. A **Settings page** adds an optional cloud data backend (bring
 keyed to your Twitch id) with a safe fallback to local. Multiple simultaneously-live profiles,
 per-pull-state overlay colors and images, backup retention, shared pull/redemption/command engines,
 and reward create/attach/sync/edit/delete all landed. Streamer.bot was retired in 0.7.2 (native is
-the only supported path). See `docs/patch-notes/v0.7.1.md` and `docs/patch-notes/v0.7.2.md`.
+the only supported path), and 0.7.3 added shareable collection packs (`.circuitcollection`) plus
+import name de-duplication. See `docs/patch-notes/v0.7.1.md`, `v0.7.2.md`, and `v0.7.3.md`.
 
 - Native Twitch: zero-config login, reward management, EventSub redemptions, chat commands, and chat
   announcements — no code to paste ✓
@@ -221,11 +223,3 @@ For a safe manual UI and patch-fix workflow, see
 
 See `docs/installation-and-updates.md` for installation and update
 instructions, and `docs/release-signing.md` for the signing workflow.
-
-
-
-
-
-
-#   C i r c u i t O S  
- 

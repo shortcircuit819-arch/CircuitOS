@@ -12,7 +12,7 @@ the end of every working session before stopping.
 |-------|-------|
 | Project | CircuitOS — configurable Twitch collection-game platform |
 | Default game | Circuit Components (electronics-themed) |
-| Current version | **0.7.2** (shipped — native Twitch is the single supported path; Streamer.bot integration retired. Optional cloud, per-state overlay images, backup retention). Local mode is the default and unchanged. |
+| Current version | **0.7.3** (shipped — native Twitch is the single supported path; Streamer.bot retired in 0.7.2. Collection packs + import de-dupe in 0.7.3. Optional cloud, per-state overlay images, backup retention). Local mode is the default and unchanged. |
 | Phase | **0.7 — Native Twitch + Cloud Foundation — shipped (0.7.2 retired Streamer.bot).** Zero-config Twitch login (device flow, no dev account), CircuitOS-managed channel-point reward, native EventSub redemptions + chat commands + pull announcements. Settings page with an optional cloud data backend (bring-your-own Appwrite, safe fallback to local). Multiple live profiles, per-state overlay colors, shared PullEngine/RedemptionEngine/CommandEngine (smoke-tested), reliability/security hardening. Still ahead: Velopack + GitHub installer/updater (gated on creating the repo — `docs/updater-velopack-plan.md`), and a true *hosted* cloud (security/infra decision — `docs/feature-requests-analysis.md`). Deferred features: bot chat account, cross-profile currency (shops/2.0), per-state overlay images. |
 | Repo root | `C:\Dev\CircuitStreamSystem` |
 | Live data path | `C:\Users\nicho\Documents\CircuitOS\Data` (profiles under `Data\profiles\<id>`; active profile `circuit-components`) |
@@ -453,6 +453,43 @@ DataPath/
 ---
 
 ## Session Log
+
+### 2026-07-04 — Claude (claude-opus-4-8) — Collection packs + import de-dupe; cut 0.7.3
+
+**Collection packs (`.circuitcollection`)** — share ONE collection as a themeable mini-game.
+- `CircuitService.Modules.cs`: `ExportCollectionPack(collectionKey)` bundles one collection + the
+  profile's flavor (terminology/commands/messages/tuning) but strips `colors`/`brandKicker`/`adminName`.
+  `ImportCollectionPack(pack, name?)` creates a NEW profile from the pack that adopts the importer's
+  own colors/brand + overlay config; single-collection catalog; deduped, editable name.
+- `POST /api/collection-pack/export` (body `{collectionKey}`) and `/import` (body `{pack, name}`) in Program.cs.
+- UI: per-collection **Share** button in `buildCollectionCard` → downloads `.circuitcollection`.
+  `importModule` now auto-detects `manifest.format === "circuitcollection"` and routes to
+  `importCollectionPack` with an editable-name `prompt` (pre-filled with the sharer's game name). Import
+  file input accepts `.circuitcollection`; button relabelled "Import Module / Pack".
+
+**Import name de-dupe** — `UniqueProfileName` (Profiles.cs) appends " (2)", " (3)" … on name collision;
+wired into both `ImportModule` and `ImportCollectionPack`. Kills the duplicate-twin footgun.
+
+**Delete hint** — the active profile card shows *"Switch to another profile to delete this one"* (it
+intentionally has no Delete button). Tiny `.pc-delete-hint` style added.
+
+**README fix** — stripped a corrupted UTF-16 tail (13 NUL bytes) that had been committed with 0.7.2
+(a stray `Out-File`-style append from an earlier session).
+
+**Version → 0.7.3** in all four locations (csproj, `/api/health`, `Modules.cs` `circuitosVersion`,
+README). New smoke test `TestCollectionPacks` — and note the tests csproj now also links
+`CircuitService.Modules.cs` (it didn't before, which is why the pack methods weren't visible at first).
+`docs/patch-notes/v0.7.3.md` added.
+
+**Validation (all green):** runtime + tests build 0/0; smoke tests pass incl. the new pack round-trip +
+de-dupe; admin UI verified live in preview — export strips theme, import builds a themed
+single-collection profile ("Basic Pack"), duplicate import de-dupes to "Basic Pack (2)", Share button +
+delete hint render, no console errors.
+
+**Design decisions (for reference):** terminology travels with the pack (it's the collection's flavor);
+only the theme (colors/brand/overlay) is the importer's. A pack is a new profile, not a merge. Event
+collections currently carry as-is (importer can edit). Online pack *discovery/marketplace* remains
+cloud-gated (roadmap 1.6+); file-based sharing is the near-term piece that shipped here.
 
 ### 2026-07-02 — Claude (claude-opus-4-8) — Retired Streamer.bot; cut 0.7.2
 

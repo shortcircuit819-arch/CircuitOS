@@ -87,8 +87,9 @@ try
     TestAppwriteOptions();
     TestTwitchOptions();
     TestBackupRetention();
+    TestCollectionPacks(service, store);
 
-    Console.WriteLine("Smoke tests passed: first run is safe, the pull + redemption + command engines behave, and the Appwrite + Twitch config loaders behave.");
+    Console.WriteLine("Smoke tests passed: first run is safe, the pull + redemption + command engines behave, collection packs round-trip, and the Appwrite + Twitch config loaders behave.");
     return 0;
 }
 finally
@@ -99,6 +100,37 @@ finally
 static void Require(bool condition, string message)
 {
     if (!condition) throw new InvalidOperationException(message);
+}
+
+static void TestCollectionPacks(CircuitService service, IDataStore store)
+{
+    store.SwitchProfile("default");
+
+    var export = service.ExportCollectionPack("starter");
+    Require(export.Status == 200, "Collection pack export should succeed for an existing collection.");
+    var pack = export.Body;
+    Require(pack["manifest"]?["format"]?.ToString() == "circuitcollection", "Pack manifest format should be circuitcollection.");
+    var packProfile = pack["profile"] as JsonObject;
+    Require(packProfile is not null && packProfile["colors"] is null, "Pack must not carry the sharer's colors (theme is the importer's).");
+    Require(packProfile!["commands"] is JsonObject, "Pack must carry commands.");
+    Require(service.ExportCollectionPack("does-not-exist").Status != 200, "Exporting an unknown collection should fail.");
+
+    var imp1 = service.ImportCollectionPack(pack, "Shared Starter");
+    Require(imp1.Status == 200, "Collection pack import should succeed.");
+    var id1 = imp1.Body["id"]?.ToString() ?? throw new InvalidOperationException("Import returned no id.");
+    Require(imp1.Body["name"]?.ToString() == "Shared Starter", "Imported pack should use the requested name.");
+    var importedCollections = store.ReadProfileData(id1, DataKeys.Catalog)?["collections"] as JsonObject;
+    Require(importedCollections is { Count: 1 } && importedCollections["starter"] is not null,
+        "Imported pack profile should contain exactly the shared collection.");
+
+    var imp2 = service.ImportCollectionPack(pack, "Shared Starter");
+    Require(imp2.Status == 200, "Second pack import should succeed.");
+    Require(imp2.Body["name"]?.ToString() == "Shared Starter (2)", "Duplicate import name should de-dupe to 'Shared Starter (2)'.");
+
+    try { store.DeleteProfile(id1); } catch { }
+    try { store.DeleteProfile(imp2.Body["id"]?.ToString() ?? ""); } catch { }
+
+    Console.WriteLine("Collection packs: export strips theme, import builds a themed single-collection profile, and duplicate names de-dupe.");
 }
 
 // Verifies the active-set model (A) and command-collision guard (B): the default profile is live

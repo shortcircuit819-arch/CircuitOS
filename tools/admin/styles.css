@@ -637,7 +637,8 @@ input.invalid { border-color: var(--danger); }
 .pc-name { margin: 10px 0 4px; font-size: 17px; font-weight: 700; }
 .pc-status { margin-bottom: 6px; color: var(--text); font-size: 12px; font-weight: 600; }
 .pc-meta { color: var(--muted); font-size: 12px; }
-.pc-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.pc-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; align-items: center; }
+.pc-delete-hint { color: var(--muted); font-size: 11px; font-style: italic; }
 
 /* ── Profile switch confirm modal ────────────────── */
 .confirm-overlay { position: fixed; inset: 0; z-index: 1200; display: grid; place-items: center; padding: 28px; background: rgba(0, 7, 14, 0.88); backdrop-filter: blur(8px); }

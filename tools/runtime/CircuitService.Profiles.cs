@@ -106,6 +106,23 @@ internal sealed partial class CircuitService
         return id;
     }
 
+    // Makes the DISPLAY name unique among existing profiles by appending " (2)", " (3)", … .
+    // GenerateProfileId already makes the id unique; this keeps the visible name unambiguous so an
+    // import can never produce two identically-labelled profiles (the duplicate-twin footgun).
+    private string UniqueProfileName(string name)
+    {
+        var existing = _store.ListProfiles().Select(p => p.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (!existing.Contains(name)) return name;
+        for (var n = 2; n < 1000; n++)
+        {
+            var suffix = $" ({n})";
+            var baseName = name.Length + suffix.Length > 80 ? name[..(80 - suffix.Length)].TrimEnd() : name;
+            var candidate = baseName + suffix;
+            if (!existing.Contains(candidate)) return candidate;
+        }
+        return name;
+    }
+
     private bool IsProfileLive(string id) => _store.ListProfiles().Any(p => p.Id == id && p.IsLive);
 
     private List<string> LiveProfileCollisions(JsonObject profile, string selfProfileId)

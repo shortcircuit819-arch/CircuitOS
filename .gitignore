@@ -30,3 +30,8 @@ data/circuitos-settings.json
 # Running the app against data/ migrates it into profiles/ + writes overlay statics — never commit those.
 data/profiles/
 data/active-profile
+
+# OS / folder junk
+desktop.ini
+Thumbs.db
+.DS_Store

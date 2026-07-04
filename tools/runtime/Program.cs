@@ -313,7 +313,7 @@ internal static class Program
                     dataPath = overlayDataPath,
                     overlayFilePath = Path.Combine(overlayDataPath, "overlay", "index.html"),
                     runtime = ".NET",
-                    version = "0.7.2",
+                    version = "0.7.3",
                     mode = _sessionMode,
                     cloudError = _cloudError,
                     twitch = _sessionTwitch is null ? null : new { login = _sessionTwitch.Login, displayName = _sessionTwitch.DisplayName, userId = _sessionTwitch.UserId, expiresAt = _sessionTwitch.ExpiresAt }
@@ -400,6 +400,16 @@ internal static class Program
                 await SendResultAsync(context, service.ExportModule());
             else if (request.HttpMethod == "POST" && path == "/api/modules/import")
                 await SendResultAsync(context, service.ImportModule(await ReadBodyAsync(request)));
+            else if (request.HttpMethod == "POST" && path == "/api/collection-pack/export")
+            {
+                var body = await ReadBodyAsync(request);
+                await SendResultAsync(context, service.ExportCollectionPack(JsonUtil.String(body, "collectionKey")));
+            }
+            else if (request.HttpMethod == "POST" && path == "/api/collection-pack/import")
+            {
+                var body = await ReadBodyAsync(request);
+                await SendResultAsync(context, service.ImportCollectionPack(JsonUtil.Object(body, "pack") ?? new JsonObject(), JsonUtil.String(body, "name")));
+            }
             else if (request.HttpMethod == "POST" && path == "/api/profile")
                 await SendResultAsync(context, service.SaveSystemProfile(await ReadBodyAsync(request)));
             else if (request.HttpMethod == "POST" && path == "/api/overlay-config")

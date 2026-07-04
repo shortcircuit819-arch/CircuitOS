@@ -1649,6 +1649,8 @@ function renderProfiles() {
       deleteBtn.type = "button";
       deleteBtn.addEventListener("click", () => deleteProfile(profile.id, profile.name));
       actions.append(deleteBtn);
+    } else {
+      actions.append(element("span", "pc-delete-hint", "Switch to another profile to delete this one"));
     }
     card.append(actions);
     grid.append(card);
@@ -1813,19 +1815,63 @@ async function exportModule() {
 async function importModule(file) {
   try {
     const text = await file.text();
-    const module = JSON.parse(text);
+    const parsed = JSON.parse(text);
+    if (parsed?.manifest?.format === "circuitcollection") {
+      await importCollectionPack(parsed);
+      return;
+    }
     const response = await fetch("/api/modules/import", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(module)
+      body: JSON.stringify(parsed)
     });
     const result = await response.json();
     if (!response.ok || !result.ok) throw new Error((result.errors || ["Import failed."]).join(" "));
     await loadProfiles();
     showNotice(`Module imported as profile "${result.name}". Switch to it from the Profiles view.`, "success");
   } catch (error) {
-    if (error instanceof SyntaxError) showNotice("Could not parse the module file. Is it a valid .circuitmodule?", "error");
+    if (error instanceof SyntaxError) showNotice("Could not parse the file. Is it a valid .circuitmodule or .circuitcollection?", "error");
     else showNotice(error.message, "error");
+  }
+}
+
+async function importCollectionPack(pack) {
+  const suggested = pack.manifest?.name || "Imported Collection";
+  const collLabel = pack.manifest?.collectionName ? ` "${pack.manifest.collectionName}"` : "";
+  const name = window.prompt(`Import collection${collLabel} as a new profile that uses your current theme.\n\nName the new profile:`, suggested);
+  if (name === null) return;
+  const response = await fetch("/api/collection-pack/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pack, name: (name || "").trim() })
+  });
+  const result = await response.json();
+  if (!response.ok || !result.ok) throw new Error((result.errors || ["Import failed."]).join(" "));
+  await loadProfiles();
+  showNotice(`Collection pack imported as profile "${result.name}". Switch to it from the Profiles view.`, "success");
+}
+
+async function shareCollection(key, displayName) {
+  try {
+    if (dirty && !window.confirm("You have unsaved catalog changes. Share the last saved version of this collection?")) return;
+    const response = await fetch("/api/collection-pack/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ collectionKey: key })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error((result.errors || ["Share failed."]).join(" "));
+    const slug = (displayName || key).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "collection";
+    const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${slug}.circuitcollection`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    showNotice(`Exported "${displayName || key}" as a collection pack.`, "success");
+  } catch (error) {
+    showNotice(error.message, "error");
   }
 }
 
@@ -3096,6 +3142,11 @@ function buildCollectionCard(collection, query = "") {
     renderCollectionList(value.type);
   });
   heading.append(toggle);
+  const share = element("button", "button secondary small", "Share");
+  share.type = "button";
+  share.title = "Export this collection as a shareable .circuitcollection pack";
+  share.addEventListener("click", () => shareCollection(collection.key, value.displayName || collection.key));
+  heading.append(share);
   const remove = element("button", "button danger small", value.type === "event" ? "Delete Event" : "Delete");
   remove.addEventListener("click", () => {
     if (value.type !== "event" && collections.filter(item => item.value.type !== "event").length <= 1) {
