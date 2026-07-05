@@ -139,6 +139,7 @@ $guideFiles = @(
     "collection-importer.md",
     "collection-command.md",
     "event-collections.md",
+    "collection-packs.md",
     "featured-stream-boosts.md",
     "leaderboard.md",
     "maintainer-quick-fixes.md",
