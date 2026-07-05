@@ -193,21 +193,40 @@ internal sealed class LocalFileDataStore : ILocalDataStore
         var profiles = new List<ProfileInfo>();
         foreach (var dir in Directory.GetDirectories(profilesDir))
         {
+            var folderName = Path.GetFileName(dir);
             var metaPath = Path.Combine(dir, "profile-meta.json");
-            if (!File.Exists(metaPath)) continue;
+            var listed = false;
             try
             {
-                var meta = ParseFile(metaPath);
-                var id = meta["id"]?.ToString() ?? Path.GetFileName(dir);
-                var name = meta["name"]?.ToString() ?? id;
-                var createdAt = DateTimeOffset.TryParse(meta["createdAt"]?.ToString(), out var dt) ? dt : DateTimeOffset.MinValue;
-                var isLive = meta["active"] is JsonValue v && v.TryGetValue<bool>(out var on) && on;
-                profiles.Add(new ProfileInfo(id, name, createdAt, id == _activeProfileId, isLive));
+                if (File.Exists(metaPath))
+                {
+                    var meta = ParseFile(metaPath);
+                    var id = meta["id"]?.ToString() ?? folderName;
+                    var name = meta["name"]?.ToString() ?? id;
+                    var createdAt = DateTimeOffset.TryParse(meta["createdAt"]?.ToString(), out var dt) ? dt : DateTimeOffset.MinValue;
+                    var isLive = meta["active"] is JsonValue v && v.TryGetValue<bool>(out var on) && on;
+                    profiles.Add(new ProfileInfo(id, name, createdAt, id == _activeProfileId, isLive));
+                    listed = true;
+                }
             }
-            catch { }
+            catch { /* meta unparseable — fall through to the recovery path */ }
+
+            // Safety net: a folder holding real profile data but a missing/corrupt profile-meta.json must
+            // NOT silently vanish from the list (the "my profiles disappeared" scare). List it under its
+            // folder name so the user can still see, switch to, or rename it — renaming rewrites a clean
+            // meta. Folders with no profile data aren't profiles, so leave those out.
+            if (!listed && LooksLikeProfile(dir))
+                profiles.Add(new ProfileInfo(folderName, folderName, DateTimeOffset.MinValue, folderName == _activeProfileId, false));
         }
         return profiles.OrderBy(p => p.CreatedAt).ToList();
     }
+
+    // A directory is a recoverable profile if it holds any of the core per-profile data files, even
+    // when its profile-meta.json is missing or corrupt.
+    private static bool LooksLikeProfile(string dir) =>
+        File.Exists(Path.Combine(dir, "components.json")) ||
+        File.Exists(Path.Combine(dir, "system-profile.json")) ||
+        File.Exists(Path.Combine(dir, "inventory.json"));
 
     public void CreateProfile(string id, string name)
     {

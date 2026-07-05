@@ -88,8 +88,9 @@ try
     TestTwitchOptions();
     TestBackupRetention();
     TestCollectionPacks(service, store);
+    TestProfileMetaSafetyNet(store, testPath);
 
-    Console.WriteLine("Smoke tests passed: first run is safe, the pull + redemption + command engines behave, collection packs round-trip, and the Appwrite + Twitch config loaders behave.");
+    Console.WriteLine("Smoke tests passed: first run is safe, the pull + redemption + command engines behave, collection packs round-trip, profiles survive missing metadata, and the Appwrite + Twitch config loaders behave.");
     return 0;
 }
 finally
@@ -100,6 +101,37 @@ finally
 static void Require(bool condition, string message)
 {
     if (!condition) throw new InvalidOperationException(message);
+}
+
+static void TestProfileMetaSafetyNet(IDataStore store, string dataRoot)
+{
+    var profilesDir = Path.Combine(dataRoot, "profiles");
+
+    // A profile folder with data but NO meta must still be listed (recovered under its folder name).
+    var orphanDir = Path.Combine(profilesDir, "orphan-recovered");
+    Directory.CreateDirectory(orphanDir);
+    File.WriteAllText(Path.Combine(orphanDir, "components.json"), "{\"schemaVersion\":1,\"collections\":{}}");
+    Require(store.ListProfiles().Any(p => p.Id == "orphan-recovered"),
+        "A profile folder with data but no profile-meta.json must still be listed.");
+
+    // A profile folder with a CORRUPT meta must still be listed.
+    var corruptDir = Path.Combine(profilesDir, "corrupt-recovered");
+    Directory.CreateDirectory(corruptDir);
+    File.WriteAllText(Path.Combine(corruptDir, "system-profile.json"), "{}");
+    File.WriteAllText(Path.Combine(corruptDir, "profile-meta.json"), "{ this is not valid json");
+    Require(store.ListProfiles().Any(p => p.Id == "corrupt-recovered"),
+        "A profile folder with a corrupt profile-meta.json must still be listed.");
+
+    // An empty folder with no profile data must NOT be treated as a profile.
+    Directory.CreateDirectory(Path.Combine(profilesDir, "empty-junk"));
+    Require(!store.ListProfiles().Any(p => p.Id == "empty-junk"),
+        "An empty folder with no profile data must not be listed as a profile.");
+
+    Directory.Delete(orphanDir, true);
+    Directory.Delete(corruptDir, true);
+    Directory.Delete(Path.Combine(profilesDir, "empty-junk"), true);
+
+    Console.WriteLine("Profile-meta safety net: missing/corrupt metadata recovers the profile; empty folders are ignored.");
 }
 
 static void TestCollectionPacks(CircuitService service, IDataStore store)

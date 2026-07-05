@@ -454,6 +454,17 @@ DataPath/
 
 ## Session Log
 
+### 2026-07-04 — Claude (claude-opus-4-8) — Profile-meta safety net (no version bump)
+
+Robustness fix for the "my profiles vanished" class of scare. `LocalFileDataStore.ListProfiles` used to
+silently skip any profile folder whose `profile-meta.json` was missing or unparseable — so a profile with
+intact catalog/inventory could disappear from the UI. Now if the meta can't be read but the folder holds
+real profile data (`components.json` / `system-profile.json` / `inventory.json`, via new
+`LooksLikeProfile`), the profile is still listed under its folder name (id = name = folder) so the user
+can see / switch to / rename it — and renaming rewrites a clean meta. Empty folders stay ignored. New
+smoke test `TestProfileMetaSafetyNet` covers missing meta, corrupt meta, and the empty-folder negative
+case. No version bump (batched under 0.7.3.1); no UI change.
+
 ### 2026-07-04 — Claude (claude-opus-4-8) — Polish & cleanup (no version bump)
 
 Housekeeping batched under 0.7.3.1 (no version change):
