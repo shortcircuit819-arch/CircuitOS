@@ -49,6 +49,15 @@ internal sealed partial class CircuitService
         if (module["catalog"] is not JsonObject catalog)
             return Error(["Module is missing required catalog data."]);
 
+        // Validate before creating anything: a corrupt or hand-edited module must not produce a broken
+        // profile. A genuine CircuitOS export already passed this on save, so it round-trips cleanly.
+        var catalogErrors = ValidateConfiguration(catalog, module["boost"] as JsonObject ?? DefaultBoost());
+        if (catalogErrors.Count > 0)
+        {
+            catalogErrors.Insert(0, "This module's catalog is invalid — nothing was imported.");
+            return Error(catalogErrors);
+        }
+
         var name = manifest["name"]?.ToString()?.Trim() ?? "";
         if (string.IsNullOrWhiteSpace(name)) name = "Imported Profile";
         if (name.Length > 80) name = name[..80];
@@ -194,6 +203,14 @@ internal sealed partial class CircuitService
             ["schemaVersion"] = 1,
             ["collections"] = importedCollections
         };
+
+        // Validate before creating anything, so a corrupt pack can't leave a broken profile behind.
+        var packErrors = ValidateConfiguration(newCatalog, DefaultBoost());
+        if (packErrors.Count > 0)
+        {
+            packErrors.Insert(0, "This collection pack is invalid — nothing was imported.");
+            return Error(packErrors);
+        }
 
         var id = GenerateProfileId(name);
         try { _store.CreateProfile(id, name); }

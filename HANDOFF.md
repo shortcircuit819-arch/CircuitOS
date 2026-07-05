@@ -454,6 +454,19 @@ DataPath/
 
 ## Session Log
 
+### 2026-07-04 — Claude (claude-opus-4-8) — Import validation + collection-packs guide (no version bump)
+
+- **Validate catalogs on import.** `ImportModule` and `ImportCollectionPack` now run the imported catalog
+  through `ValidateConfiguration` (with the module's boost, or a default) *before* creating the profile,
+  so a corrupt or hand-edited `.circuitmodule` / `.circuitcollection` is rejected with clear errors and
+  leaves nothing behind. A genuine CircuitOS export already passed this validator on save, so legit files
+  round-trip unchanged. `TestCollectionPacks` gains a negative case (invalid pack → rejected, no profile).
+- **Collection-packs user guide.** Added `docs/collection-packs.md` (pack vs module, share one / share
+  all, what travels vs stays yours, events never share, import + de-dupe) and shipped it in the packaged
+  Documentation/ via `Build-CircuitOSPackage.ps1` guideFiles.
+
+No version bump (batched under 0.7.3.1); no UI change.
+
 ### 2026-07-04 — Claude (claude-opus-4-8) — Profile-meta safety net (no version bump)
 
 Robustness fix for the "my profiles vanished" class of scare. `LocalFileDataStore.ListProfiles` used to

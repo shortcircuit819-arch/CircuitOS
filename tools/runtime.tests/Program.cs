@@ -198,10 +198,17 @@ static void TestCollectionPacks(CircuitService service, IDataStore store)
     var imp2 = service.ImportCollectionPack(pack, "Shared Starter");
     Require(imp2.Body["name"]?.ToString() == "Shared Starter (2)", "Duplicate import name should de-dupe to 'Shared Starter (2)'.");
 
+    // A pack whose catalog is invalid is rejected up front and leaves no profile behind.
+    var badPack = (JsonObject)all.Body.DeepClone();
+    ((JsonObject)((JsonObject)badPack["collections"]!)["starter"]!)["parts"] = new JsonArray();
+    var beforeBad = store.ListProfiles().Count;
+    Require(service.ImportCollectionPack(badPack, "Should Not Import").Status != 200, "A pack with an invalid catalog must be rejected.");
+    Require(store.ListProfiles().Count == beforeBad, "A rejected pack import must not create a profile.");
+
     foreach (var cleanupId in new[] { id1, allImportedId, imp2.Body["id"]?.ToString() ?? "" })
         try { store.DeleteProfile(cleanupId); } catch { }
 
-    Console.WriteLine("Collection packs: single + share-all round-trip, events never travel, and duplicate names de-dupe.");
+    Console.WriteLine("Collection packs: single + share-all round-trip, events never travel, invalid packs are rejected, and duplicate names de-dupe.");
 }
 
 // Verifies the active-set model (A) and command-collision guard (B): the default profile is live
