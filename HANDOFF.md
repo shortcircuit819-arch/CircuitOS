@@ -454,6 +454,25 @@ DataPath/
 
 ## Session Log
 
+### 2026-07-04 — Claude (claude-opus-4-8) — 0.8 kickoff: design language + token layer (no version bump)
+
+Started the **0.8 Design & Identity** milestone. Version stays 0.7.3.1 until 0.8 is cut.
+- **Design-language doc** (`docs/design-language.md`, commit e85748d) — the re-skin contract: hairlines
+  over cards, crisp geometry (no pills), one soft element (accent glow), hue-independent semantic tokens,
+  segmented/checkbox controls, Design Mode = overrides layer. User approved the direction.
+- **Token layer (step 1).** Added semantic tokens to `:root` (`--surface`, `--surface-raised`,
+  `--hairline`, `--text-muted`, `--accent-soft`, `--accent-line`, `--accent-dark`, `--accent-glow`, and
+  fixed status hues `--positive`/`--warning`/`--info`), and routed ~16 hardcoded `rgba(255,26,36,…)`
+  accent literals + 3 red shade hexes through `var(--accent)` via `color-mix` — so they now follow the
+  streamer's accent instead of staying red. Fixes a real hue-independence leak (blue-accent streamers were
+  getting red glows/gradients/borders). Verified in preview: default red theme visually unchanged;
+  switching the accent to teal recolors every accent-derived element with no red left behind; no console
+  errors. `applySystemProfile` needed no change — the color-mix tokens re-derive when `--accent` updates.
+  Note: `color-mix` requires a Chromium 111+ WebView2 (fine on current Edge/Windows).
+
+Next (step 2): re-skin the admin to the token system + this language (hairlines over cards, segmented
+controls). Then a contrast-aware pass, then Design Mode (the overrides layer).
+
 ### 2026-07-04 — Claude (claude-opus-4-8) — Import validation + collection-packs guide (no version bump)
 
 - **Validate catalogs on import.** `ImportModule` and `ImportCollectionPack` now run the imported catalog
