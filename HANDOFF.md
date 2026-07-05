@@ -454,6 +454,23 @@ DataPath/
 
 ## Session Log
 
+### 2026-07-04 — Claude (claude-opus-4-8) — Contrast-aware theming + DECIDED the theming model
+
+- **Contrast-aware theming (0.8 step)** — commits e0cb0d7 (accent-readable) + 286d98d (text/chrome).
+  `applySystemProfile` now derives `--accent-readable` (accent nudged until legible on the panel),
+  auto-corrects `--text`/`--muted` to stay readable on the panel, and derives the chrome (sidebar/topbar)
+  from the panel so all text sits on one surface family. Verified: a magenta-bg + black-text + grey-accent
+  palette is fully legible; default red unchanged. JS contrast helpers (luminance / contrastRatio /
+  readableOn) live next to `hexToRgba` in app.js.
+- **DECIDED — theming model = curated base themes + a contrast-safe accent** (the Apple model). The app
+  owns the structural colors via a few *designed* base themes; the streamer only picks their **accent**.
+  This supersedes the free-form 7-color approach. Full rationale + implications in
+  `docs/design-language.md` → "Theming model (curated base + accent)". To build in 0.8: define the base
+  themes, rework the Appearance page to **theme + accent**, and migrate the profile color data model
+  (7 colors → `theme` id + `accent`, with a "Custom" fallback so existing profiles aren't lost). The
+  contrast work just built becomes the accent-safety layer. Design Mode = theme + accent + label/spacing
+  tweaks; raw per-color editing becomes an optional "Advanced" escape hatch.
+
 ### 2026-07-04 — Claude (claude-opus-4-8) — 0.8 re-skin: Overview de-boxed (reference screen)
 
 Step 2 of 0.8 — the visible re-skin — with the **Overview** as the reference for "hairlines over cards".

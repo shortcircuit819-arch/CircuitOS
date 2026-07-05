@@ -49,6 +49,31 @@ Derived tokens (`accent-soft`, `accent-line`, `accent-glow`, hover surfaces) are
 streamer colors so any combination stays composed. Today these are ad-hoc `rgba(255,26,36,…)` literals;
 0.8 formalizes them.
 
+## Theming model — curated base + accent (decided 2026-07-04)
+
+The app owns the *bones*; the streamer tints *one* thing.
+
+- **The app ships a few designed base themes** — each a crafted set of the structural colors (background,
+  surface, surface-raised, hairline, text, muted). These are not free-form user fields; they're designed
+  so the product always looks intentional (the Apple model). Start with the current dark theme; add a
+  couple more (e.g. a lighter one) over time.
+- **The streamer picks their accent color** — their brand pop — and nothing else. The accent is applied
+  **contrast-safely** (`--accent-readable` derives a legible variant per surface), so any accent stays
+  usable without letting a bad pick break the UI.
+- **Why:** readable ≠ tasteful. Guaranteeing legibility across 7 arbitrary colors is possible but can't
+  guarantee a *designed* result, and it dilutes the CircuitOS identity. Owning the surfaces + tinting the
+  accent gives brand identity without foot-guns — and is less theming engineering long-term.
+- **The contrast work already built is the accent-safety layer** — repurposed, not discarded.
+- **Optional escape hatch:** full per-color control can live behind an "Advanced" door for power users
+  who accept they can make it ugly; the default path stays curated + accent.
+
+**Implications to build (0.8):**
+- **Data model:** a profile stores `theme` (base-theme id) + `accent` (one color), not 7 colors. Migrate
+  existing profiles: map saved colors to the nearest base theme (or a one-off "Custom" theme) and carry
+  the accent across.
+- **Appearance page:** replace the 7 color pickers with a **theme selector** + an **accent picker**.
+- **Status hues** stay fixed regardless of theme.
+
 ## Controls
 
 - **Toggles → segmented control or checkbox.** A two-option choice is a **segmented control** — two flat
@@ -70,8 +95,9 @@ streamer colors so any combination stays composed. Today these are ad-hoc `rgba(
 
 ## Design Mode (0.8 deliverable)
 
-An in-app visual editor so a streamer can tune **everything** — colors, text labels, small accents,
-spacing, pop-ups — by hand, without touching source:
+An in-app visual editor so a streamer can tune the look without touching source: **base theme + accent**
+(above), plus text **labels**, spacing, and specific small accents. (Raw per-color editing is the
+Advanced escape hatch, not the default.)
 
 - Edits write to an **overrides layer**: a JSON map of token/label overrides applied *over* the base
   tokens at runtime. The base skin is never edited, so there's no drift and overrides can be reset.
@@ -81,9 +107,10 @@ spacing, pop-ups — by hand, without touching source:
 
 ## 0.8 build order
 
-1. **Token layer.** Formalize semantic tokens derived from the 7 streamer colors; replace ad-hoc color
-   literals in `styles.css` with tokens. No visible change intended — this is the foundation.
-2. **Re-skin.** Move the admin to the token system and this language: hairlines over cards, crisp
-   geometry, segmented controls, the single accent glow.
-3. **Contrast-aware theming.** Ensure legibility holds across accent/base combinations.
-4. **Design Mode.** The overrides layer + the in-app editor.
+1. **Token layer** ✓ — semantic tokens + accent literals routed through `var(--accent)`.
+2. **Contrast-aware theming** ✓ — `--accent-readable`, auto-legible text, chrome derived from the panel.
+3. **Re-skin.** Move the admin to the token system and this language: hairlines over cards, crisp
+   geometry, segmented controls, the single accent glow. (Overview done as the reference screen.)
+4. **Curated theming model.** Define the base themes; rework Appearance to theme + accent; migrate the
+   profile color data model (see "Theming model" above).
+5. **Design Mode.** The overrides layer + the in-app editor (theme + accent + labels/spacing).
