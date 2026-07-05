@@ -188,6 +188,45 @@ function hexToRgba(hex, alpha) {
   return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
 }
 
+// ── Contrast-aware theming ────────────────────────────────────────────────────
+// Keep foreground tokens legible whatever colors a streamer picks, so an
+// "unhinged" palette can't produce unreadable accent text (kickers, links, etc.).
+function hexTriple(hex) {
+  const match = /^#([0-9a-f]{6})$/i.exec((hex || "").trim());
+  const value = match ? Number.parseInt(match[1], 16) : 0xff1a24;
+  return { r: (value >> 16) & 255, g: (value >> 8) & 255, b: value & 255 };
+}
+function relLuminance({ r, g, b }) {
+  const lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+function contrastRatio(a, b) {
+  const la = relLuminance(hexTriple(a)), lb = relLuminance(hexTriple(b));
+  const [hi, lo] = la >= lb ? [la, lb] : [lb, la];
+  return (hi + 0.05) / (lo + 0.05);
+}
+function toHex({ r, g, b }) {
+  const c = n => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+  return `#${c(r)}${c(g)}${c(b)}`;
+}
+function mixToward(hex, target, amount) {
+  const a = hexTriple(hex), t = hexTriple(target);
+  return toHex({ r: a.r + (t.r - a.r) * amount, g: a.g + (t.g - a.g) * amount, b: a.b + (t.b - a.b) * amount });
+}
+// Nudge `fg` toward white or black (whichever the surface needs) until it meets
+// `target` contrast against `bg`, keeping the original hue as long as possible.
+// A color that already passes is returned unchanged, so good palettes are untouched.
+function readableOn(fg, bg, target = 3.2) {
+  if (contrastRatio(fg, bg) >= target) return fg;
+  const toward = relLuminance(hexTriple(bg)) > 0.32 ? "#000000" : "#ffffff";
+  let candidate = fg;
+  for (let amount = 0.12; amount <= 1.0001; amount += 0.12) {
+    candidate = mixToward(fg, toward, Math.min(1, amount));
+    if (contrastRatio(candidate, bg) >= target) break;
+  }
+  return candidate;
+}
+
 let lastSession = { mode: "local", twitch: null, dataPath: "" };
 let twitchRewardCatalog = { loaded: false, loading: false, error: "", items: [] };
 
@@ -330,6 +369,9 @@ function applySystemProfile() {
   root.style.setProperty("--line", colors.line);
   root.style.setProperty("--red", colors.accent);
   root.style.setProperty("--accent", colors.accent);
+  // Contrast-safe accent for text/icons (kickers, links, active states): if the streamer's accent is
+  // too low-contrast on the panel surface, nudge it until legible. A good accent passes through unchanged.
+  root.style.setProperty("--accent-readable", readableOn(colors.accent, colors.panel, 3.2));
   root.style.setProperty("--red-soft", hexToRgba(colors.accent, 0.13));
   root.style.setProperty("--red-border", hexToRgba(colors.accent, 0.28));
   root.style.setProperty("--sidebar-bg", hexToRgba(colors.background, 0.93));
