@@ -360,9 +360,31 @@ async function logoutTwitch() {
   }
 }
 
+// ── Curated base themes ───────────────────────────────────────────────────────
+// The app owns the structural colors; a profile picks a base theme + one accent.
+// See docs/design-language.md → "Theming model".
+const BASE_THEMES = {
+  midnight: { label: "Midnight", background: "#000d19", panel: "#061a2b", panelAlt: "#092239", line: "#193a55", text: "#eef5fb", muted: "#8295a8" },
+  slate:    { label: "Slate",    background: "#0d1117", panel: "#161b22", panelAlt: "#1c232c", line: "#2b3543", text: "#e6edf3", muted: "#8b949e" },
+  carbon:   { label: "Carbon",   background: "#0a0a0c", panel: "#141418", panelAlt: "#1d1d22", line: "#2f2f37", text: "#f0f0f2", muted: "#9a9aa4" },
+};
+const DEFAULT_THEME = "midnight";
+const DEFAULT_ACCENT = "#ff1a24";
+
+// The effective 7 render colors: structural from the chosen base theme, accent from the profile.
+// Backward-compatible: a legacy profile with no `theme` falls back to its stored 7-color `colors`.
+function resolveThemeColors(profile) {
+  const p = profile || {};
+  const accent = /^#[0-9a-f]{6}$/i.test(p.accent || "") ? p.accent : ((p.colors && p.colors.accent) || DEFAULT_ACCENT);
+  const base = p.theme && BASE_THEMES[p.theme];
+  if (base) return { ...base, accent };
+  if (p.colors) return { ...p.colors, accent };            // legacy / custom
+  return { ...BASE_THEMES[DEFAULT_THEME], accent };
+}
+
 function applySystemProfile() {
   const root = document.documentElement;
-  const colors = systemProfile.colors;
+  const colors = resolveThemeColors(systemProfile);
   root.style.setProperty("--bg", colors.background);
   root.style.setProperty("--panel", colors.panel);
   root.style.setProperty("--panel-2", colors.panelAlt);
