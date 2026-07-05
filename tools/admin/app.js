@@ -374,12 +374,15 @@ function applySystemProfile() {
   root.style.setProperty("--accent-readable", readableOn(colors.accent, colors.panel, 3.2));
   root.style.setProperty("--red-soft", hexToRgba(colors.accent, 0.13));
   root.style.setProperty("--red-border", hexToRgba(colors.accent, 0.28));
-  root.style.setProperty("--sidebar-bg", hexToRgba(colors.background, 0.93));
-  root.style.setProperty("--sidebar-card", hexToRgba(colors.panel, 0.52));
-  root.style.setProperty("--sidebar-card-hover", hexToRgba(colors.panelAlt, 0.72));
-  root.style.setProperty("--chrome-bg", hexToRgba(colors.background, 0.96));
-  root.style.setProperty("--text", colors.text);
-  root.style.setProperty("--muted", colors.muted);
+  // Chrome (sidebar + topbar) derives from the panel, not the page background, so ALL text lives on one
+  // surface family and stays legible — the page background then reads as a frame between the panels.
+  root.style.setProperty("--sidebar-bg", hexToRgba(colors.panel, 0.96));
+  root.style.setProperty("--sidebar-card", hexToRgba(colors.panelAlt, 0.55));
+  root.style.setProperty("--sidebar-card-hover", hexToRgba(colors.panelAlt, 0.75));
+  root.style.setProperty("--chrome-bg", hexToRgba(colors.panel, 0.97));
+  // Guarantee legible body/label text on the panel surface, whatever the streamer picked.
+  root.style.setProperty("--text", readableOn(colors.text, colors.panel, 4.5));
+  root.style.setProperty("--muted", readableOn(colors.muted, colors.panel, 3.0));
   document.title = `${platformName} | ${systemProfile.gameName}`;
   document.getElementById("activeProfileGame").textContent = systemProfile.gameName;
   document.getElementById("activeProfileAdmin").textContent = systemProfile.adminName;
