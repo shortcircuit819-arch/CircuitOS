@@ -454,6 +454,26 @@ DataPath/
 
 ## Session Log
 
+### 2026-07-04 — Claude (claude-opus-4-8) — 0.8 re-skin: Overview de-boxed (reference screen)
+
+Step 2 of 0.8 — the visible re-skin — with the **Overview** as the reference for "hairlines over cards".
+Commits: f5d6451 (stat strip), 61fbbfc (economy cluster), 22055f4 (action/health/timeline rows). The
+shared card rule (`.stat-card, .panel, .collection-card`) also lost its heavy drop-shadow and moved to a
+theme-derived surface.
+- **Overview is now fully card-less:** stat cards → a line-divided data strip (vertical hairlines, no
+  frame); economy tiles → a 2×2 hairline-divided cluster; Action Center → a clean callout (kept its
+  status left-bar); Configuration Health checklist + Event Timeline → flat rows. Removed the decorative
+  rotated-square accents from the stat cards (user's long-standing gripe).
+- **Panels stay as light hairline-bounded regions** — user chose "option 1": panels still group content,
+  just without the heavy card feel; nested clutter is what gets flattened.
+- **Remaining scope (the bulk of 0.8):** the same boxed pattern — `border: 1px solid var(--line)` + a
+  hardcoded `rgba(0,10,20,X)` fill (which is ALSO a hue leak) — appears ~40× across every other screen:
+  collections editor, viewers, backups, settings, wizard, Twitch, roles, rate lab. Work screen-by-screen
+  against the Overview reference: convert `-row`/tile boxes to flat or line-divided rows, and swap the
+  hardcoded surface fills for tokens so they follow the streamer's theme.
+- Design decisions live in `docs/design-language.md`. Still ahead in 0.8: a contrast-aware pass and
+  Design Mode (the overrides layer). No version bump (0.8 in progress; footer still 0.7.3.1).
+
 ### 2026-07-04 — Claude (claude-opus-4-8) — 0.8 kickoff: design language + token layer (no version bump)
 
 Started the **0.8 Design & Identity** milestone. Version stays 0.7.3.1 until 0.8 is cut.
