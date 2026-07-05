@@ -186,8 +186,10 @@ p { color: var(--muted); }
 .timeline-copy strong, .timeline-copy small { display: block; }
 .timeline-copy small { margin-top: 3px; color: var(--muted); }
 .timeline-date { color: var(--muted); font-size: 12px; text-align: right; }
-.pulse-grid { grid-template-columns: repeat(2, 1fr); }
-.pulse-item { padding: 13px; border: 1px solid var(--line); background: rgba(0, 10, 20, 0.26); }
+.pulse-grid { grid-template-columns: repeat(2, 1fr); gap: 0; }
+.pulse-item { padding: 12px 14px; border: 0; background: none; }
+.pulse-item:nth-child(even) { border-left: 1px solid var(--hairline); }
+.pulse-item:nth-child(n+3) { border-top: 1px solid var(--hairline); }
 .pulse-item span { display: block; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: 0.09em; }
 .pulse-item strong { display: block; margin-top: 6px; font-size: 24px; }
 .compact-list .leader-row { padding: 9px 5px; }
