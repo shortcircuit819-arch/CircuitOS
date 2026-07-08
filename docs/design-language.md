@@ -109,8 +109,15 @@ Advanced escape hatch, not the default.)
 
 1. **Token layer** ✓ — semantic tokens + accent literals routed through `var(--accent)`.
 2. **Contrast-aware theming** ✓ — `--accent-readable`, auto-legible text, chrome derived from the panel.
-3. **Re-skin.** Move the admin to the token system and this language: hairlines over cards, crisp
-   geometry, segmented controls, the single accent glow. (Overview done as the reference screen.)
+3. **Re-skin** ✓ (structural) — the admin uses the token system and this language: hairlines over cards,
+   crisp geometry, the single accent glow. Overview was the reference; the data-row treatment
+   (`.health-table-row` / `overview-stats`: transparent rows, one hairline divider, no per-row border +
+   fill) is now rolled onto Economy, Leaderboard, RateLab simulations, Viewer metrics, Role awards,
+   Backups (guide strip + file/backup lists), boost multipliers, and Twitch reward mappings. Message
+   editor cards were unified to the standard panel treatment. **Intentionally kept as cards** (genuinely
+   distinct areas): collection cards, the Settings backend option cards, the Twitch account + utility
+   cards, and the message editors. **Deliberately left for a dedicated pass:** the first-run **Wizard**
+   (a distinct ceremonial modal with its own identity) and deep form internals (part/variant/field grids).
 4. **Curated theming model** ✓ — base themes (Midnight/Slate/Carbon) + a `resolveThemeColors` resolver;
    Appearance reworked to a theme selector + accent picker (with a "Custom" card for legacy profiles);
    profile data model carries `theme` + `accent`, and `NormalizeProfile` rewrites the effective `colors`
@@ -118,5 +125,5 @@ Advanced escape hatch, not the default.)
    adopt a base theme.
 5. **Design Mode.** The overrides layer + the in-app editor (theme + accent + labels/spacing).
 
-**Still open in step 3:** roll the card-less re-skin from Overview out to the other screens
-(Collections, Viewers, Backups, Settings, Wizard, Twitch, Roles, RateLab).
+**Open polish (step 3 tail):** the first-run Wizard pass, plus segmented-control / checkbox conversion
+of the remaining pill chips and sliding toggles (the `Controls` section) — not yet done app-wide.
