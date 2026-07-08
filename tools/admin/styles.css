@@ -266,13 +266,16 @@ input.invalid { border-color: var(--danger); }
 .multiplier-row { display: grid; grid-template-columns: 1fr 120px; align-items: center; gap: 12px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 4px; background: rgba(0, 10, 20, 0.28); }
 .multiplier-row small { display: block; margin-top: 3px; color: var(--muted); }
 
-.economy-table, .leader-list { display: grid; gap: 9px; margin-top: 20px; }
-.economy-row { display: grid; grid-template-columns: 1.4fr 100px 110px 1fr; align-items: center; gap: 12px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 4px; background: rgba(0, 10, 20, 0.26); }
+.economy-table, .leader-list { display: grid; gap: 0; margin-top: 20px; }
+/* Data rows read as a line-divided table (the Overview treatment), not a stack of bordered boxes. */
+.economy-row { display: grid; grid-template-columns: 1.4fr 100px 110px 1fr; align-items: center; gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--hairline); }
+.economy-row:last-child { border-bottom: 0; }
 .economy-row strong, .leader-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .economy-number { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
 .economy-bar { height: 6px; overflow: hidden; background: #020e19; }
 .economy-bar span { display: block; height: 100%; background: linear-gradient(90deg, #ad0b15, var(--red)); }
-.leader-row { display: grid; grid-template-columns: 32px 1fr auto; align-items: center; gap: 10px; padding: 12px; border-bottom: 1px solid var(--line); }
+.leader-row { display: grid; grid-template-columns: 32px 1fr auto; align-items: center; gap: 10px; padding: 12px; border-bottom: 1px solid var(--hairline); }
+.leader-row:last-child { border-bottom: 0; }
 .leader-rank { color: var(--accent-readable); font-weight: 800; }
 .leader-balance { color: var(--amber); font-variant-numeric: tabular-nums; font-weight: 800; }
 .empty-state { padding: 24px 0; color: var(--muted); text-align: center; }
@@ -290,8 +293,9 @@ input.invalid { border-color: var(--danger); }
 .viewer-detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
 .viewer-detail-header h2 { font-size: 25px; }
 .viewer-id { margin-top: 5px; color: var(--muted); font-family: Consolas, monospace; font-size: 12px; }
-.viewer-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin-bottom: 18px; }
-.viewer-metric { padding: 12px; border: 1px solid var(--line); background: rgba(0, 10, 20, 0.26); }
+.viewer-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin-bottom: 18px; }
+.viewer-metric { padding: 12px 16px; border-left: 1px solid var(--hairline); }
+.viewer-metric:first-child { border-left: 0; padding-left: 2px; }
 .viewer-metric span { display: block; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: 0.09em; }
 .viewer-metric strong { display: block; margin-top: 5px; font-size: 21px; }
 .viewer-collections { display: grid; gap: 8px; }
@@ -316,8 +320,10 @@ input.invalid { border-color: var(--danger); }
 
 .role-layout { display: grid; grid-template-columns: minmax(520px, 1.35fr) minmax(360px, 0.65fr); gap: 18px; align-items: start; }
 .role-history-panel { grid-column: 1 / -1; }
-.role-award-list, .role-name-list { display: grid; gap: 9px; margin-top: 20px; }
-.role-award-row { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(180px, 1fr) minmax(130px, auto) auto; align-items: center; gap: 14px; padding: 12px; border: 1px solid var(--line); border-left: 3px solid var(--amber); background: rgba(0, 10, 20, 0.26); }
+.role-award-list { display: grid; gap: 0; margin-top: 20px; }
+.role-name-list { display: grid; gap: 9px; margin-top: 20px; }
+.role-award-row { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(180px, 1fr) minmax(130px, auto) auto; align-items: center; gap: 14px; padding: 12px 12px 12px 14px; border-bottom: 1px solid var(--hairline); border-left: 3px solid var(--amber); }
+.role-award-row:last-child { border-bottom: 0; }
 .role-award-row.assigned { border-left-color: var(--green); }
 .role-identity strong, .role-identity small, .role-earned strong, .role-earned small { display: block; }
 .role-identity small, .role-earned small, .role-date { margin-top: 3px; color: var(--muted); font-size: 11px; }
@@ -335,8 +341,9 @@ input.invalid { border-color: var(--danger); }
 .ratelab-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
 .simulation-count { display: grid; gap: 6px; }
 .simulation-count span { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: 0.09em; }
-.simulation-table { display: grid; gap: 9px; margin-top: 20px; }
-.simulation-row { display: grid; grid-template-columns: minmax(150px, 1fr) 90px 90px 1fr; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); background: rgba(0, 10, 20, 0.26); }
+.simulation-table { display: grid; gap: 0; margin-top: 20px; }
+.simulation-row { display: grid; grid-template-columns: minmax(150px, 1fr) 90px 90px 1fr; align-items: center; gap: 12px; padding: 11px 4px; border-bottom: 1px solid var(--hairline); }
+.simulation-row:last-child { border-bottom: 0; }
 .simulation-row span { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
 .simulation-bar { height: 7px; overflow: hidden; background: #020e19; }
 .simulation-bar span { display: block; height: 100%; background: linear-gradient(90deg, #ad0b15, var(--red)); }
