@@ -111,6 +111,12 @@ Advanced escape hatch, not the default.)
 2. **Contrast-aware theming** ✓ — `--accent-readable`, auto-legible text, chrome derived from the panel.
 3. **Re-skin.** Move the admin to the token system and this language: hairlines over cards, crisp
    geometry, segmented controls, the single accent glow. (Overview done as the reference screen.)
-4. **Curated theming model.** Define the base themes; rework Appearance to theme + accent; migrate the
-   profile color data model (see "Theming model" above).
+4. **Curated theming model** ✓ — base themes (Midnight/Slate/Carbon) + a `resolveThemeColors` resolver;
+   Appearance reworked to a theme selector + accent picker (with a "Custom" card for legacy profiles);
+   profile data model carries `theme` + `accent`, and `NormalizeProfile` rewrites the effective `colors`
+   from the chosen base palette so the overlay + engine follow. Legacy profiles stay "Custom" until they
+   adopt a base theme.
 5. **Design Mode.** The overrides layer + the in-app editor (theme + accent + labels/spacing).
+
+**Still open in step 3:** roll the card-less re-skin from Overview out to the other screens
+(Collections, Viewers, Backups, Settings, Wizard, Twitch, Roles, RateLab).
