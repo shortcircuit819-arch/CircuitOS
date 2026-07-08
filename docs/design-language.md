@@ -114,10 +114,13 @@ Advanced escape hatch, not the default.)
    (`.health-table-row` / `overview-stats`: transparent rows, one hairline divider, no per-row border +
    fill) is now rolled onto Economy, Leaderboard, RateLab simulations, Viewer metrics, Role awards,
    Backups (guide strip + file/backup lists), boost multipliers, and Twitch reward mappings. Message
-   editor cards were unified to the standard panel treatment. **Intentionally kept as cards** (genuinely
-   distinct areas): collection cards, the Settings backend option cards, the Twitch account + utility
-   cards, and the message editors. **Deliberately left for a dedicated pass:** the first-run **Wizard**
-   (a distinct ceremonial modal with its own identity) and deep form internals (part/variant/field grids).
+   editor cards were unified to the standard panel treatment. The first-run **Wizard** kept its
+   ceremonial shell + selectable preset choice cards, but its summary/review fact tiles were flattened
+   to a divider strip. **Controls:** booleans are now crisp **checkboxes** (the sliding pill switch is
+   gone) and every fully-rounded pill chip/badge/token was de-pilled to a small crisp radius. **Kept as
+   cards** (genuinely distinct areas): collection cards, the Settings backend option cards, the Twitch
+   account + utility cards, and the message editors. **Kept round** (not pills): status dots, and the
+   help/step round icon markers. **Deliberately left:** deep form internals (part/variant/field grids).
 4. **Curated theming model** ✓ — base themes (Midnight/Slate/Carbon) + a `resolveThemeColors` resolver;
    Appearance reworked to a theme selector + accent picker (with a "Custom" card for legacy profiles);
    profile data model carries `theme` + `accent`, and `NormalizeProfile` rewrites the effective `colors`
@@ -125,5 +128,8 @@ Advanced escape hatch, not the default.)
    adopt a base theme.
 5. **Design Mode.** The overrides layer + the in-app editor (theme + accent + labels/spacing).
 
-**Open polish (step 3 tail):** the first-run Wizard pass, plus segmented-control / checkbox conversion
-of the remaining pill chips and sliding toggles (the `Controls` section) — not yet done app-wide.
+**Segmented controls:** deferred, not skipped. The genuine two-option choices are already handled
+(booleans → checkboxes; data backend Local/Cloud → selectable option cards). The remaining `<select>`s
+(import mode/target/format, backup filter) are legitimately multi-option, so converting them to a
+segmented control would be a needless functional refactor. If a true two-option control appears later,
+build the segmented control then (or as part of Design Mode).

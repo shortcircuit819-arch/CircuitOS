@@ -454,6 +454,37 @@ DataPath/
 
 ## Session Log
 
+### 2026-07-08 — Claude (claude-opus-4-8) — 0.8 curated theming model + full re-skin rollout (no version bump)
+
+Landed 0.8 steps 3 (re-skin) and 4 (curated theming), all on `main`; footer still 0.7.3.1 (0.8 in progress).
+
+- **Curated theming model — DONE** (commits 0a13fc3, f86ada7, 67a43d4). `app.js` gained `BASE_THEMES`
+  (Midnight/Slate/Carbon) + `resolveThemeColors`. The Appearance page is now a **base-theme selector +
+  a single accent picker** (`renderThemePicker`), with a "Custom" card shown only for legacy profiles
+  still on their own colors (drops away once a base theme is adopted). Profiles carry `theme` + `accent`;
+  `CircuitService.Core.cs` `DefaultProfile`/`NormalizeProfile` resolve them — a known base theme
+  **rewrites the effective `colors`** from that palette (+ accent) so the OBS overlay and engine (which
+  read `colors`) follow automatically; unknown/absent theme = "Custom" (own colors). Collection packs
+  treat `theme`/`accent` as skin (stripped on export, adopted from importer). New test
+  `TestThemeNormalization`; smoke tests green. Verified end-to-end in preview incl. save + reload.
+- **Re-skin rolled to every screen — DONE (structural)** (commits 2e6cc97, 19b288b, b32e538, c6af9f5).
+  The Overview data-row treatment (`.health-table-row`/`overview-stats`: transparent rows, one hairline
+  divider, no per-row border+fill) now covers Economy, Leaderboard, RateLab sims, Viewer metrics, Role
+  awards (kept status left-bar), Backups (guide strip + file/backup lists), boost multipliers, Twitch
+  reward rows. Message editor cards unified to the standard panel treatment.
+- **Controls — DONE** (commit 4d94329). The sliding pill switch is now a crisp **checkbox** (accent-soft
+  fill + contrast-safe accent check via `--accent-readable`); every 999px pill chip/badge/token de-pilled
+  to a small crisp radius. Dots/knobs/round icon markers stay round.
+- **Wizard — DONE** (commit dcbf9fe). Kept the ceremonial shell + preset choice cards; flattened the
+  summary/review fact tiles to a divider strip; choice-card radius aligned to 10px.
+- **Segmented controls: intentionally deferred** — the real two-option choices are already handled
+  (booleans→checkbox, backend→option cards); remaining `<select>`s are legitimately multi-option. See
+  `docs/design-language.md` build order + Controls note.
+- **Left for later:** deep form internals (part/variant/field grids), then 0.8 step 5 = **Design Mode**
+  (overrides layer). Screenshots timed out all session (transient preview-renderer hang); verification
+  was via `preview_eval`/`preview_inspect`. Note: an untracked `ios/` folder sits in the repo root —
+  not created by this work, left out of every commit; worth checking what it is.
+
 ### 2026-07-04 — Claude (claude-opus-4-8) — Contrast-aware theming + DECIDED the theming model
 
 - **Contrast-aware theming (0.8 step)** — commits e0cb0d7 (accent-readable) + 286d98d (text/chrome).
