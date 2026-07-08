@@ -34,6 +34,8 @@ const defaultSystemProfile = {
   redeemCooldownSeconds: 120,
   redeemDupProtectionTurns: 0,
   redemptionCost: 100,
+  theme: "midnight",
+  accent: "#ff1a24",
   commands: {
     inventory: "components",
     missing: "missing",
@@ -171,7 +173,7 @@ function markClean() {
 
 function normalizeProfile(value) {
   const incoming = value || {};
-  return {
+  const merged = {
     ...clone(defaultSystemProfile),
     ...clone(incoming),
     schemaVersion: 1,
@@ -179,6 +181,10 @@ function normalizeProfile(value) {
     commands: { ...clone(defaultSystemProfile.commands), ...clone(incoming.commands || {}) },
     messages: { ...clone(defaultSystemProfile.messages), ...clone(incoming.messages || {}) }
   };
+  // `theme` is optional — a custom/legacy profile has none. Don't let the default's theme leak in and
+  // silently re-skin a profile that was running on its own colors.
+  if (!("theme" in incoming)) delete merged.theme;
+  return merged;
 }
 
 function hexToRgba(hex, alpha) {
@@ -382,6 +388,78 @@ function resolveThemeColors(profile) {
   return { ...BASE_THEMES[DEFAULT_THEME], accent };
 }
 
+function currentThemeId() {
+  return systemProfile.theme && BASE_THEMES[systemProfile.theme] ? systemProfile.theme : null;
+}
+
+// Appearance page: a base-theme selector + a single accent picker. The app owns the structural
+// colors (base themes); the streamer tints only the accent, applied contrast-safely. A profile still
+// on its own 7 hand-picked colors is shown a "Custom" option so nothing is lost pre-migration.
+function renderThemePicker() {
+  const grid = document.getElementById("profileColors");
+  grid.replaceChildren();
+
+  const activeId = currentThemeId();
+  const isCustom = !activeId && !!systemProfile.colors;
+  const accent = resolveThemeColors(systemProfile).accent;
+
+  const options = Object.entries(BASE_THEMES).map(([id, theme]) => ({ id, theme, custom: false }));
+  // A profile still on its own hand-picked colors (no base theme) keeps a "Custom" card so its look
+  // isn't lost. Once a base theme is adopted, the curated model takes over and Custom drops away.
+  if (isCustom) {
+    options.push({ id: "__custom", theme: { label: "Custom", ...systemProfile.colors }, custom: true });
+  }
+
+  const row = element("div", "theme-picker");
+  for (const opt of options) {
+    const active = opt.custom ? isCustom : activeId === opt.id;
+    const card = element("button", `theme-card${active ? " is-active" : ""}`);
+    card.type = "button";
+
+    const swatch = element("div", "theme-swatch");
+    swatch.style.background = opt.theme.background;
+    const panel = element("div", "theme-swatch-panel");
+    panel.style.background = opt.theme.panel;
+    panel.style.borderColor = opt.theme.line;
+    const dot = element("div", "theme-swatch-accent");
+    dot.style.background = accent;
+    panel.append(dot);
+    swatch.append(panel);
+
+    card.append(swatch, element("span", "theme-card-label", opt.theme.label));
+    card.addEventListener("click", () => {
+      if (opt.custom) delete systemProfile.theme;
+      else systemProfile.theme = opt.id;
+      profileDirty = true;
+      applySystemProfile();
+      renderProfilePreview();
+      updateProfileStatus();
+      renderThemePicker();
+    });
+    row.append(card);
+  }
+  grid.append(row);
+
+  const accentField = element("label", "accent-field");
+  const input = document.createElement("input");
+  input.type = "color";
+  input.value = accent;
+  input.dataset.profileAccent = "accent";
+  input.addEventListener("input", () => {
+    systemProfile.accent = input.value;
+    profileDirty = true;
+    applySystemProfile();
+    renderProfilePreview();
+    updateProfileStatus();
+    grid.querySelectorAll(".theme-swatch-accent").forEach(dot => (dot.style.background = input.value));
+  });
+  const text = element("div", "accent-field-text");
+  text.append(element("span", "accent-field-label", "Accent color"));
+  text.append(element("span", "accent-field-hint", "Your brand pop. Everything else is designed to stay legible."));
+  accentField.append(input, text);
+  grid.append(accentField);
+}
+
 function applySystemProfile() {
   const root = document.documentElement;
   const colors = resolveThemeColors(systemProfile);
@@ -460,33 +538,7 @@ function renderProfile() {
     profileCurrencyName: "currencyName"
   };
   for (const [id, key] of Object.entries(fields)) document.getElementById(id).value = systemProfile[key];
-  const colorNames = {
-    background: "Background",
-    panel: "Panel",
-    panelAlt: "Raised panel",
-    line: "Borders",
-    accent: "Accent",
-    text: "Text",
-    muted: "Muted text"
-  };
-  const grid = document.getElementById("profileColors");
-  grid.replaceChildren();
-  for (const [key, labelText] of Object.entries(colorNames)) {
-    const label = element("label", "color-field");
-    const input = document.createElement("input");
-    input.type = "color";
-    input.value = systemProfile.colors[key];
-    input.dataset.profileColor = key;
-    input.addEventListener("input", () => {
-      systemProfile.colors[key] = input.value;
-      profileDirty = true;
-      applySystemProfile();
-      renderProfilePreview();
-      updateProfileStatus();
-    });
-    label.append(input, element("span", "", labelText));
-    grid.append(label);
-  }
+  renderThemePicker();
   const commandNames = {
     inventory: "Inventory",
     missing: "Missing",
@@ -569,6 +621,9 @@ function validateProfileClient() {
   }
   for (const [key, value] of Object.entries(systemProfile.colors || {})) {
     if (!/^#[0-9a-f]{6}$/i.test(value)) errors.push(`${key} needs a valid hex color.`);
+  }
+  if (systemProfile.accent !== undefined && !/^#[0-9a-f]{6}$/i.test(systemProfile.accent)) {
+    errors.push("Accent needs a valid hex color.");
   }
   const commands = Object.values(systemProfile.commands || {});
   for (const command of commands) {
@@ -1167,7 +1222,10 @@ function validateWizardStep() {
 function buildWizardProfile() {
   const profile = wizardPreset === "circuit" ? clone(defaultSystemProfile) : blankWizardProfile();
   for (const [field, id] of Object.entries(wizardProfileFields)) profile[field] = document.getElementById(id).value.trim();
-  profile.colors.accent = document.getElementById("wizardAccent").value;
+  const accent = document.getElementById("wizardAccent").value;
+  profile.theme = DEFAULT_THEME;
+  profile.accent = accent;
+  if (profile.colors) profile.colors.accent = accent;
   return profile;
 }
 

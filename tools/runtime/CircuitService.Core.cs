@@ -21,6 +21,18 @@ internal sealed partial class CircuitService
     private static readonly string[] ColorFields =
         ["background", "panel", "panelAlt", "line", "accent", "text", "muted"];
 
+    // Curated base themes: the structural colors the app owns (background, panel, panelAlt, line, text,
+    // muted). The accent is supplied separately by the streamer. Mirrors BASE_THEMES in tools/admin/app.js.
+    // When a profile selects a theme, these become its effective `colors` so overlay + engine follow too.
+    private static readonly Dictionary<string, string[]> BaseThemes = new(StringComparer.Ordinal)
+    {
+        ["midnight"] = ["#000d19", "#061a2b", "#092239", "#193a55", "#eef5fb", "#8295a8"],
+        ["slate"]    = ["#0d1117", "#161b22", "#1c232c", "#2b3543", "#e6edf3", "#8b949e"],
+        ["carbon"]   = ["#0a0a0c", "#141418", "#1d1d22", "#2f2f37", "#f0f0f2", "#9a9aa4"],
+    };
+    private const string DefaultThemeId = "midnight";
+    private const string DefaultAccent = "#ff1a24";
+
     private static readonly HashSet<string> OptionalMessages = new(StringComparer.Ordinal)
     {
         "variantPull"
@@ -111,6 +123,10 @@ internal sealed partial class CircuitService
         ["redeemCooldownSeconds"] = 120,
         ["redeemDupProtectionTurns"] = 0,
         ["redemptionCost"] = 100,
+        // Curated theme selection. `colors` is the effective palette this resolves to (Midnight + red),
+        // kept in sync by NormalizeProfile so overlay + engine can keep reading `colors` directly.
+        ["theme"] = DefaultThemeId,
+        ["accent"] = DefaultAccent,
         ["colors"] = new JsonObject
         {
             ["background"] = "#000d19", ["panel"] = "#061a2b", ["panelAlt"] = "#092239",
@@ -136,8 +152,33 @@ internal sealed partial class CircuitService
         if (dupProtection >= 0 && dupProtection <= 20) normalized["redeemDupProtectionTurns"] = dupProtection;
         var redemptionCost = JsonUtil.Long(incoming, "redemptionCost");
         if (redemptionCost >= 1 && redemptionCost <= 1_000_000) normalized["redemptionCost"] = redemptionCost;
+
+        // Curated theming: `theme` (a base-theme id) + `accent` (one color) are the streamer's selection.
+        // Start clean — the theme is only re-added when a known base is chosen; otherwise the profile is
+        // "Custom" (running on its own `colors`, no theme).
+        normalized.Remove("theme");
+        var accent = JsonUtil.String(incoming, "accent");
+        if (!IsHexColor(accent)) accent = JsonUtil.String(JsonUtil.Object(incoming, "colors"), "accent");
+        if (IsHexColor(accent)) normalized["accent"] = accent;
+        else accent = normalized["accent"]?.ToString() is { } fallback && IsHexColor(fallback) ? fallback : DefaultAccent;
+
+        var themeId = JsonUtil.String(incoming, "theme");
+        if (BaseThemes.TryGetValue(themeId, out var palette))
+        {
+            // A base theme wins: its structural colors + the chosen accent become the effective `colors`,
+            // so the OBS overlay and engine (which read `colors`) follow the selected theme automatically.
+            normalized["theme"] = themeId;
+            normalized["accent"] = accent;
+            normalized["colors"] = new JsonObject
+            {
+                ["background"] = palette[0], ["panel"] = palette[1], ["panelAlt"] = palette[2],
+                ["line"] = palette[3], ["accent"] = accent, ["text"] = palette[4], ["muted"] = palette[5]
+            };
+        }
         return normalized;
     }
+
+    private static bool IsHexColor(string? value) => value is not null && Regex.IsMatch(value, "^#[0-9a-fA-F]{6}$");
 
     private static List<string> ValidateProfile(JsonObject? profile)
     {

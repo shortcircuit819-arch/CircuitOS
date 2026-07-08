@@ -129,8 +129,11 @@ internal sealed partial class CircuitService
         var gameName = JsonUtil.String(profile, "gameName").Trim();
         if (string.IsNullOrWhiteSpace(gameName)) gameName = "Shared Collection";
 
-        // Carry the flavor, strip the skin: colors/brandKicker/adminName come from whoever imports it.
+        // Carry the flavor, strip the skin: theme/accent/colors/brandKicker/adminName come from
+        // whoever imports it.
         var packProfile = (JsonObject)profile.DeepClone();
+        packProfile.Remove("theme");
+        packProfile.Remove("accent");
         packProfile.Remove("colors");
         packProfile.Remove("brandKicker");
         packProfile.Remove("adminName");
@@ -189,6 +192,8 @@ internal sealed partial class CircuitService
         var current = _store.TryRead(DataKeys.Profile);
         if (current is not null)
         {
+            if (current["theme"] is { } theme) merged["theme"] = theme.DeepClone();
+            if (current["accent"] is { } accent) merged["accent"] = accent.DeepClone();
             if (current["colors"] is { } colors) merged["colors"] = colors.DeepClone();
             if (current["brandKicker"] is { } brandKicker) merged["brandKicker"] = brandKicker.DeepClone();
             if (current["adminName"] is { } adminName) merged["adminName"] = adminName.DeepClone();

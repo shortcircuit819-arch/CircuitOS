@@ -89,6 +89,7 @@ try
     TestBackupRetention();
     TestCollectionPacks(service, store);
     TestProfileMetaSafetyNet(store, testPath);
+    TestThemeNormalization(service);
 
     Console.WriteLine("Smoke tests passed: first run is safe, the pull + redemption + command engines behave, collection packs round-trip, profiles survive missing metadata, and the Appwrite + Twitch config loaders behave.");
     return 0;
@@ -101,6 +102,56 @@ finally
 static void Require(bool condition, string message)
 {
     if (!condition) throw new InvalidOperationException(message);
+}
+
+// Curated theming (0.8): a profile stores `theme` (a base-theme id) + `accent`. Selecting a base theme
+// rewrites the effective `colors` from that palette so the overlay/engine follow; a profile with no
+// theme stays "custom" (its own colors), and an unrecognized theme id is dropped, not applied.
+static void TestThemeNormalization(CircuitService service)
+{
+    var baseProfile = service.GetSystemProfile()["profile"] as JsonObject
+        ?? throw new InvalidOperationException("Profile was unavailable for the theme test.");
+
+    JsonObject Clone() => (JsonObject)JsonUtil.Clone(baseProfile)!;
+    JsonObject SaveAndRead(JsonObject profile, string label)
+    {
+        var save = service.SaveSystemProfile(profile);
+        Require(save.Status == 200, label + " should save.");
+        return service.GetSystemProfile()["profile"] as JsonObject
+            ?? throw new InvalidOperationException("Profile was unavailable after " + label + ".");
+    }
+
+    // 1) A base theme drives the effective colors; the chosen accent flows through.
+    var themed = Clone();
+    themed["theme"] = "slate";
+    themed["accent"] = "#2dd4bf";
+    var got1 = SaveAndRead(themed, "A base-theme profile");
+    var colors1 = (JsonObject)got1["colors"]!;
+    Require(got1["theme"]?.ToString() == "slate", "The base-theme id should persist.");
+    Require(got1["accent"]?.ToString() == "#2dd4bf", "The accent should persist.");
+    Require(colors1["panel"]?.ToString() == "#161b22", "The base theme should drive colors.panel.");
+    Require(colors1["text"]?.ToString() == "#e6edf3", "The base theme should drive colors.text.");
+    Require(colors1["accent"]?.ToString() == "#2dd4bf", "The accent should flow into colors.accent.");
+
+    // 2) No theme = "custom": the profile keeps its own colors; the accent falls back to colors.accent.
+    var custom = Clone();
+    custom.Remove("theme");
+    custom.Remove("accent");
+    ((JsonObject)custom["colors"]!)["panel"] = "#123456";
+    ((JsonObject)custom["colors"]!)["accent"] = "#abcdef";
+    var got2 = SaveAndRead(custom, "A custom profile");
+    Require(got2["theme"] is null, "A custom profile should carry no theme.");
+    Require(((JsonObject)got2["colors"]!)["panel"]?.ToString() == "#123456", "Custom colors should be preserved.");
+    Require(got2["accent"]?.ToString() == "#abcdef", "The accent should fall back to colors.accent when custom.");
+
+    // 3) An unknown theme id is treated as custom (dropped), never applied over the profile's colors.
+    var bogus = Clone();
+    bogus.Remove("theme");
+    bogus["theme"] = "not-a-real-theme";
+    ((JsonObject)bogus["colors"]!)["panel"] = "#0f0f0f";
+    var got3 = SaveAndRead(bogus, "An unknown-theme profile");
+    Require(got3["theme"] is null, "An unknown theme id should be dropped.");
+    Require(((JsonObject)got3["colors"]!)["panel"]?.ToString() == "#0f0f0f", "An unknown theme keeps the profile's own colors.");
 }
 
 static void TestProfileMetaSafetyNet(IDataStore store, string dataRoot)
