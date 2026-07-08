@@ -716,8 +716,9 @@ input.invalid { border-color: var(--danger); }
 .twitch-scope-card.warning { border-color: rgba(255,200,87,0.48); }
 .twitch-scope-list { margin: 10px 0 12px 16px; padding: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .twitch-scope-list li { margin: 2px 0; }
-.twitch-reward-list { display: grid; gap: 10px; margin-top: 18px; }
-.twitch-reward-row { display: grid; grid-template-columns: 10px minmax(160px, 1fr) minmax(180px, 1fr) 110px auto; align-items: center; gap: 12px; padding: 13px 14px; border: 1px solid var(--line); border-radius: 4px; background: rgba(0, 10, 20, 0.26); }
+.twitch-reward-list { display: grid; gap: 0; margin-top: 18px; }
+.twitch-reward-row { display: grid; grid-template-columns: 10px minmax(160px, 1fr) minmax(180px, 1fr) 110px auto; align-items: center; gap: 12px; padding: 13px 4px; border-bottom: 1px solid var(--hairline); }
+.twitch-reward-row:last-child { border-bottom: 0; }
 .twitch-reward-row > div:first-child { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); }
 .twitch-reward-row span, .twitch-reward-row small { color: var(--muted); }
 .twitch-reward-cell { display: grid; gap: 6px; min-width: 0; }
