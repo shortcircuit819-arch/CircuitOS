@@ -93,17 +93,28 @@ The app owns the *bones*; the streamer tints *one* thing.
 - ALL-CAPS section kickers are brand flavor and stay, but every panel also carries a plain title so
   meaning is never carried by the kicker alone.
 
-## Design Mode (0.8 deliverable)
+## Design Mode (0.8 deliverable) — v1 shipped
 
 An in-app visual editor so a streamer can tune the look without touching source: **base theme + accent**
-(above), plus text **labels**, spacing, and specific small accents. (Raw per-color editing is the
-Advanced escape hatch, not the default.)
+(the Appearance defaults), plus deeper tuning. Raw per-color editing is the Advanced escape hatch, not
+the default.
 
-- Edits write to an **overrides layer**: a JSON map of token/label overrides applied *over* the base
-  tokens at runtime. The base skin is never edited, so there's no drift and overrides can be reset.
-- Overrides persist (per profile, with a global option) alongside the rest of the profile config.
-- Because the skin already reads from semantic tokens, Design Mode is "expose the tokens + a few text
-  labels as editable fields," not a rewrite.
+- Edits write to an **overrides layer** (`systemProfile.designOverrides`): a JSON map of CSS-var
+  overrides applied *over* the resolved theme at runtime. The base skin/theme is never edited, so there's
+  no drift and overrides reset cleanly.
+- **How it applies** (`applySystemProfile`): structural color overrides (`--bg`, `--panel`, `--panel-2`,
+  `--line`, `--text`, `--muted`) fold into the resolved theme *before* chrome + contrast derivation, so
+  the whole surface family stays consistent; status hues (`--green/--amber/--blue/--danger`) and
+  `--radius` pass through verbatim, applied last so they win.
+- The key whitelist lives in two mirrored places: `DESIGN_*` in `tools/admin/app.js` and `DesignColorKeys`
+  in `CircuitService.Core.cs`. The backend **sanitizes** the map (whitelisted keys, hex colors, 0–24px
+  radius) and never rejects a save — a stale or hand-edited override is simply dropped.
+- Overrides persist per profile alongside the rest of the profile config. A cross-profile **global**
+  option is deferred to v2.
+- **v1 UI** (Appearance page, progressive disclosure): a friendly **Roundness** slider (`--radius`, routed
+  through the panel/card surfaces) and an **Advanced** raw-token color grid + **Reset**.
+- **v2:** editable text **labels** and a **density/spacing** scale — both need a label/spacing token layer
+  the app doesn't have yet ("expose the tokens as fields" only works once the tokens exist).
 
 ## 0.8 build order
 
@@ -126,7 +137,12 @@ Advanced escape hatch, not the default.)
    profile data model carries `theme` + `accent`, and `NormalizeProfile` rewrites the effective `colors`
    from the chosen base palette so the overlay + engine follow. Legacy profiles stay "Custom" until they
    adopt a base theme.
-5. **Design Mode.** The overrides layer + the in-app editor (theme + accent + labels/spacing).
+5. **Design Mode** ✓ (v1) — the runtime **overrides layer** (`systemProfile.designOverrides`: a
+   whitelisted CSS-var map applied over the resolved theme; structural colors fold into the theme before
+   chrome/contrast derivation, status hues + `--radius` pass through) plus an editor on the Appearance
+   page: a friendly **Roundness** control and an **Advanced** raw-token color grid + **Reset**. The
+   backend sanitizes the map (never rejects). **v2:** editable labels, a density/spacing scale, and a
+   cross-profile "global" overrides option.
 
 **Segmented controls:** deferred, not skipped. The genuine two-option choices are already handled
 (booleans → checkboxes; data backend Local/Cloud → selectable option cards). The remaining `<select>`s

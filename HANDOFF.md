@@ -454,6 +454,30 @@ DataPath/
 
 ## Session Log
 
+### 2026-07-08 — Claude (claude-opus-4-8) — 0.8 Design Mode v1 (step 5) — all 0.8 steps now implemented (no version bump)
+
+Commit e9bbc65 (feature) + doc updates. This completes the 0.8 build order (steps 1–5 all implemented);
+**0.8 is NOT cut** — footer still 0.7.3.1, pending the user's review + any pre-rollout tweaks.
+
+- **Design Mode v1 = the runtime overrides layer + an Appearance-page editor.** `systemProfile.designOverrides`
+  is a whitelisted map of CSS-var overrides applied over the resolved theme. In `applySystemProfile`,
+  structural color overrides (`--bg/--panel/--panel-2/--line/--text/--muted`) fold into the theme BEFORE
+  chrome + contrast derivation (so the surface family stays consistent — verified: overriding `--panel`
+  recomputes `--sidebar-bg`); status hues + `--radius` pass through verbatim, last.
+- **UI** (Appearance page, progressive disclosure below theme+accent): a friendly **Roundness** slider
+  (`--radius`, now a `:root` token routed through the panel/stat/collection/message surfaces) + an
+  **Advanced** raw-token color grid (10 colors) + **Reset**. `renderDesignMode()` in app.js.
+- **Backend** (`CircuitService.Core.cs`): `DefaultProfile` seeds `designOverrides {}`; `NormalizeProfile`
+  **sanitizes** it (whitelist `DesignColorKeys`, hex colors, 0–24px radius) — never rejects, so a stale/
+  hand-edited override just gets dropped. Whitelist mirrored between app.js `DESIGN_*` and Core.cs.
+- **Test:** `TestDesignOverrides` (keep valid / drop invalid / drop out-of-range). Smoke tests green;
+  verified live in preview incl. backend save round-trip + reset.
+- **Deferred to Design Mode v2** (documented in design-language.md): editable text **labels** + a
+  **density/spacing** scale (need a label/spacing token layer first), and a cross-profile **global**
+  overrides option (currently per-profile only).
+- **Next:** user review of the whole 0.8 look on their build, then any tweaks → then cut 0.8 (bump
+  version + patch note). The v2 Design Mode items and deep form-internal re-skin remain optional polish.
+
 ### 2026-07-08 — Claude (claude-opus-4-8) — 0.8 curated theming model + full re-skin rollout (no version bump)
 
 Landed 0.8 steps 3 (re-skin) and 4 (curated theming), all on `main`; footer still 0.7.3.1 (0.8 in progress).
