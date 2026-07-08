@@ -33,6 +33,11 @@ internal sealed partial class CircuitService
     private const string DefaultThemeId = "midnight";
     private const string DefaultAccent = "#ff1a24";
 
+    // Design Mode (0.8 step 5): whitelisted CSS custom-property overrides layered over the theme at
+    // runtime. Colors must be hex; --radius is 0–24px. Kept in sync with app.js DESIGN_* key lists.
+    private static readonly string[] DesignColorKeys =
+        ["--bg", "--panel", "--panel-2", "--line", "--text", "--muted", "--green", "--amber", "--blue", "--danger"];
+
     private static readonly HashSet<string> OptionalMessages = new(StringComparer.Ordinal)
     {
         "variantPull"
@@ -127,6 +132,7 @@ internal sealed partial class CircuitService
         // kept in sync by NormalizeProfile so overlay + engine can keep reading `colors` directly.
         ["theme"] = DefaultThemeId,
         ["accent"] = DefaultAccent,
+        ["designOverrides"] = new JsonObject(),
         ["colors"] = new JsonObject
         {
             ["background"] = "#000d19", ["panel"] = "#061a2b", ["panelAlt"] = "#092239",
@@ -175,6 +181,21 @@ internal sealed partial class CircuitService
                 ["line"] = palette[3], ["accent"] = accent, ["text"] = palette[4], ["muted"] = palette[5]
             };
         }
+
+        // Design Mode overrides: keep only whitelisted keys with valid values (colors = hex, --radius =
+        // 0–24px). Sanitize rather than reject, so a hand-edited or stale override can never block a save.
+        var overrides = new JsonObject();
+        if (JsonUtil.Object(incoming, "designOverrides") is { } incomingOverrides)
+        {
+            foreach (var key in DesignColorKeys)
+            {
+                var value = JsonUtil.String(incomingOverrides, key);
+                if (IsHexColor(value)) overrides[key] = value;
+            }
+            var radius = JsonUtil.String(incomingOverrides, "--radius");
+            if (Regex.IsMatch(radius, "^([0-9]|1[0-9]|2[0-4])px$")) overrides["--radius"] = radius;
+        }
+        normalized["designOverrides"] = overrides;
         return normalized;
     }
 

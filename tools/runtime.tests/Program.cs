@@ -90,6 +90,7 @@ try
     TestCollectionPacks(service, store);
     TestProfileMetaSafetyNet(store, testPath);
     TestThemeNormalization(service);
+    TestDesignOverrides(service);
 
     Console.WriteLine("Smoke tests passed: first run is safe, the pull + redemption + command engines behave, collection packs round-trip, profiles survive missing metadata, and the Appwrite + Twitch config loaders behave.");
     return 0;
@@ -152,6 +153,45 @@ static void TestThemeNormalization(CircuitService service)
     var got3 = SaveAndRead(bogus, "An unknown-theme profile");
     Require(got3["theme"] is null, "An unknown theme id should be dropped.");
     Require(((JsonObject)got3["colors"]!)["panel"]?.ToString() == "#0f0f0f", "An unknown theme keeps the profile's own colors.");
+}
+
+// Design Mode overrides (0.8 step 5): NormalizeProfile sanitizes the overrides map — whitelisted keys
+// with valid values survive; invalid values, non-whitelisted keys, and out-of-range radii are dropped
+// (never rejected) so a hand-edited or stale override can't block a save.
+static void TestDesignOverrides(CircuitService service)
+{
+    var baseProfile = service.GetSystemProfile()["profile"] as JsonObject
+        ?? throw new InvalidOperationException("Profile was unavailable for the design-overrides test.");
+
+    JsonObject SaveAndRead(JsonObject overrides)
+    {
+        var profile = (JsonObject)JsonUtil.Clone(baseProfile)!;
+        profile["designOverrides"] = overrides;
+        var save = service.SaveSystemProfile(profile);
+        Require(save.Status == 200, "A profile with design overrides should save.");
+        var got = service.GetSystemProfile()["profile"] as JsonObject
+            ?? throw new InvalidOperationException("Profile was unavailable after saving design overrides.");
+        return got["designOverrides"] as JsonObject
+            ?? throw new InvalidOperationException("designOverrides was missing from the saved profile.");
+    }
+
+    var ov = SaveAndRead(new JsonObject
+    {
+        ["--panel"] = "#123456",     // valid structural color → kept
+        ["--danger"] = "#abcdef",    // valid status color → kept
+        ["--radius"] = "4px",        // valid roundness → kept
+        ["--line"] = "not-a-color",  // invalid value → dropped
+        ["--bogus"] = "#ffffff"      // not whitelisted → dropped
+    });
+    Require(ov["--panel"]?.ToString() == "#123456", "A valid structural override should persist.");
+    Require(ov["--danger"]?.ToString() == "#abcdef", "A valid status override should persist.");
+    Require(ov["--radius"]?.ToString() == "4px", "A valid radius override should persist.");
+    Require(ov["--line"] is null, "An invalid color override should be dropped.");
+    Require(ov["--bogus"] is null, "A non-whitelisted override should be dropped.");
+
+    var ov2 = SaveAndRead(new JsonObject { ["--radius"] = "40px" });  // out of range
+    Require(ov2["--radius"] is null, "An out-of-range radius should be dropped.");
+    Require(ov2.Count == 0, "Sanitizing should leave no stray override keys.");
 }
 
 static void TestProfileMetaSafetyNet(IDataStore store, string dataRoot)

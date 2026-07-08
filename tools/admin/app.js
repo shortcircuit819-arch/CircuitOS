@@ -36,6 +36,7 @@ const defaultSystemProfile = {
   redemptionCost: 100,
   theme: "midnight",
   accent: "#ff1a24",
+  designOverrides: {},
   commands: {
     inventory: "components",
     missing: "missing",
@@ -179,7 +180,8 @@ function normalizeProfile(value) {
     schemaVersion: 1,
     colors: { ...clone(defaultSystemProfile.colors), ...clone(incoming.colors || {}) },
     commands: { ...clone(defaultSystemProfile.commands), ...clone(incoming.commands || {}) },
-    messages: { ...clone(defaultSystemProfile.messages), ...clone(incoming.messages || {}) }
+    messages: { ...clone(defaultSystemProfile.messages), ...clone(incoming.messages || {}) },
+    designOverrides: { ...clone(incoming.designOverrides || {}) }
   };
   // `theme` is optional — a custom/legacy profile has none. Don't let the default's theme leak in and
   // silently re-skin a profile that was running on its own colors.
@@ -377,6 +379,16 @@ const BASE_THEMES = {
 const DEFAULT_THEME = "midnight";
 const DEFAULT_ACCENT = "#ff1a24";
 
+// Design Mode (0.8 step 5): a whitelisted map of CSS custom-property overrides applied over the resolved
+// theme at runtime (see docs/design-language.md → Design Mode). Structural colors fold into the theme
+// before chrome/contrast derivation; status hues + roundness pass through verbatim. Kept in sync with
+// the backend whitelist in CircuitService.Core.cs.
+const DESIGN_STRUCTURAL_KEYS = ["--bg", "--panel", "--panel-2", "--line", "--text", "--muted"];
+const DESIGN_PASSTHROUGH_KEYS = ["--green", "--amber", "--blue", "--danger", "--radius"];
+const DESIGN_COLOR_KEYS = [...DESIGN_STRUCTURAL_KEYS, "--green", "--amber", "--blue", "--danger"];
+const DESIGN_OVERRIDE_KEYS = [...DESIGN_STRUCTURAL_KEYS, ...DESIGN_PASSTHROUGH_KEYS];
+const DESIGN_RADIUS_DEFAULT = 10;
+
 // The effective 7 render colors: structural from the chosen base theme, accent from the profile.
 // Backward-compatible: a legacy profile with no `theme` falls back to its stored 7-color `colors`.
 function resolveThemeColors(profile) {
@@ -460,29 +472,124 @@ function renderThemePicker() {
   grid.append(accentField);
 }
 
+// Design Mode: the overrides editor. Roundness is the friendly knob; Advanced exposes the individual
+// structural + status colors. Every change writes into systemProfile.designOverrides and applies live.
+function renderDesignMode() {
+  const host = document.getElementById("designControls");
+  if (!host) return;
+  host.replaceChildren();
+  const overrides = systemProfile.designOverrides || (systemProfile.designOverrides = {});
+
+  const commit = () => {
+    profileDirty = true;
+    applySystemProfile();
+    renderProfilePreview();
+    updateProfileStatus();
+  };
+  const setOverride = (key, value) => {
+    if (value == null || value === "") delete overrides[key];
+    else overrides[key] = value;
+    if (resetButton) resetButton.disabled = Object.keys(overrides).length === 0;
+    commit();
+  };
+
+  // Roundness — a single friendly control over --radius (stored only when it differs from the default).
+  const round = element("div", "design-row");
+  round.append(element("span", "design-row-label", "Roundness"));
+  const range = document.createElement("input");
+  range.type = "range"; range.min = "0"; range.max = "20"; range.step = "1";
+  const storedRadius = parseInt(overrides["--radius"], 10);
+  range.value = String(Number.isFinite(storedRadius) ? storedRadius : DESIGN_RADIUS_DEFAULT);
+  const radiusValue = element("span", "design-row-value", range.value + "px");
+  range.addEventListener("input", () => {
+    radiusValue.textContent = range.value + "px";
+    setOverride("--radius", Number(range.value) === DESIGN_RADIUS_DEFAULT ? null : range.value + "px");
+  });
+  round.append(range, radiusValue);
+  host.append(round);
+
+  // Advanced — the raw structural + status colors (the "you can make it ugly" escape hatch).
+  const labels = {
+    "--bg": "Page", "--panel": "Surface", "--panel-2": "Raised", "--line": "Lines",
+    "--text": "Text", "--muted": "Muted", "--green": "Positive", "--amber": "Warning",
+    "--blue": "Info", "--danger": "Danger"
+  };
+  const resolved = resolveThemeColors(systemProfile);
+  const structural = { "--bg": "background", "--panel": "panel", "--panel-2": "panelAlt", "--line": "line", "--text": "text", "--muted": "muted" };
+  const baseColorFor = (key) => {
+    if (structural[key]) return resolved[structural[key]];
+    const computed = getComputedStyle(document.documentElement).getPropertyValue(key).trim();
+    return /^#[0-9a-f]{6}$/i.test(computed) ? computed : "#888888";
+  };
+  const advanced = element("details", "design-advanced");
+  advanced.append(element("summary", "", "Advanced — individual colors"));
+  const tokenGrid = element("div", "design-token-grid");
+  for (const key of DESIGN_COLOR_KEYS) {
+    const field = element("label", "design-token-field");
+    const input = document.createElement("input");
+    input.type = "color";
+    input.value = /^#[0-9a-f]{6}$/i.test(overrides[key] || "") ? overrides[key] : baseColorFor(key);
+    input.addEventListener("input", () => setOverride(key, input.value));
+    field.append(input, element("span", "", labels[key]));
+    tokenGrid.append(field);
+  }
+  advanced.append(tokenGrid);
+  host.append(advanced);
+
+  const resetButton = document.createElement("button");
+  resetButton.type = "button";
+  resetButton.className = "button secondary design-reset";
+  resetButton.textContent = "Reset design overrides";
+  resetButton.disabled = Object.keys(overrides).length === 0;
+  resetButton.addEventListener("click", () => {
+    if (Object.keys(overrides).length === 0) return;
+    systemProfile.designOverrides = {};
+    commit();
+    renderDesignMode();
+  });
+  host.append(resetButton);
+}
+
 function applySystemProfile() {
   const root = document.documentElement;
   const colors = resolveThemeColors(systemProfile);
-  root.style.setProperty("--bg", colors.background);
-  root.style.setProperty("--panel", colors.panel);
-  root.style.setProperty("--panel-2", colors.panelAlt);
-  root.style.setProperty("--line", colors.line);
-  root.style.setProperty("--red", colors.accent);
-  root.style.setProperty("--accent", colors.accent);
+  // Design Mode overrides layer: structural color overrides are folded into the resolved theme BEFORE
+  // deriving chrome + contrast tokens, so the whole surface family stays consistent (see
+  // docs/design-language.md → Design Mode). Accent stays owned by the Appearance accent picker.
+  const ov = systemProfile.designOverrides || {};
+  const c = {
+    background: ov["--bg"] || colors.background,
+    panel: ov["--panel"] || colors.panel,
+    panelAlt: ov["--panel-2"] || colors.panelAlt,
+    line: ov["--line"] || colors.line,
+    accent: colors.accent,
+    text: ov["--text"] || colors.text,
+    muted: ov["--muted"] || colors.muted,
+  };
+  root.style.setProperty("--bg", c.background);
+  root.style.setProperty("--panel", c.panel);
+  root.style.setProperty("--panel-2", c.panelAlt);
+  root.style.setProperty("--line", c.line);
+  root.style.setProperty("--red", c.accent);
+  root.style.setProperty("--accent", c.accent);
   // Contrast-safe accent for text/icons (kickers, links, active states): if the streamer's accent is
   // too low-contrast on the panel surface, nudge it until legible. A good accent passes through unchanged.
-  root.style.setProperty("--accent-readable", readableOn(colors.accent, colors.panel, 3.2));
-  root.style.setProperty("--red-soft", hexToRgba(colors.accent, 0.13));
-  root.style.setProperty("--red-border", hexToRgba(colors.accent, 0.28));
+  root.style.setProperty("--accent-readable", readableOn(c.accent, c.panel, 3.2));
+  root.style.setProperty("--red-soft", hexToRgba(c.accent, 0.13));
+  root.style.setProperty("--red-border", hexToRgba(c.accent, 0.28));
   // Chrome (sidebar + topbar) derives from the panel, not the page background, so ALL text lives on one
   // surface family and stays legible — the page background then reads as a frame between the panels.
-  root.style.setProperty("--sidebar-bg", hexToRgba(colors.panel, 0.96));
-  root.style.setProperty("--sidebar-card", hexToRgba(colors.panelAlt, 0.55));
-  root.style.setProperty("--sidebar-card-hover", hexToRgba(colors.panelAlt, 0.75));
-  root.style.setProperty("--chrome-bg", hexToRgba(colors.panel, 0.97));
+  root.style.setProperty("--sidebar-bg", hexToRgba(c.panel, 0.96));
+  root.style.setProperty("--sidebar-card", hexToRgba(c.panelAlt, 0.55));
+  root.style.setProperty("--sidebar-card-hover", hexToRgba(c.panelAlt, 0.75));
+  root.style.setProperty("--chrome-bg", hexToRgba(c.panel, 0.97));
   // Guarantee legible body/label text on the panel surface, whatever the streamer picked.
-  root.style.setProperty("--text", readableOn(colors.text, colors.panel, 4.5));
-  root.style.setProperty("--muted", readableOn(colors.muted, colors.panel, 3.0));
+  root.style.setProperty("--text", readableOn(c.text, c.panel, 4.5));
+  root.style.setProperty("--muted", readableOn(c.muted, c.panel, 3.0));
+  // Pass-through overrides (status hues + roundness) apply verbatim, last, so they win.
+  for (const key of DESIGN_PASSTHROUGH_KEYS) {
+    if (ov[key]) root.style.setProperty(key, ov[key]); else root.style.removeProperty(key);
+  }
   document.title = `${platformName} | ${systemProfile.gameName}`;
   document.getElementById("activeProfileGame").textContent = systemProfile.gameName;
   document.getElementById("activeProfileAdmin").textContent = systemProfile.adminName;
@@ -539,6 +646,7 @@ function renderProfile() {
   };
   for (const [id, key] of Object.entries(fields)) document.getElementById(id).value = systemProfile[key];
   renderThemePicker();
+  renderDesignMode();
   const commandNames = {
     inventory: "Inventory",
     missing: "Missing",
