@@ -134,6 +134,14 @@ static void TestThemeNormalization(CircuitService service)
     Require(colors1["text"]?.ToString() == "#e6edf3", "The base theme should drive colors.text.");
     Require(colors1["accent"]?.ToString() == "#2dd4bf", "The accent should flow into colors.accent.");
 
+    // A newly added base theme resolves through the same path (guards the JS↔C# theme-list mirror).
+    var light = Clone();
+    light["theme"] = "daylight";
+    var gotLight = SaveAndRead(light, "The daylight theme");
+    Require(gotLight["theme"]?.ToString() == "daylight", "The daylight theme id should persist.");
+    Require(((JsonObject)gotLight["colors"]!)["panel"]?.ToString() == "#ffffff", "Daylight should resolve to a white panel.");
+    Require(((JsonObject)gotLight["colors"]!)["background"]?.ToString() == "#e9ebf0", "Daylight should resolve to its light page.");
+
     // 2) No theme = "custom": the profile keeps its own colors; the accent falls back to colors.accent.
     var custom = Clone();
     custom.Remove("theme");

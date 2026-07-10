@@ -375,6 +375,9 @@ const BASE_THEMES = {
   midnight: { label: "Midnight", background: "#000d19", panel: "#061a2b", panelAlt: "#092239", line: "#193a55", text: "#eef5fb", muted: "#8295a8" },
   slate:    { label: "Slate",    background: "#0d1117", panel: "#161b22", panelAlt: "#1c232c", line: "#2b3543", text: "#e6edf3", muted: "#8b949e" },
   carbon:   { label: "Carbon",   background: "#0a0a0c", panel: "#141418", panelAlt: "#1d1d22", line: "#2f2f37", text: "#f0f0f2", muted: "#9a9aa4" },
+  ember:    { label: "Ember",    background: "#140f0d", panel: "#1f1815", panelAlt: "#2a201b", line: "#3d2f27", text: "#f5ede7", muted: "#a8968a" },
+  grape:    { label: "Grape",    background: "#0e0a17", panel: "#191130", panelAlt: "#241941", line: "#362a58", text: "#efeafb", muted: "#9b8fbf" },
+  daylight: { label: "Daylight", background: "#e9ebf0", panel: "#ffffff", panelAlt: "#f3f4f7", line: "#d5d9e0", text: "#1b1e26", muted: "#5b6472" },
 };
 const DEFAULT_THEME = "midnight";
 const DEFAULT_ACCENT = "#ff1a24";
@@ -583,6 +586,14 @@ function applySystemProfile() {
   root.style.setProperty("--sidebar-card", hexToRgba(c.panelAlt, 0.55));
   root.style.setProperty("--sidebar-card-hover", hexToRgba(c.panelAlt, 0.75));
   root.style.setProperty("--chrome-bg", hexToRgba(c.panel, 0.97));
+  // Recessed surfaces (form fields, tracks, list wells, nested regions) derived from the theme so they
+  // follow ANY base — including light themes — instead of assuming a dark page. --inset is a subtle
+  // recess; --well is a deeper one (inputs, progress tracks, code blocks).
+  root.style.setProperty("--inset", mixToward(c.panel, c.background, 0.5));
+  root.style.setProperty("--well", mixToward(c.panel, c.background, 0.82));
+  // A legible foreground for accent-filled controls (primary buttons, count badges): black or white,
+  // whichever contrasts better with the accent — so the label stays readable on any accent + theme.
+  root.style.setProperty("--on-accent", contrastRatio("#ffffff", c.accent) >= 3.0 ? "#ffffff" : "#000000");
   // Guarantee legible body/label text on the panel surface, whatever the streamer picked.
   root.style.setProperty("--text", readableOn(c.text, c.panel, 4.5));
   root.style.setProperty("--muted", readableOn(c.muted, c.panel, 3.0));

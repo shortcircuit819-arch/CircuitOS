@@ -29,6 +29,9 @@ internal sealed partial class CircuitService
         ["midnight"] = ["#000d19", "#061a2b", "#092239", "#193a55", "#eef5fb", "#8295a8"],
         ["slate"]    = ["#0d1117", "#161b22", "#1c232c", "#2b3543", "#e6edf3", "#8b949e"],
         ["carbon"]   = ["#0a0a0c", "#141418", "#1d1d22", "#2f2f37", "#f0f0f2", "#9a9aa4"],
+        ["ember"]    = ["#140f0d", "#1f1815", "#2a201b", "#3d2f27", "#f5ede7", "#a8968a"],
+        ["grape"]    = ["#0e0a17", "#191130", "#241941", "#362a58", "#efeafb", "#9b8fbf"],
+        ["daylight"] = ["#e9ebf0", "#ffffff", "#f3f4f7", "#d5d9e0", "#1b1e26", "#5b6472"],
     };
     private const string DefaultThemeId = "midnight";
     private const string DefaultAccent = "#ff1a24";
