@@ -12,7 +12,7 @@ the end of every working session before stopping.
 |-------|-------|
 | Project | CircuitOS — configurable Twitch collection-game platform |
 | Default game | Circuit Components (electronics-themed) |
-| Current version | **0.7.3.1** (shipped — native Twitch is the single supported path; Streamer.bot retired in 0.7.2. Collection packs + import de-dupe in 0.7.3; share-all-collections in 0.7.3.1. Optional cloud, per-state overlay images, backup retention). Local mode is the default and unchanged. |
+| Current version | **0.8.0** (shipped — "Design & Identity": full card-less re-skin, six curated base themes incl. a light theme, contrast-safe accent, and Design Mode overrides. Native Twitch is the single supported path; Streamer.bot retired in 0.7.2. Optional cloud, per-state overlay images, backup retention). Local mode is the default and unchanged. |
 | Phase | **0.7 — Native Twitch + Cloud Foundation — shipped (0.7.2 retired Streamer.bot).** Zero-config Twitch login (device flow, no dev account), CircuitOS-managed channel-point reward, native EventSub redemptions + chat commands + pull announcements. Settings page with an optional cloud data backend (bring-your-own Appwrite, safe fallback to local). Multiple live profiles, per-state overlay colors, shared PullEngine/RedemptionEngine/CommandEngine (smoke-tested), reliability/security hardening. Still ahead: Velopack + GitHub installer/updater (gated on creating the repo — `docs/updater-velopack-plan.md`), and a true *hosted* cloud (security/infra decision — `docs/feature-requests-analysis.md`). Deferred features: bot chat account, cross-profile currency (shops/2.0), per-state overlay images. |
 | Repo root | `C:\Dev\CircuitStreamSystem` |
 | Live data path | `C:\Users\nicho\Documents\CircuitOS\Data` (profiles under `Data\profiles\<id>`; active profile `circuit-components`) |
@@ -453,6 +453,19 @@ DataPath/
 ---
 
 ## Session Log
+
+### 2026-07-08 — Claude (claude-opus-4-8) — Cut 0.8.0 (Design & Identity)
+
+Version → **0.8.0** in all four locations (csproj `<Version>/<FileVersion>/<AssemblyVersion>`,
+`Program.cs` `/api/health`, `CircuitService.Modules.cs` `circuitosVersion` ×2, `README.md`).
+`docs/patch-notes/v0.8.0.md` added. Packaged (publish single-file EXE → `tools/admin/runtime` →
+`Build-CircuitOSPackage.ps1` → `dist/`). Tagged `v0.8.0`.
+
+0.8 milestone contents (all build-order steps 1–5): the token layer + contrast-aware theming, the full
+card-less re-skin across every screen, the curated theming model (six base themes incl. the Daylight
+light theme + a contrast-safe accent), and Design Mode v1 (the runtime overrides layer + Roundness /
+Advanced / Reset). See the earlier 2026-07-08 entries for the per-step detail and
+`docs/design-language.md` for the contract.
 
 ### 2026-07-08 — Claude (claude-opus-4-8) — 0.8 themes: light theme + token cleanup (no version bump)
 
