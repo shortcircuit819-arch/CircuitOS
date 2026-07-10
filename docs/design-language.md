@@ -55,8 +55,14 @@ The app owns the *bones*; the streamer tints *one* thing.
 
 - **The app ships a few designed base themes** — each a crafted set of the structural colors (background,
   surface, surface-raised, hairline, text, muted). These are not free-form user fields; they're designed
-  so the product always looks intentional (the Apple model). Start with the current dark theme; add a
-  couple more (e.g. a lighter one) over time.
+  so the product always looks intentional (the Apple model). Current set (6): **Midnight** (cool blue-
+  black), **Slate** (neutral gray), **Carbon** (near-black), **Ember** (warm dark), **Grape** (deep
+  purple), and **Daylight** (light). Keep the set curated — a handful, not a color free-for-all.
+- **Themes must be token-clean.** A theme only works because the skin reads structural colors from tokens.
+  The recessed surfaces (`--inset`, `--well`), the accent foreground (`--on-accent`), plus the existing
+  `--surface/--hairline/--text/...` are all derived from the theme in `applySystemProfile`, so a light
+  base doesn't hit hardcoded dark values. When adding UI, never hardcode a near-black fill or light-on-
+  dark text — route it through a token, or Daylight (and Design Mode overrides) will break there.
 - **The streamer picks their accent color** — their brand pop — and nothing else. The accent is applied
   **contrast-safely** (`--accent-readable` derives a legible variant per surface), so any accent stays
   usable without letting a bad pick break the UI.
@@ -132,7 +138,7 @@ the default.
    cards** (genuinely distinct areas): collection cards, the Settings backend option cards, the Twitch
    account + utility cards, and the message editors. **Kept round** (not pills): status dots, and the
    help/step round icon markers. **Deliberately left:** deep form internals (part/variant/field grids).
-4. **Curated theming model** ✓ — base themes (Midnight/Slate/Carbon) + a `resolveThemeColors` resolver;
+4. **Curated theming model** ✓ — six base themes (Midnight/Slate/Carbon/Ember/Grape/Daylight) + a `resolveThemeColors` resolver;
    Appearance reworked to a theme selector + accent picker (with a "Custom" card for legacy profiles);
    profile data model carries `theme` + `accent`, and `NormalizeProfile` rewrites the effective `colors`
    from the chosen base palette so the overlay + engine follow. Legacy profiles stay "Custom" until they

@@ -454,6 +454,27 @@ DataPath/
 
 ## Session Log
 
+### 2026-07-08 — Claude (claude-opus-4-8) — 0.8 themes: light theme + token cleanup (no version bump)
+
+Commit fca9319. Added three base themes and did the tokenization a light theme requires.
+
+- **Three new themes** (now 6 total): **Ember** (warm dark), **Grape** (deep purple), **Daylight**
+  (light). Palettes mirrored in `BASE_THEMES` (app.js) + `BaseThemes` (Core.cs); `TestThemeNormalization`
+  now asserts Daylight too (guards the mirror).
+- **Token cleanup (the real work).** ~40 hardcoded dark literals in styles.css assumed a dark base and
+  would have broken a light theme (black input boxes, invisible code text, blue-tinted washes). Routed
+  them through theme-derived tokens: new `--inset`/`--well` (recessed surfaces) + `--on-accent` (legible
+  fg for accent fills) are computed in `applySystemProfile`; near-black fills → `--well`, `rgba(0,10,20,x)`
+  washes → `--inset`, line-at-alpha borders → `--hairline`, code text → `--text`, accent-shade bar fills
+  → `--accent-dark`. This also **de-blued Slate/Carbon** (the washes were blue-tinted) and makes Design
+  Mode's Advanced overrides reach everywhere. `--on-accent` biases to white (default red buttons keep
+  white text), flipping to black only for light accents.
+- **Verified live** (in-app browser on the headless server): all 6 themes resolve; Daylight inputs are
+  dark-on-light (`#edeff3` well, `#1b1e26` text) — not black boxes — red accent + glow preserved,
+  screenshot looks clean. Smoke tests green; Release builds clean.
+- **Only intentional darks left:** the `:root` theme defaults (overridden at runtime) and the OBS
+  overlay-preview canvas (`#000`, correct — OBS renders on black/transparent).
+
 ### 2026-07-08 — Claude (claude-opus-4-8) — 0.8 Design Mode v1 (step 5) — all 0.8 steps now implemented (no version bump)
 
 Commit e9bbc65 (feature) + doc updates. This completes the 0.8 build order (steps 1–5 all implemented);
