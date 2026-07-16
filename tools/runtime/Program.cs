@@ -305,6 +305,17 @@ internal static class Program
                 await SendJsonAsync(context, 403, new { ok = false, errors = new[] { "Forbidden host." } });
                 return;
             }
+            // Defense against drive-by CSRF: a malicious webpage can fire "simple" cross-origin POSTs at
+            // 127.0.0.1 without a CORS preflight — the response stays opaque to it, but the side effect
+            // (overwrite profile, restore backup, drive Twitch) would still run. Browsers attach an Origin
+            // header to those requests, so reject any Origin that isn't loopback. Requests with no Origin
+            // (the WebView2 shell, curl, same-origin GETs) pass; the admin's own POSTs carry a loopback
+            // Origin and pass.
+            if (!IsAllowedOrigin(request))
+            {
+                await SendJsonAsync(context, 403, new { ok = false, errors = new[] { "Forbidden origin." } });
+                return;
+            }
             var path = request.Url?.AbsolutePath ?? "/";
             if (request.HttpMethod == "GET" && path == "/api/health")
                 await SendJsonAsync(context, 200, new
@@ -485,6 +496,17 @@ internal static class Program
             if (colon > 0) host = host[..colon];
         }
         return host is "127.0.0.1" or "localhost" or "::1";
+    }
+
+    // Companion to IsAllowedHost (see the CSRF note at the call site): if a browser attributed the
+    // request to a web origin, it must be a loopback origin. "Origin: null" (sandboxed iframes,
+    // file:// pages) is NOT loopback and is rejected — the OBS overlay never calls the API cross-origin.
+    private static bool IsAllowedOrigin(HttpListenerRequest request)
+    {
+        var origin = request.Headers["Origin"];
+        if (string.IsNullOrEmpty(origin)) return true;
+        if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return false;
+        return uri.Host is "127.0.0.1" or "localhost" or "::1";
     }
 
     // Surfaces the Device Code Flow prompt by opening Twitch's activate page directly — the
