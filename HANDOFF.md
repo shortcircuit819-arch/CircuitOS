@@ -454,6 +454,24 @@ DataPath/
 
 ## Session Log
 
+### 2026-07-16 — Claude (claude-fable-5) — Security audit + Origin check (no version bump)
+
+Post-0.8.0 security/backend pass. Commit 6fea862.
+
+- **Audit findings (mostly healthy):** secrets gitignored and never in git history; Twitch tokens DPAPI-
+  encrypted at rest (TwitchAuth.cs); Host-header check covers DNS rebinding; static files served from a
+  fixed allowlist (no traversal); body-size limits on JSON (1 MB) + image (10 MB) uploads; the old
+  Appwrite row-addressing bug was already fixed 2026-06-24.
+- **One real gap, fixed: no Origin validation** — a malicious webpage could fire "simple" cross-origin
+  POSTs at the loopback API with no CORS preflight (ReadBodyAsync parses JSON regardless of Content-Type),
+  executing side effects blind. Added `IsAllowedOrigin` beside `IsAllowedHost`: any request carrying an
+  Origin header must be loopback or it 403s; no-Origin (WebView2 shell, curl) passes; `Origin: null` is
+  rejected (the OBS overlay never calls the API cross-origin). Verified live: evil/null origins → 403,
+  loopback/no origin → 200, admin save works. Ships with the next cut.
+- **Known accepted risks / later:** code signing (long lead, distribution trust); `appwrite.local.json`
+  API key is plaintext on disk (user-edited config — DPAPI would break hand-editing; revisit at cloud
+  milestone); cloud-mode Appwrite table permissions to review when cloud becomes the default path.
+
 ### 2026-07-08 — Claude (claude-opus-4-8) — Cut 0.8.0 (Design & Identity)
 
 Version → **0.8.0** in all four locations (csproj `<Version>/<FileVersion>/<AssemblyVersion>`,
