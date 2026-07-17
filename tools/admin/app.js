@@ -422,7 +422,7 @@ async function loginTwitchBot() {
     // Deliberately NOT auto-opened: the streamer must sign in as the BOT account, not the account
     // their browser is already logged into. Private/incognito window is the reliable way.
     if (button) button.textContent = `Code: ${start.userCode}`;
-    showNotice(`In a PRIVATE/incognito window, log in to Twitch as your BOT account, then go to ${start.verificationUri} and enter code ${start.userCode}.`, "success");
+    showNotice(`A Twitch page opened — sign in there as your BOT account (click "Switch accounts", or use a private window if the browser is logged in as your main channel), then enter code ${start.userCode}.`, "success");
     const result = await pollTwitchLogin(start);
     const health = await (await fetch("/api/health", { cache: "no-store" })).json();
     renderSessionMode(health.mode || lastSession.mode, health.twitch || null, lastSession.dataPath, health.twitchBot || null);

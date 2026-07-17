@@ -12,7 +12,7 @@ the end of every working session before stopping.
 |-------|-------|
 | Project | CircuitOS — configurable Twitch collection-game platform |
 | Default game | Circuit Components (electronics-themed) |
-| Current version | **0.9.1** — fixes the installer to ship the WHOLE app (0.9.0's Setup.exe packaged only the bare exe → a fresh install would error) and moves user data to a stable per-user folder that survives updates. Includes the 0.9.0.1 security hardening (magic-byte image validation, CSP, clean audit). Versioning moved to 3-part SemVer (required by the installer/updater). 0.9.0 = "Distribution & Release Candidate": Velopack **Setup.exe installer**, **in-app auto-updates** (Settings → About), and a **one-command signed release pipeline**. RC for 1.0. (0.8.1 = bot chat account, per-profile OBS overlays, CSRF/Origin fix. 0.8.0 = card-less re-skin, six curated themes incl. light, contrast-safe accent, Design Mode.) Native Twitch is the single supported path. Local mode is the default and unchanged. |
+| Current version | **0.9.2** — fixes the bot-account login (clicking "Connect Bot Account" now opens the Twitch page like the main login does, + rejects accidentally authorizing the main account as the bot). 0.9.1 fixes the installer to ship the WHOLE app (0.9.0's Setup.exe packaged only the bare exe → a fresh install would error) and moves user data to a stable per-user folder that survives updates. Includes the 0.9.0.1 security hardening (magic-byte image validation, CSP, clean audit). Versioning moved to 3-part SemVer (required by the installer/updater). 0.9.0 = "Distribution & Release Candidate": Velopack **Setup.exe installer**, **in-app auto-updates** (Settings → About), and a **one-command signed release pipeline**. RC for 1.0. (0.8.1 = bot chat account, per-profile OBS overlays, CSRF/Origin fix. 0.8.0 = card-less re-skin, six curated themes incl. light, contrast-safe accent, Design Mode.) Native Twitch is the single supported path. Local mode is the default and unchanged. |
 | Phase | **0.7 — Native Twitch + Cloud Foundation — shipped (0.7.2 retired Streamer.bot).** Zero-config Twitch login (device flow, no dev account), CircuitOS-managed channel-point reward, native EventSub redemptions + chat commands + pull announcements. Settings page with an optional cloud data backend (bring-your-own Appwrite, safe fallback to local). Multiple live profiles, per-state overlay colors, shared PullEngine/RedemptionEngine/CommandEngine (smoke-tested), reliability/security hardening. Still ahead: Velopack + GitHub installer/updater (gated on creating the repo — `docs/updater-velopack-plan.md`), and a true *hosted* cloud (security/infra decision — `docs/feature-requests-analysis.md`). Deferred features: bot chat account, cross-profile currency (shops/2.0), per-state overlay images. |
 | Repo root | `C:\Dev\CircuitStreamSystem` |
 | Live data path | `C:\Users\nicho\Documents\CircuitOS\Data` (profiles under `Data\profiles\<id>`; active profile `circuit-components`) |
@@ -453,6 +453,27 @@ DataPath/
 ---
 
 ## Session Log
+
+### 2026-07-16 — Claude (claude-opus-4-8) — Cut 0.9.2 (bot-account login fix; user bug report)
+
+User reported (with a screenshot of the Twitch page): "bot log in does not properly launch a log in for
+a bot account." Root cause: `StartDeviceLogin` deliberately did **not** open the browser for a bot login
+(`if (!_headless && !bot)`) — the original reasoning was "the streamer is signed into their main account,
+so don't auto-open." But clicking Connect Bot Account then launched nothing visible (just a device code +
+an easy-to-miss notice), reading as broken.
+
+- **Fix:** the bot login now opens the browser too (`if (!_headless)`), identical to the working main-
+  account path — so it visibly launches the Twitch activate page. Frontend notice updated to match
+  ("A Twitch page opened — sign in as your BOT account; click Switch accounts or use a private window…").
+- **Safety net:** `PollDeviceLogin` now rejects a bot login whose Twitch user id equals the broadcaster's
+  (the common mistake — authorizing the main account in the same signed-in browser), deletes the just-
+  saved bot token, and returns a clear error instead of silently connecting main-as-bot.
+- Verified in preview: the bot login/start endpoint returns a code, the flow shows "Code: …" + the new
+  notice, no JS errors. The actual browser-open is headless-suppressed in preview but uses the exact code
+  path the main login already uses in the real app. Smoke tests green.
+
+Bug fix during the 0.9.x RC — not a new feature, so consistent with the pre-1.0 freeze. The 1.0 signing
+gates (cert + public feed) are unchanged; user is holding at the RC for those.
 
 ### 2026-07-16 — Claude (claude-opus-4-8) — Cut 0.9.1 (installer actually works; fresh-install gate closed)
 

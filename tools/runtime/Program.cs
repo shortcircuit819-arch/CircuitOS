@@ -344,7 +344,7 @@ internal static class Program
                     overlayFilePath = Path.Combine(overlayDataPath, "overlay", "index.html"),
                     profilesRoot = Path.Combine(_dataRoot, "profiles"),
                     runtime = ".NET",
-                    version = "0.9.1",
+                    version = "0.9.2",
                     mode = _sessionMode,
                     cloudError = _cloudError,
                     twitch = _sessionTwitch is null ? null : new { login = _sessionTwitch.Login, displayName = _sessionTwitch.DisplayName, userId = _sessionTwitch.UserId, expiresAt = _sessionTwitch.ExpiresAt },
@@ -704,12 +704,12 @@ internal static class Program
             if (opts.HasSecret && !bot)
                 return new ServiceResult(200, new JsonObject { ["ok"] = true, ["inline"] = false });
             var request = TwitchAuth.RequestDeviceCode(opts, bot ? TwitchAuth.BotScopes : null);
-            // Open the OS browser to the pre-filled activate page (reliable from the host, vs a
-            // WebView2 window.open). The panel still shows the code and polls for completion.
-            // For a BOT login, don't auto-open: the streamer is normally logged into their main
-            // account in the default browser, and the whole point is authorizing a different account
-            // (incognito/second browser). The panel shows the link + code instead.
-            if (!_headless && !bot)
+            // Open the OS browser to the activate page (reliable from the host, vs a WebView2
+            // window.open). The panel still shows the code and polls for completion. A BOT login opens
+            // the browser too — clicking "Connect Bot Account" has to visibly launch something — with the
+            // panel guiding the streamer to sign in as the bot there. If they accidentally authorize their
+            // main account, PollDeviceLogin catches it (bot must differ from the broadcaster).
+            if (!_headless)
             {
                 try { Process.Start(new ProcessStartInfo(request.VerificationUri) { UseShellExecute = true }); } catch { }
             }
@@ -761,7 +761,24 @@ internal static class Program
             if (tokens is null)
                 return new ServiceResult(200, new JsonObject { ["ok"] = true, ["status"] = "pending" });
             lock (_pendingDeviceLogins) _pendingDeviceLogins.Remove(loginId);
-            if (pending.Bot) _sessionTwitchBot = tokens; else _sessionTwitch = tokens;
+            if (pending.Bot)
+            {
+                // The bot account must be DIFFERENT from the broadcaster. Same id = the streamer authorized
+                // their main account (usually because the browser was still signed in as it) — "post as the
+                // bot" would then be a no-op. Reject clearly and discard the token we just saved.
+                if (_sessionTwitch is not null && string.Equals(tokens.UserId, _sessionTwitch.UserId, StringComparison.Ordinal))
+                {
+                    try { var f = Path.Combine(_dataRoot, TwitchTokens.BotFileName); if (File.Exists(f)) File.Delete(f); } catch { }
+                    return new ServiceResult(200, new JsonObject
+                    {
+                        ["ok"] = false,
+                        ["status"] = "error",
+                        ["errors"] = new JsonArray($"That signed in your main account (@{tokens.Login}), not a separate bot. Sign out or use a private window, log in as your bot account, then try again.")
+                    });
+                }
+                _sessionTwitchBot = tokens;
+            }
+            else _sessionTwitch = tokens;
             RefreshNativeTwitch(service, cancel);
             return new ServiceResult(200, new JsonObject
             {
