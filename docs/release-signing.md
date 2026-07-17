@@ -28,11 +28,37 @@ Every signing tool CircuitOS can use is present on the dev machine, so there's n
 - **Windows SDK SignTool** — `C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\`.
 - **Velopack's embedded signtool** — used automatically by `vpk pack --signParams/--signTemplate`.
 
-## The absolute minimum you must do
+## The repo is now PUBLIC — this changes everything (2026-07-16)
 
-Everything else is automated. The only thing no tool or agent can do for you is **prove to a Certificate
-Authority that you are you** — that identity check *is* the trust, so it's inherently yours. Concretely,
-via Azure Trusted Signing (the least-friction option, ~$10/mo, no hardware):
+Two consequences:
+
+1. **The auto-update feed works now.** The updater reads GitHub Releases; a public repo means the app can
+   fetch them without a token. Publish a signed release (`… -Upload`) and in-app updates go live.
+2. **Free code signing is now on the table.** Public OSS projects qualify for **SignPath Foundation**,
+   which signs releases at **no cost**. This is now the recommended path — it removes the money barrier
+   entirely.
+
+## Recommended path: SignPath Foundation (free, public OSS)
+
+The one thing no tool or agent can do for you is **prove to a Certificate Authority that you are you** —
+that identity check *is* the trust, so it's irreducibly yours. With SignPath Foundation the rest is free:
+
+1. Apply to the **SignPath Foundation** program at `https://signpath.org/` (or `about.signpath.io/product/open-source`)
+   — submit the CircuitOS GitHub repo. Approval is a review by them (you, the owner, apply; I can't apply
+   as you).
+2. Once approved, SignPath gives you an **organization id, project/signing-policy slugs, and an API token**.
+   SignPath signs via **submission** (upload the built artifact → they sign → you get it back), typically
+   wired through their **official GitHub Action** in a release workflow, or their CLI/API for a local build.
+3. Add those as repo secrets (for CI) or feed them to the signing step for a local build.
+
+That's the whole of your side. If you want, I'll write the GitHub Actions release workflow (public repos
+get **free** Actions minutes) that builds → submits to SignPath → publishes the signed release, so a tag
+push produces a signed 1.0 automatically.
+
+## Alternative: Azure Trusted Signing (~$10/mo, fits the current pipeline today)
+
+Lower setup if you'd rather not wait for SignPath approval; it plugs straight into
+`Build-CircuitOSVelopack.ps1 -SignTemplate` (azuresigntool is already installed):
 
 1. Azure Portal → create a **Trusted Signing account** (note the region + endpoint URL).
 2. Complete the one-time **identity validation** (individual ID check).
