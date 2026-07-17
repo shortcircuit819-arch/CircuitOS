@@ -80,6 +80,11 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        // MUST be the first statement: Velopack invokes the app with hook args during install/update/
+        // uninstall and may exit the process early. Anything before this (arg parsing, windows, HTTP)
+        // would break those hooks. No-op on a normal launch. See docs/updater-velopack-plan.md.
+        Velopack.VelopackApp.Build().Run();
+
         var options = RuntimeOptions.Parse(args);
 
         // 0.7 diagnostic: verify the Appwrite connection + collection, then exit.
@@ -375,6 +380,24 @@ internal static class Program
                 await SendResultAsync(context, OpenDataFolder());
             else if (request.HttpMethod == "POST" && path == "/api/settings/backup-retention")
                 await SendResultAsync(context, SetBackupRetention(await ReadBodyAsync(request)));
+            else if (request.HttpMethod == "POST" && path == "/api/updates/check")
+            {
+                var status = await UpdateService.CheckAsync();
+                await SendJsonAsync(context, 200, new { ok = true, managed = status.Managed, available = status.Available, latestVersion = status.LatestVersion, currentVersion = status.CurrentVersion, error = status.Error });
+            }
+            else if (request.HttpMethod == "POST" && path == "/api/updates/apply")
+            {
+                // The preview/headless host must never self-update (it's a dev/test process, not an install).
+                if (_headless)
+                    await SendJsonAsync(context, 200, new { ok = false, error = "Updates are disabled in this mode." });
+                else
+                {
+                    var status = await UpdateService.ApplyAsync();
+                    // On success the process is replaced and restarted, so control never returns here; a
+                    // returned status means it declined (not managed / up to date) or hit an error.
+                    await SendJsonAsync(context, 200, new { ok = status.Error is null, available = status.Available, latestVersion = status.LatestVersion, error = status.Error });
+                }
+            }
             else if (request.HttpMethod == "POST" && path == "/api/twitch/login/start")
                 await SendResultAsync(context, StartDeviceLogin());
             else if (request.HttpMethod == "POST" && path == "/api/twitch/login/poll")

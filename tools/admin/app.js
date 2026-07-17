@@ -1809,6 +1809,54 @@ async function openDataFolder() {
   }
 }
 
+// In-app updates (Velopack). Only meaningful when installed via the CircuitOS setup; a ZIP/dev copy
+// reports "not managed" and the panel tells the user to install the setup to get auto-updates.
+async function checkForUpdates() {
+  const status = document.getElementById("updateStatus");
+  const checkBtn = document.getElementById("checkUpdatesButton");
+  const applyBtn = document.getElementById("applyUpdateButton");
+  if (!status) return;
+  applyBtn.hidden = true;
+  checkBtn.disabled = true;
+  const prev = checkBtn.textContent;
+  checkBtn.textContent = "Checking…";
+  try {
+    const resp = await fetch("/api/updates/check", { method: "POST" });
+    const r = await resp.json();
+    if (r.error) status.textContent = `Couldn't check for updates: ${r.error}`;
+    else if (!r.managed) status.textContent = `Version ${r.currentVersion}. This copy isn't managed by the updater — install CircuitOS via the setup to get automatic updates.`;
+    else if (r.available) {
+      status.textContent = `Update available: ${r.currentVersion} → ${r.latestVersion}.`;
+      applyBtn.hidden = false;
+    } else status.textContent = `You're up to date (version ${r.currentVersion}).`;
+  } catch (error) {
+    status.textContent = `Couldn't check for updates: ${error.message}`;
+  } finally {
+    checkBtn.disabled = false;
+    checkBtn.textContent = prev;
+  }
+}
+
+async function applyUpdate() {
+  const status = document.getElementById("updateStatus");
+  const applyBtn = document.getElementById("applyUpdateButton");
+  applyBtn.disabled = true;
+  applyBtn.textContent = "Downloading…";
+  status.textContent = "Downloading the update — CircuitOS will restart when it's ready.";
+  try {
+    const resp = await fetch("/api/updates/apply", { method: "POST" });
+    // On success the app restarts and this request never resolves; a response means it declined/failed.
+    const r = await resp.json();
+    status.textContent = r.error ? `Update failed: ${r.error}` : "No update was applied.";
+  } catch (error) {
+    // A dropped connection here usually means the app is restarting into the new version — expected.
+    status.textContent = "CircuitOS is restarting to finish the update…";
+  } finally {
+    applyBtn.disabled = false;
+    applyBtn.textContent = "Download & Restart";
+  }
+}
+
 function backendCard(id, title, desc, chosen, running) {
   const card = element("button", "settings-backend-card");
   card.type = "button";
@@ -4881,6 +4929,8 @@ document.getElementById("commandTestButton").addEventListener("click", runComman
 document.getElementById("testAppwriteButton").addEventListener("click", testAppwriteConnection);
 document.getElementById("saveAppwriteButton").addEventListener("click", saveAppwriteConnectionAndNotify);
 document.getElementById("openDataFolderButton").addEventListener("click", openDataFolder);
+document.getElementById("checkUpdatesButton").addEventListener("click", checkForUpdates);
+document.getElementById("applyUpdateButton").addEventListener("click", applyUpdate);
 document.getElementById("hideSystemCheckSetting").addEventListener("change", event => {
   if (event.target.checked) localStorage.setItem("circuitos.hideSystemCheck", "1");
   else localStorage.removeItem("circuitos.hideSystemCheck");
