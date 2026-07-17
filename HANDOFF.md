@@ -454,6 +454,43 @@ DataPath/
 
 ## Session Log
 
+### 2026-07-16 — Claude (claude-opus-4-8) — 1.0 readiness pass (docs gate closed; 2 human gates remain)
+
+Worked the 1.0 gates from `docs/versioning.md` ("feature freeze, fresh-install and update testing,
+saved-data migration coverage, complete onboarding and recovery documentation, trusted code signing").
+Commit 495213e.
+
+**CLOSED:**
+- **Documentation.** `installation-and-updates.md` rewritten for the installer era (Setup.exe primary,
+  in-app updates, ZIP alternate, data-vs-program separation, first run = theme+accent not the pre-0.8
+  six colors, bot account, recovery). It had **never been shipped to users** — now in the packager's
+  guide list (package went 31 → 32 files). README roadmap refreshed: 0.8/0.9 marked shipped, 1.0 next.
+- **Saved-data migration coverage.** Already covered: the smoke suite constructs `LocalFileDataStore`
+  over flat files (runs the 0.5 → profiles migration) and asserts the inventory hash is unchanged;
+  `TestProfileMetaSafetyNet` covers missing/corrupt metadata; `TestThemeNormalization` covers the legacy
+  7-color → theme/accent path.
+- **Feature freeze.** No in-flight features; the 1.x band stays excluded by the roadmap.
+
+**BLOCKED — both are human decisions, not code:**
+1. **Code-signing certificate.** Pipeline is built + proven (see the 0.9.0 entry); a real cert is a
+   thumbprint swap. Cannot be automated: a trusted signature requires a CA to validate a human identity
+   (+ payment). Azure Trusted Signing (~$10/mo, cloud, no token) is lowest friction; traditional OV certs
+   now ship a physical USB token (FIPS rule since 6/2023).
+2. **Public release feed.** The updater reads GitHub Releases and cannot ship a token to read a private
+   repo. Make the repo public or publish to a public releases repo. **Going public may also unlock free
+   SignPath Foundation OSS signing — solving both gates at once.**
+
+**Deliberately deferred — the live install→update round-trip.** Attempted a safe fresh-install test
+(`Setup.exe --silent --installto <temp> -- --headless --data <temp>`) and found a **Velopack 1.2.0 bug**:
+passing `-- EXE_ARGS` panics its Rust arg parser ("Mismatch between definition and access of EXE_ARGS").
+Without arg control, the post-install auto-launch would run with no args; the data path resolves relative
+to the exe (`<installdir>\Data`), so it can't reach live data — but with no catalog it pops a **modal
+MessageBox** (Program.cs:182), which shouldn't be left on the user's screen unattended. The round-trip
+also can't be truly validated until a real feed exists, so both were deferred together. Test artifacts,
+the throwaway self-signed cert, and the test-signed output were all cleaned up.
+
+**1.0 is otherwise ready.** Everything buildable is built, tested, and shipped.
+
 ### 2026-07-16 — Claude (claude-opus-4-8) — Cut 0.9.0 (Distribution & RC: installer, auto-updater, signing pipeline)
 
 Version → **0.9.0** in all four locations; `docs/patch-notes/v0.9.0.md` added; tagged `v0.9.0`. This is
