@@ -12,7 +12,7 @@ the end of every working session before stopping.
 |-------|-------|
 | Project | CircuitOS — configurable Twitch collection-game platform |
 | Default game | Circuit Components (electronics-themed) |
-| Current version | **0.8.1** (shipped — on top of 0.8.0 "Design & Identity": optional **bot chat account** (replies post as the bot), **per-profile OBS overlays** (each live profile its own overlay + path), and a **CSRF/Origin** security fix on the local API. 0.8.0 = full card-less re-skin, six curated themes incl. a light theme, contrast-safe accent, Design Mode overrides). Native Twitch is the single supported path. Local mode is the default and unchanged. |
+| Current version | **0.9.0** — "Distribution & Release Candidate": Velopack **Setup.exe installer**, **in-app auto-updates** (Settings → About), and a **one-command signed release pipeline**. RC for 1.0. (0.8.1 = bot chat account, per-profile OBS overlays, CSRF/Origin fix. 0.8.0 = card-less re-skin, six curated themes incl. light, contrast-safe accent, Design Mode.) Native Twitch is the single supported path. Local mode is the default and unchanged. |
 | Phase | **0.7 — Native Twitch + Cloud Foundation — shipped (0.7.2 retired Streamer.bot).** Zero-config Twitch login (device flow, no dev account), CircuitOS-managed channel-point reward, native EventSub redemptions + chat commands + pull announcements. Settings page with an optional cloud data backend (bring-your-own Appwrite, safe fallback to local). Multiple live profiles, per-state overlay colors, shared PullEngine/RedemptionEngine/CommandEngine (smoke-tested), reliability/security hardening. Still ahead: Velopack + GitHub installer/updater (gated on creating the repo — `docs/updater-velopack-plan.md`), and a true *hosted* cloud (security/infra decision — `docs/feature-requests-analysis.md`). Deferred features: bot chat account, cross-profile currency (shops/2.0), per-state overlay images. |
 | Repo root | `C:\Dev\CircuitStreamSystem` |
 | Live data path | `C:\Users\nicho\Documents\CircuitOS\Data` (profiles under `Data\profiles\<id>`; active profile `circuit-components`) |
@@ -453,6 +453,40 @@ DataPath/
 ---
 
 ## Session Log
+
+### 2026-07-16 — Claude (claude-opus-4-8) — Cut 0.9.0 (Distribution & RC: installer, auto-updater, signing pipeline)
+
+Version → **0.9.0** in all four locations; `docs/patch-notes/v0.9.0.md` added; tagged `v0.9.0`. This is
+the **1.0 release candidate**. Milestone bump (second part) per docs/versioning.md — 0.9 = Distribution &
+RC, the last milestone before 1.0.
+
+- **Velopack updater (commit 1de984a):** Velopack 1.2.0; `VelopackApp.Build().Run()` is the first line of
+  `Main` (vpk *verifies* this at pack time — it printed "Verified VelopackApp.Run() in ... Program::Main");
+  `UpdateService` (GithubSource; CheckAsync never throws; ApplyAsync downloads + restarts; reports
+  Managed=false for raw/ZIP/dev copies); `/api/updates/check|apply` (apply blocked in headless);
+  Settings → About got a real Check-for-updates + Download & Restart UI replacing the "coming soon" note.
+- **vpk packaging + one-command release:** `tools/package/Build-CircuitOSVelopack.ps1` = publish → pack →
+  sign → verify → optional `-Upload`. Reads the version from the csproj (can't drift; asserts the built
+  exe matches). `-Clean` re-packs a version during dev (vpk otherwise refuses to overwrite a release,
+  since the output folder IS the delta history). Produces Setup.exe + full nupkg + Portable zip +
+  RELEASES/releases.win.json feed. The legacy ZIP flow is retained (plan said keep until Velopack proves out).
+- **Signing pipeline BUILT + PROVEN** (see the rewritten `docs/release-signing.md`). Verified with a
+  throwaway self-signed cert (created in CurrentUser\My, **never** added to Trusted Root — no fake trust;
+  delete `CN=CircuitOS PIPELINE TEST`): SignTool discovery (SDK 10.0.26100 already installed), signing,
+  **RFC3161 timestamping confirmed** (DigiCert countersigned), vpk `--signParams` signed 3/3 app files +
+  Setup.exe. Result `UnknownError` = signature present, chain untrusted — correct for self-signed. **A real
+  cert is now a thumbprint swap, no code changes.**
+
+**The two remaining 1.0 gates are both human decisions, not code:**
+1. **Release feed must be PUBLIC** — the app can't ship a token to read a private repo's releases (same
+   foot-gun as a master key). Make the repo public or publish to a public releases repo. Until then real
+   installs report a fetch error on Check-for-updates.
+2. **A code-signing certificate** — Azure Trusted Signing (~$10/mo, cloud, no token) is lowest friction;
+   traditional OV certs now require a shipped USB token (FIPS rule since 6/2023). **Insight: going public
+   solves gate 1 AND may unlock free SignPath Foundation OSS signing.**
+
+**Not yet validated:** the live install→update round-trip (install vX → detect/apply vX+1). Genuinely
+untestable until a real feed is published — the last technical 1.0 gate.
 
 ### 2026-07-16 — Claude (claude-opus-4-8) — Cut 0.8.1 (bot account + per-profile overlays + CSRF fix)
 

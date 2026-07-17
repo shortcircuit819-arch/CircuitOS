@@ -334,7 +334,7 @@ internal static class Program
                     overlayFilePath = Path.Combine(overlayDataPath, "overlay", "index.html"),
                     profilesRoot = Path.Combine(_dataRoot, "profiles"),
                     runtime = ".NET",
-                    version = "0.8.1",
+                    version = "0.9.0",
                     mode = _sessionMode,
                     cloudError = _cloudError,
                     twitch = _sessionTwitch is null ? null : new { login = _sessionTwitch.Login, displayName = _sessionTwitch.DisplayName, userId = _sessionTwitch.UserId, expiresAt = _sessionTwitch.ExpiresAt },

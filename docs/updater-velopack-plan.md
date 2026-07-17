@@ -1,8 +1,24 @@
 # Installer + Auto-Updater plan (Velopack)
 
 Chosen 2026-06-29: **Velopack** for both the installer and in-app auto-updates, with **GitHub
-Releases** as the update feed. This is the actionable plan so the integration is fast once the repo
-exists. Nothing here is built yet — it's gated on Step 0.
+Releases** as the update feed.
+
+> **STATUS 2026-07-16 — Steps 0–2 are BUILT (shipped in 0.9.0).** Repo exists; Velopack 1.2.0 is in the
+> app with `VelopackApp.Build().Run()` first in `Main` (vpk itself verifies this at pack time);
+> `UpdateService` + `/api/updates/check|apply` + the Settings → About "Check for updates" UI are live;
+> `tools/package/Build-CircuitOSVelopack.ps1` does publish → pack → sign → (optional) upload in one
+> command. Step 3 (signing) is **wired and proven** — only a real certificate is outstanding; see
+> `docs/release-signing.md`.
+>
+> **Two things remain, both requiring a human decision:**
+> 1. **The release feed must be PUBLIC.** The app can't ship a token to read a private repo's releases
+>    (same foot-gun as a master key). Either make the repo public or publish to a public releases repo.
+>    Until then `Check for updates` reports a fetch error on real installs.
+> 2. **A code-signing certificate** (see `release-signing.md` — Azure Trusted Signing is lowest friction;
+>    going public may unlock free SignPath Foundation signing).
+>
+> **Not yet validated:** the live install→update round-trip (install vX, confirm it detects and applies
+> vX+1). That genuinely can't be tested until a real feed is published — it's the last 1.0 gate.
 
 ## Why this is low-risk for CircuitOS
 - **User data is safe by construction.** Data lives in `Documents\CircuitOS\Data`, completely

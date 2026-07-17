@@ -17,9 +17,10 @@ when its contract changes.
   saved-data contract or introducing a major new workflow.
 - Update packages remain data-free and must preserve existing installations.
 
-The current milestone is **0.7 — Native Twitch + Cloud Foundation** (shipped as
-`0.7.2`, which retired the Streamer.bot integration). The next milestone is
-**0.8 — Design & Identity**.
+The current milestone is **0.9 — Distribution & Release Candidate** (shipped as
+`0.9.0`: Velopack installer, in-app auto-updates, and a signed release pipeline).
+Preceding milestones: **0.7 — Native Twitch + Cloud Foundation** (`0.7.3.1`) and
+**0.8 — Design & Identity** (`0.8.1`). The next release is **1.0** — see below.
 
 ## Stable Releases
 
