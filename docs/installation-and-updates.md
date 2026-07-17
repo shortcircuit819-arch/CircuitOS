@@ -14,12 +14,14 @@ Signed public releases don't show this. Never disable your antivirus to run it.
 
 | What | Where |
 |---|---|
-| The program | `%LocalAppData%\CircuitOS` |
-| **Your data** | **`Documents\CircuitOS\Data`** |
+| The program (replaced each update) | `%LocalAppData%\CircuitOS\current` |
+| **Your data** (kept across updates) | **`%LocalAppData%\CircuitOS\Data`** |
 
-Your data is deliberately kept **outside** the program folder: collections, inventories, profiles,
-backups, and settings. Updates only ever swap program files — **an update can never touch a viewer's
-collection.**
+Your data — collections, inventories, profiles, backups, settings — is deliberately kept **outside** the
+versioned program folder. An update swaps the `current` folder; your `Data` sits beside it, untouched.
+**An update can never touch a viewer's collection.** On first launch the app seeds `Data` with a starter
+catalog so the setup wizard has something to work with. (Settings → About → *Open data folder* jumps
+straight there.)
 
 ## Updating
 

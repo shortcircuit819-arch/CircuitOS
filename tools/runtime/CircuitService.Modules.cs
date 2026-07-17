@@ -24,7 +24,7 @@ internal sealed partial class CircuitService
                 ["format"] = "circuitmodule",
                 ["version"] = "1",
                 ["name"] = profileName,
-                ["circuitosVersion"] = "0.9.0.1",
+                ["circuitosVersion"] = "0.9.1",
                 ["exportedAt"] = DateTimeOffset.UtcNow.ToString("O")
             },
             ["catalog"] = JsonNode.Parse(catalog.ToJsonString())!
@@ -144,7 +144,7 @@ internal sealed partial class CircuitService
             ["version"] = "1",
             ["name"] = gameName,
             ["collectionCount"] = shared.Count,
-            ["circuitosVersion"] = "0.9.0.1",
+            ["circuitosVersion"] = "0.9.1",
             ["exportedAt"] = DateTimeOffset.UtcNow.ToString("O")
         };
         if (!shareAll)

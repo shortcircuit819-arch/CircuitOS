@@ -4,14 +4,23 @@ CircuitOS separates application and data-schema versions. The application versio
 describes the shipped desktop experience; the data-schema version changes only
 when its contract changes.
 
-## Pre-1.0 Releases
+## Versioning scheme — 3-part SemVer (from 0.9)
 
-- The **milestone** number (second part — `0.5`, `0.6`, `0.7`) represents a
-  major feature area. It only advances when the current milestone is fully
-  satisfactory, not on a fixed schedule.
-- Work within a milestone uses a **four-part** version: `0.6.0.1`, `0.6.0.2`,
-  and so on. The third part is a sub-feature; the fourth is an iteration within
-  that sub-feature (including hotfixes).
+**As of 0.9, CircuitOS uses 3-part SemVer2 (`MAJOR.MINOR.PATCH`).** This is required by the distribution
+tooling: Velopack / the in-app updater packages releases as SemVer2 and rejects a 4-part string outright
+(`0.9.0.1` is invalid; `0.9.1` is valid). Since the installer + auto-updater are now the shipping path,
+the version has to be what they accept.
+
+- The **milestone** (minor, second part — `0.7`, `0.8`, `0.9`) is a major feature area; it advances only
+  when the current milestone is fully satisfactory.
+- The **patch** (third part) covers everything within a milestone: sub-features, hotfixes, and hardening
+  iterations alike. Bump it for each meaningful shipped change (`0.9.1`, `0.9.2`, …).
+
+### Pre-0.9 history (retired 4-part scheme)
+
+Milestones 0.3–0.8 used a **four-part** version (`0.6.0.1`, `0.7.3.1`, `0.9.0.1`): third part = sub-feature,
+fourth = an iteration/hotfix within it. Those tags stay in history; `0.9.1` supersedes the interim
+`0.9.0.1`. The 4-part scheme predates the SemVer-based installer and is not used going forward.
 - Early `0.3.x` patch releases contained bug fixes, UI polish, performance,
   documentation, diagnostics, or packaging improvements without changing the
   saved-data contract or introducing a major new workflow.

@@ -26,12 +26,17 @@ internal sealed record RuntimeOptions(string DataPath, string UiPath, string Ove
             Path.Combine(basePath, "App"),
             basePath,
             Path.Combine(basePath, "..")) ?? Path.Combine(basePath, "App")));
+        // An installed (Velopack) build ships no Data beside the exe: its writable data lives in a stable
+        // per-user folder that SURVIVES updates, because the versioned program folder is replaced on every
+        // update. Portable/ZIP still finds Data next to the exe; dev finds the repo data/ via candidates.
+        var installedDataDefault = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CircuitOS", "Data");
         var dataPath = Path.GetFullPath(values.GetValueOrDefault("--data", FindFolderContaining(
             "components.json",
             Path.Combine(basePath, "Data"),
             Path.Combine(basePath, "..", "Data"),
             Path.Combine(uiPath, "..", "Data"),
-            Path.Combine(uiPath, "..", "..", "data")) ?? Path.Combine(basePath, "Data")));
+            Path.Combine(uiPath, "..", "..", "data")) ?? installedDataDefault));
         var overlayPath = Path.GetFullPath(values.GetValueOrDefault("--overlay", FindFolderContaining(
             "overlay.js",
             Path.Combine(basePath, "Overlay"),
@@ -125,6 +130,11 @@ internal static class Program
         // redemptions until Ctrl+C. The zero-config native path. Run from a terminal.
         if (args.Contains("--twitch-listen"))
             return TwitchListen(options.DataPath);
+
+        // First run of an installed build: the per-user data folder is empty, so seed it from the
+        // StarterData bundled beside the exe (before the store is constructed, so its migration picks the
+        // starter catalog up). No-op for dev/portable (they already resolved to a populated Data folder).
+        SeedInstalledDataIfEmpty(options.DataPath, AppContext.BaseDirectory);
 
         // The local file store is always created: it provides the active profile id and the
         // local folder used to serve the OBS overlay (overlay statics/state stay local even
@@ -334,7 +344,7 @@ internal static class Program
                     overlayFilePath = Path.Combine(overlayDataPath, "overlay", "index.html"),
                     profilesRoot = Path.Combine(_dataRoot, "profiles"),
                     runtime = ".NET",
-                    version = "0.9.0.1",
+                    version = "0.9.1",
                     mode = _sessionMode,
                     cloudError = _cloudError,
                     twitch = _sessionTwitch is null ? null : new { login = _sessionTwitch.Login, displayName = _sessionTwitch.DisplayName, userId = _sessionTwitch.UserId, expiresAt = _sessionTwitch.ExpiresAt },
@@ -1404,6 +1414,25 @@ internal static class Program
 
     // Copies overlay statics and a normalized overlay-config.json into the active
     // profile's overlay folder so OBS local-file mode needs no cross-directory fetches.
+    // First-run seeding for an installed build. The per-user data folder starts empty; copy the starter
+    // catalog/config bundled beside the exe (StarterData/) into it so the app has a catalog to run the
+    // first-run wizard against. Only seeds a genuinely empty root — an existing install (flat starter
+    // files or a migrated profiles/ tree) is never touched. Dev/portable have no StarterData → no-op.
+    private static void SeedInstalledDataIfEmpty(string dataPath, string exeDir)
+    {
+        try
+        {
+            if (File.Exists(Path.Combine(dataPath, "components.json")) || Directory.Exists(Path.Combine(dataPath, "profiles")))
+                return;
+            var starter = Path.Combine(exeDir, "StarterData");
+            if (!File.Exists(Path.Combine(starter, "components.json"))) return;
+            Directory.CreateDirectory(dataPath);
+            foreach (var file in Directory.GetFiles(starter))
+                File.Copy(file, Path.Combine(dataPath, Path.GetFileName(file)), overwrite: false);
+        }
+        catch { /* best-effort; the catalog check right after surfaces a genuine failure to the user */ }
+    }
+
     // The OBS overlay is per-profile: each LIVE profile needs its own overlay/index.html so a streamer
     // can point a separate OBS browser source at each live game. Publishes to the active (editing)
     // profile as always, plus every other live profile whose local folder exists (a cloud-mode profile

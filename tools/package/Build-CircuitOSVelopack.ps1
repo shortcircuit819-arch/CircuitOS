@@ -76,6 +76,29 @@ if ($productVersion -ne $version) {
     throw "Version mismatch: csproj says $version but CircuitOS.exe reports $productVersion."
 }
 
+# ── Assemble the install payload ───────────────────────────────────────────────────────────────
+# Velopack must package the WHOLE app, not just the exe: the admin UI (App\), the OBS overlay
+# (Overlay\), and the starter catalog (StarterData\, which the app seeds into the per-user data folder
+# on first run). Data is NOT shipped beside the exe — the versioned program folder is replaced on every
+# update, so user data must live outside it. Reuse the proven ZIP layout to source these.
+Write-Host "Assembling install payload..." -ForegroundColor Cyan
+Copy-Item -LiteralPath $exe -Destination (Join-Path $projectRoot "tools\admin\runtime\CircuitOS.exe") -Force
+& (Join-Path $PSScriptRoot "Build-CircuitOSPackage.ps1") -SkipZip | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Payload assembly (Build-CircuitOSPackage) failed." }
+$releaseFolder = Join-Path $projectRoot "dist\CircuitOS-Release"
+
+$stageDir = Join-Path $projectRoot "dist\velopack-stage"
+if (Test-Path -LiteralPath $stageDir) { Remove-Item -LiteralPath $stageDir -Recurse -Force }
+$null = New-Item -ItemType Directory -Path $stageDir -Force
+Copy-Item -LiteralPath $exe -Destination (Join-Path $stageDir "CircuitOS.exe") -Force
+Copy-Item -LiteralPath (Join-Path $releaseFolder "App")     -Destination (Join-Path $stageDir "App")     -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $releaseFolder "Overlay") -Destination (Join-Path $stageDir "Overlay") -Recurse -Force
+# The assembled Data\ becomes StarterData\ — the seed source, never the live data folder.
+Copy-Item -LiteralPath (Join-Path $releaseFolder "Data")    -Destination (Join-Path $stageDir "StarterData") -Recurse -Force
+foreach ($required in @("App\index.html", "Overlay\overlay.js", "StarterData\components.json")) {
+    if (-not (Test-Path -LiteralPath (Join-Path $stageDir $required))) { throw "Install payload is missing $required." }
+}
+
 # ── Signing arguments ────────────────────────────────────────────────────────────────────────
 $signArgs = @()
 if ($CertificateThumbprint -and $SignTemplate) {
@@ -104,7 +127,7 @@ if ($Clean -and (Test-Path -LiteralPath $outputDir)) {
     Get-ChildItem -LiteralPath $outputDir -File | Remove-Item -Force
 }
 Write-Host "Packing..." -ForegroundColor Cyan
-& $vpk pack --packId CircuitOS --packVersion $version --packDir $publishDir --mainExe CircuitOS.exe `
+& $vpk pack --packId CircuitOS --packVersion $version --packDir $stageDir --mainExe CircuitOS.exe `
     --packTitle "CircuitOS" --packAuthors "CircuitOS" --outputDir $outputDir @signArgs
 if ($LASTEXITCODE -ne 0) { throw "vpk pack failed with exit code $LASTEXITCODE." }
 

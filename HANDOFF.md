@@ -12,7 +12,7 @@ the end of every working session before stopping.
 |-------|-------|
 | Project | CircuitOS — configurable Twitch collection-game platform |
 | Default game | Circuit Components (electronics-themed) |
-| Current version | **0.9.0.1** — 0.9 RC + a security-hardening pass (magic-byte image-upload validation, Content-Security-Policy on the admin page, clean dependency audit). 0.9.0 = "Distribution & Release Candidate": Velopack **Setup.exe installer**, **in-app auto-updates** (Settings → About), and a **one-command signed release pipeline**. RC for 1.0. (0.8.1 = bot chat account, per-profile OBS overlays, CSRF/Origin fix. 0.8.0 = card-less re-skin, six curated themes incl. light, contrast-safe accent, Design Mode.) Native Twitch is the single supported path. Local mode is the default and unchanged. |
+| Current version | **0.9.1** — fixes the installer to ship the WHOLE app (0.9.0's Setup.exe packaged only the bare exe → a fresh install would error) and moves user data to a stable per-user folder that survives updates. Includes the 0.9.0.1 security hardening (magic-byte image validation, CSP, clean audit). Versioning moved to 3-part SemVer (required by the installer/updater). 0.9.0 = "Distribution & Release Candidate": Velopack **Setup.exe installer**, **in-app auto-updates** (Settings → About), and a **one-command signed release pipeline**. RC for 1.0. (0.8.1 = bot chat account, per-profile OBS overlays, CSRF/Origin fix. 0.8.0 = card-less re-skin, six curated themes incl. light, contrast-safe accent, Design Mode.) Native Twitch is the single supported path. Local mode is the default and unchanged. |
 | Phase | **0.7 — Native Twitch + Cloud Foundation — shipped (0.7.2 retired Streamer.bot).** Zero-config Twitch login (device flow, no dev account), CircuitOS-managed channel-point reward, native EventSub redemptions + chat commands + pull announcements. Settings page with an optional cloud data backend (bring-your-own Appwrite, safe fallback to local). Multiple live profiles, per-state overlay colors, shared PullEngine/RedemptionEngine/CommandEngine (smoke-tested), reliability/security hardening. Still ahead: Velopack + GitHub installer/updater (gated on creating the repo — `docs/updater-velopack-plan.md`), and a true *hosted* cloud (security/infra decision — `docs/feature-requests-analysis.md`). Deferred features: bot chat account, cross-profile currency (shops/2.0), per-state overlay images. |
 | Repo root | `C:\Dev\CircuitStreamSystem` |
 | Live data path | `C:\Users\nicho\Documents\CircuitOS\Data` (profiles under `Data\profiles\<id>`; active profile `circuit-components`) |
@@ -453,6 +453,35 @@ DataPath/
 ---
 
 ## Session Log
+
+### 2026-07-16 — Claude (claude-opus-4-8) — Cut 0.9.1 (installer actually works; fresh-install gate closed)
+
+Doing the 1.0 fresh-install-testing gate surfaced two **install-breaking bugs**, now fixed. Version →
+**0.9.1** (3-part SemVer — see below).
+
+- **The 0.9.0 Velopack Setup.exe shipped only `CircuitOS.exe`** — no admin UI, no starter catalog, no
+  overlay. A fresh install would launch straight into a "catalog not found" error. `vpk pack` had been
+  pointed at the bare single-file publish dir. Fixed: `Build-CircuitOSVelopack.ps1` now assembles a full
+  payload (`App/`, `Overlay/`, `StarterData/` + exe) by reusing the proven ZIP layout, and packs that.
+- **User data would have been wiped by updates.** The app resolved its data folder relative to the exe;
+  a Velopack install replaces the versioned program folder every update, so data beside the exe would
+  vanish. Fixed: `RuntimeOptions.Parse` now defaults an installed build's data to
+  `%LocalAppData%\CircuitOS\Data` (survives updates); `SeedInstalledDataIfEmpty` seeds it from the bundled
+  `StarterData/` on first run. Portable/ZIP (Data beside the exe) and dev (repo `data/`) are unchanged.
+- **Verified with an install simulation:** ran the staged exe with NO `--ui`/`--overlay` (exactly like the
+  auto-launched install) against an empty data dir → it auto-found its bundled UI (served 200), seeded a
+  working catalog (`profiles/default/components.json` created), health = 0.9.1. This is the fresh-install
+  1.0 gate, now genuinely passing.
+- **Versioning → 3-part SemVer.** `vpk` rejects 4-part versions (`0.9.0.1` invalid; `0.9.1` valid). Since
+  the installer/updater is the shipping path, the scheme had to change. `versioning.md` updated; the
+  retired 4-part tags stay in history; 0.9.1 supersedes the interim 0.9.0.1.
+- **Rolls up 0.9.0.1** (security hardening) — that shipped as a ZIP+tag only, never as a Velopack.
+- Both artifact sets rebuilt at 0.9.1 (ZIP + Velopack Setup/feed); smoke tests green; docs corrected
+  (data location was wrongly documented as Documents\CircuitOS\Data).
+
+**Still the only open 1.0 gates:** a signing certificate + a public release feed (both human/decisions),
+and the live install→update round-trip (needs the public feed). Every buildable thing is done and now
+actually works on a clean machine.
 
 ### 2026-07-16 — Claude (claude-opus-4-8) — Cut 0.9.0.1 (security hardening)
 
