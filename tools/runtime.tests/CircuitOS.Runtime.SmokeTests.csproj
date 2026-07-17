@@ -32,6 +32,7 @@
     <Compile Include="..\runtime\CircuitService.Profiles.cs" Link="CircuitService.Profiles.cs" />
     <Compile Include="..\runtime\CircuitService.Backups.cs" Link="CircuitService.Backups.cs" />
     <Compile Include="..\runtime\CircuitService.AnalyticsRoles.cs" Link="CircuitService.AnalyticsRoles.cs" />
+    <Compile Include="..\runtime\CircuitService.Overlay.cs" Link="CircuitService.Overlay.cs" />
   </ItemGroup>
 </Project>
 

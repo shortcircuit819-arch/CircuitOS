@@ -12,7 +12,7 @@ the end of every working session before stopping.
 |-------|-------|
 | Project | CircuitOS — configurable Twitch collection-game platform |
 | Default game | Circuit Components (electronics-themed) |
-| Current version | **0.9.0** — "Distribution & Release Candidate": Velopack **Setup.exe installer**, **in-app auto-updates** (Settings → About), and a **one-command signed release pipeline**. RC for 1.0. (0.8.1 = bot chat account, per-profile OBS overlays, CSRF/Origin fix. 0.8.0 = card-less re-skin, six curated themes incl. light, contrast-safe accent, Design Mode.) Native Twitch is the single supported path. Local mode is the default and unchanged. |
+| Current version | **0.9.0.1** — 0.9 RC + a security-hardening pass (magic-byte image-upload validation, Content-Security-Policy on the admin page, clean dependency audit). 0.9.0 = "Distribution & Release Candidate": Velopack **Setup.exe installer**, **in-app auto-updates** (Settings → About), and a **one-command signed release pipeline**. RC for 1.0. (0.8.1 = bot chat account, per-profile OBS overlays, CSRF/Origin fix. 0.8.0 = card-less re-skin, six curated themes incl. light, contrast-safe accent, Design Mode.) Native Twitch is the single supported path. Local mode is the default and unchanged. |
 | Phase | **0.7 — Native Twitch + Cloud Foundation — shipped (0.7.2 retired Streamer.bot).** Zero-config Twitch login (device flow, no dev account), CircuitOS-managed channel-point reward, native EventSub redemptions + chat commands + pull announcements. Settings page with an optional cloud data backend (bring-your-own Appwrite, safe fallback to local). Multiple live profiles, per-state overlay colors, shared PullEngine/RedemptionEngine/CommandEngine (smoke-tested), reliability/security hardening. Still ahead: Velopack + GitHub installer/updater (gated on creating the repo — `docs/updater-velopack-plan.md`), and a true *hosted* cloud (security/infra decision — `docs/feature-requests-analysis.md`). Deferred features: bot chat account, cross-profile currency (shops/2.0), per-state overlay images. |
 | Repo root | `C:\Dev\CircuitStreamSystem` |
 | Live data path | `C:\Users\nicho\Documents\CircuitOS\Data` (profiles under `Data\profiles\<id>`; active profile `circuit-components`) |
@@ -453,6 +453,28 @@ DataPath/
 ---
 
 ## Session Log
+
+### 2026-07-16 — Claude (claude-opus-4-8) — Cut 0.9.0.1 (security hardening)
+
+Version → **0.9.0.1** (fourth part = RC-hardening iteration in the 0.9 line, per versioning.md); patch
+note added; tagged. Prompted by a request to "source-code harden." (The same message asked to "make AI
+undetectable in code" — I declined the concealment/attribution-falsifying part and did only the
+legitimate security + craftsmanship work.)
+
+- **Overlay image upload now validates by magic bytes, not the client Content-Type.** `SaveOverlayBackground`
+  gained `SniffImageExtension(bytes)` (PNG/JPEG/GIF/WebP signatures); the endpoint ignores the declared
+  MIME. A mislabeled/non-image payload is rejected. Test `TestOverlayImageValidation` (accept real PNG/GIF,
+  reject junk + empty); linked `CircuitService.Overlay.cs` into the test csproj.
+- **Content-Security-Policy on the admin document** (`SendStaticAsync`, html only): `script-src 'self'`
+  (the panel has no inline scripts — verified — so this blocks any injected inline script), plus
+  `object-src 'none'`, `base-uri 'none'`, `form-action 'none'`, `img-src 'self' data: blob:`,
+  `style-src 'self' 'unsafe-inline'` (live theming sets element.style). **Verified in-browser: theming,
+  view switching, and fetches all work; zero CSP violations, zero console errors.**
+- **Dependency audit:** `dotnet list package --vulnerable/--deprecated` — clean.
+- Confirmed safe by construction (no change needed): overlay file serving is a strict allowlist (no
+  traversal); JSON + static already set `nosniff`; body-size limits (1 MB JSON / 10 MB image) already exist.
+
+Builds on the 0.8.1 CSRF/Origin fix. Loopback-only, single-user threat model throughout.
 
 ### 2026-07-16 — Claude (claude-opus-4-8) — 1.0 readiness pass (docs gate closed; 2 human gates remain)
 

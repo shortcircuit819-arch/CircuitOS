@@ -334,7 +334,7 @@ internal static class Program
                     overlayFilePath = Path.Combine(overlayDataPath, "overlay", "index.html"),
                     profilesRoot = Path.Combine(_dataRoot, "profiles"),
                     runtime = ".NET",
-                    version = "0.9.0",
+                    version = "0.9.0.1",
                     mode = _sessionMode,
                     cloudError = _cloudError,
                     twitch = _sessionTwitch is null ? null : new { login = _sessionTwitch.Login, displayName = _sessionTwitch.DisplayName, userId = _sessionTwitch.UserId, expiresAt = _sessionTwitch.ExpiresAt },
@@ -494,9 +494,11 @@ internal static class Program
                 await SendResultAsync(context, service.SaveConfiguration(await ReadBodyAsync(request)));
             else if (request.HttpMethod == "POST" && path == "/api/overlay-image")
             {
-                var (bytes, contentType) = await ReadRawBodyAsync(request);
+                // The declared Content-Type is ignored: SaveOverlayBackground sniffs the real image type
+                // from the bytes, so a mislabeled payload can't be written as a background.
+                var (bytes, _) = await ReadRawBodyAsync(request);
                 var state = request.QueryString["state"] ?? "";
-                await SendResultAsync(context, service.SaveOverlayBackground(bytes, contentType, state));
+                await SendResultAsync(context, service.SaveOverlayBackground(bytes, state));
             }
             else if (request.HttpMethod == "GET" && path == "/overlay-bg")
                 await SendOverlayBackgroundAsync(context, service.Store);
@@ -968,6 +970,14 @@ internal static class Program
         context.Response.ContentLength64 = body.Length;
         context.Response.Headers["Cache-Control"] = "no-store";
         context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        // Content-Security-Policy for the admin document: the panel loads only its own app.js (no inline
+        // scripts), so 'self' script-src blocks any injected inline script — the XSS backstop if a
+        // hand-edited profile/collection value ever reached the DOM unescaped. Inline styles are allowed
+        // because live theming sets element.style; images allow data:/blob: for previews.
+        if (entry.ContentType.StartsWith("text/html", StringComparison.Ordinal))
+            context.Response.Headers["Content-Security-Policy"] =
+                "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+                "img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'";
         await context.Response.OutputStream.WriteAsync(body);
     }
 

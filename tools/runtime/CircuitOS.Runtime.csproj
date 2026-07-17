@@ -7,9 +7,9 @@
     <Nullable>enable</Nullable>
     <AssemblyName>CircuitOS</AssemblyName>
     <RootNamespace>CircuitOS.Runtime</RootNamespace>
-    <Version>0.9.0</Version>
-    <FileVersion>0.9.0</FileVersion>
-    <AssemblyVersion>0.9.0</AssemblyVersion>
+    <Version>0.9.0.1</Version>
+    <FileVersion>0.9.0.1</FileVersion>
+    <AssemblyVersion>0.9.0.1</AssemblyVersion>
     <Description>CircuitOS collection game administration</Description>
     <Company>CircuitOS</Company>
     <Product>CircuitOS</Product>

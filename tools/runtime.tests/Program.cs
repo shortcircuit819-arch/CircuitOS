@@ -91,6 +91,7 @@ try
     TestProfileMetaSafetyNet(store, testPath);
     TestThemeNormalization(service);
     TestDesignOverrides(service);
+    TestOverlayImageValidation(service);
 
     Console.WriteLine("Smoke tests passed: first run is safe, the pull + redemption + command engines behave, collection packs round-trip, profiles survive missing metadata, and the Appwrite + Twitch config loaders behave.");
     return 0;
@@ -200,6 +201,24 @@ static void TestDesignOverrides(CircuitService service)
     var ov2 = SaveAndRead(new JsonObject { ["--radius"] = "40px" });  // out of range
     Require(ov2["--radius"] is null, "An out-of-range radius should be dropped.");
     Require(ov2.Count == 0, "Sanitizing should leave no stray override keys.");
+}
+
+// Overlay background uploads are validated by their actual bytes (magic number), never by a
+// client-declared Content-Type, so a mislabeled or non-image payload can't be written as a background.
+static void TestOverlayImageValidation(CircuitService service)
+{
+    var png = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0 };
+    var okPng = service.SaveOverlayBackground(png, "");
+    Require(okPng.Status == 200, "A real PNG should be accepted as an overlay background.");
+    Require(okPng.Body["filename"]?.ToString() == "bg.png", "A PNG background should save as bg.png.");
+
+    var gif = new byte[] { 0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0, 0 };
+    var okGif = service.SaveOverlayBackground(gif, "rare");
+    Require(okGif.Status == 200 && okGif.Body["filename"]?.ToString() == "bg-rare.gif", "A per-state GIF should save as bg-rare.gif.");
+
+    var junk = new byte[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
+    Require(service.SaveOverlayBackground(junk, "").Status != 200, "A non-image payload must be rejected.");
+    Require(service.SaveOverlayBackground(System.Array.Empty<byte>(), "").Status != 200, "An empty payload must be rejected.");
 }
 
 static void TestProfileMetaSafetyNet(IDataStore store, string dataRoot)
