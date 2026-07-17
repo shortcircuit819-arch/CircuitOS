@@ -454,6 +454,29 @@ DataPath/
 
 ## Session Log
 
+### 2026-07-16 — Claude (claude-fable-5) — 1.0 feature window: bot chat account + per-profile overlay URLs (no version bump)
+
+The user set the plan: **0.9 = release candidate (polish only), 1.0 = release** — so remaining features
+had to land now. Swept the deferred-feature trail (feature-requests-analysis.md, HANDOFF deferrals,
+roadmap): the 1.x band (hosted cloud/sync, analytics, achievements, extension, trading/shops) stays
+excluded by design; the Velopack updater + signing IS 0.9. Two deferred, well-scoped features made the
+1.0 bar and shipped:
+
+- **Bot chat account** (commit 350570f) — feature-requests §1 ("botsefer"), now BUILT. Optional second
+  Twitch device-flow login; chat replies + pull announcements send AS the bot (sender_id + bot token);
+  rewards/redemptions/EventSub stay on the broadcaster. Tokens: `twitch-bot-tokens.local.json` (DPAPI).
+  Broadcaster scopes + `channel:bot` (existing logins: one refresh, or mod the bot). UI: optional bot
+  card on the Twitch page (hidden until the main login exists; no auto-open browser — private-window
+  sign-in as the bot). No bot = exactly prior behavior. **Tester step remaining:** a real second-account
+  authorization end-to-end (Moose/Amber have bot accounts).
+- **Per-profile overlay URLs** (commit ae0895c) — the deferred "item C" piece. Overlay statics now
+  publish to EVERY live profile's folder (startup + after profile ops), not just the active one; live
+  profile cards show their own OBS path + Copy. Cloud-mode ids without local folders are skipped.
+
+Both verified live (endpoints + UI states + on-disk publish); smoke tests green. Next: user review →
+then 0.9 (Velopack updater + signing + polish, per docs/updater-velopack-plan.md — repo exists now, so
+it's unblocked).
+
 ### 2026-07-16 — Claude (claude-fable-5) — Security audit + Origin check (no version bump)
 
 Post-0.8.0 security/backend pass. Commit 6fea862.

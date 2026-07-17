@@ -8,7 +8,15 @@ The third request, **"test feature on commands,"** is **done** — the Game Prof
 
 ---
 
-## 1. Bot chat account ("botsefer")  — CLARIFIED 2026-06-29
+## 1. Bot chat account ("botsefer")  — BUILT 2026-07-16 (pre-0.9, for 1.0)
+
+**Shipped as designed below**, with the recommended default: the broadcaster keeps EventSub/chat-read;
+only *sends* go out as the bot. Connect/disconnect lives on the Twitch page ("Bot chat account
+(optional)" card, device-code login — sign in as the BOT account in a private window). Tokens in
+`twitch-bot-tokens.local.json` (DPAPI). No bot connected = exactly the old behavior. Broadcaster scopes
+gained `channel:bot`; an existing login grants it with one refresh (or mod the bot).
+
+### Original analysis — CLARIFIED 2026-06-29
 
 **Corrected understanding (my first writeup was wrong — it was about inventory merging; it's not).**
 This is a **separate bot chat account**, like MixItUp / Streamer.bot: the bot's replies and pull
