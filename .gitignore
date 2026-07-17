@@ -35,3 +35,21 @@ data/active-profile
 desktop.ini
 Thumbs.db
 .DS_Store
+
+# Internal working / collaboration docs — kept locally for development, not published to the repo.
+# (Product docs, README, versioning, and patch notes stay tracked.)
+AGENTS.md
+HANDOFF.md
+HANDOFF-archive.md
+UI.md
+UX.md
+docs/design-language.md
+docs/feature-requests-analysis.md
+docs/updater-velopack-plan.md
+docs/dotnet-runtime.md
+docs/0.7-appwrite-dev-setup.md
+docs/0.7-cloud-foundation.md
+docs/0.7-twitch-auth-setup.md
+
+# Mobile companion project — separate app, not part of the desktop repo
+ios/
