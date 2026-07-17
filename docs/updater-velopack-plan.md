@@ -67,7 +67,13 @@ Releases** as the update feed.
 - **First cutover:** existing ZIP-install users won't auto-migrate to the Velopack install — they
   install the new `Setup.exe` once. Their data (in Documents) carries over untouched.
 - **Testing:** cut a throwaway `v0.0.1` and `v0.0.2` to a test repo, install v1, confirm it detects and
-  applies v2. Can't be fully tested until real releases exist — so land this once the feed is live.
+  applies v2. **Verified 2026-07-16 that this genuinely REQUIRES a real install** — Velopack's
+  `CheckForUpdatesAsync` throws *"can not be performed in an application that is not installed"* from any
+  raw/dev/headless process, so the round-trip can't be validated headlessly. For the interactive test,
+  set the env var **`CIRCUITOS_UPDATE_FEED=<local dir>`** to point an installed build at a local feed
+  (built with two `vpk pack` versions) instead of needing a public GitHub feed. Steps: `Setup.exe`
+  install v0.9.1, set the env var to a local feed containing v0.9.2, launch, Settings → About → Check for
+  updates → Download & Restart, confirm it relaunches as v0.9.2.
 
 ## Sequence summary
 Step 0 (user: repo) → Step 1 (app code) → Step 2 (vpk build) → cut a real release → Step 3 (signing).

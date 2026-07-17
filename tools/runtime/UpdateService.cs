@@ -18,9 +18,17 @@ internal static class UpdateService
     // The release feed. `vpk upload github --tag vX.Y.Z` publishes here; the app checks the same place.
     private const string RepoUrl = "https://github.com/shortcircuit819-arch/CircuitOS";
 
+    // Test/dev override: point the updater at a local directory feed instead of GitHub. Unset in
+    // production (the app always uses the GitHub feed). Used to validate the update flow end-to-end
+    // against a local feed without publishing anything.
+    private static string? FeedOverride => Environment.GetEnvironmentVariable("CIRCUITOS_UPDATE_FEED");
+
     public sealed record UpdateStatus(bool Managed, bool Available, string? LatestVersion, string CurrentVersion, string? Error);
 
-    private static UpdateManager NewManager() => new(new GithubSource(RepoUrl, accessToken: null, prerelease: false));
+    private static UpdateManager NewManager() =>
+        string.IsNullOrWhiteSpace(FeedOverride)
+            ? new UpdateManager(new GithubSource(RepoUrl, accessToken: null, prerelease: false))
+            : new UpdateManager(FeedOverride);
 
     private static string CurrentVersion()
     {
@@ -37,7 +45,9 @@ internal static class UpdateService
         try
         {
             var mgr = NewManager();
-            if (!mgr.IsInstalled)
+            // A raw/ZIP/dev copy isn't updatable — except when a local test feed is explicitly configured,
+            // where we're deliberately exercising the check against that feed.
+            if (!mgr.IsInstalled && string.IsNullOrWhiteSpace(FeedOverride))
                 return new UpdateStatus(false, false, null, current, null);
             var info = await mgr.CheckForUpdatesAsync().ConfigureAwait(false);
             if (info is null)
