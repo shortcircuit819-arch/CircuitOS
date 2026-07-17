@@ -711,6 +711,10 @@ input.invalid { border-color: var(--danger); }
 .profile-card.is-active { border-left-color: var(--green); }
 .profile-card.is-live { border-left-color: var(--red); }
 .pc-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; color: #000; font-size: 10px; font-weight: 800; letter-spacing: 0.1em; background: var(--green); margin-right: 6px; }
+.pc-obs-path { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 7px 9px; border: 1px solid var(--hairline); border-radius: 4px; background: var(--well); font-size: 11px; }
+.pc-obs-path span { flex: none; color: var(--muted); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; font-size: 9px; }
+.pc-obs-path code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.pc-obs-path .button { flex: none; padding: 3px 8px; font-size: 10px; }
 .pc-badge-live { background: var(--red); color: var(--on-accent); }
 .pc-name { margin: 10px 0 4px; font-size: 17px; font-weight: 700; }
 .pc-status { margin-bottom: 6px; color: var(--text); font-size: 12px; font-weight: 600; }

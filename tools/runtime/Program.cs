@@ -166,7 +166,7 @@ internal static class Program
         _dataRoot = options.DataPath;
         _headless = options.Headless;
 
-        PublishOverlayStatics(options.OverlayPath, overlayDataPath);
+        PublishOverlayStaticsForLiveProfiles(options.OverlayPath, overlayDataPath, store);
 
         if (!store.Exists(DataKeys.Catalog))
         {
@@ -327,6 +327,7 @@ internal static class Program
                     ok = true,
                     dataPath = overlayDataPath,
                     overlayFilePath = Path.Combine(overlayDataPath, "overlay", "index.html"),
+                    profilesRoot = Path.Combine(_dataRoot, "profiles"),
                     runtime = ".NET",
                     version = "0.8.0",
                     mode = _sessionMode,
@@ -456,7 +457,7 @@ internal static class Program
                 await SendResultAsync(context, profileResult);
                 if (profileResult.Status == 200)
                 {
-                    PublishOverlayStatics(overlayPath, overlayDataPath);
+                    PublishOverlayStaticsForLiveProfiles(overlayPath, overlayDataPath, service.Store);
                     RefreshNativeTwitch(service, cancel);
                 }
             }
@@ -1370,6 +1371,27 @@ internal static class Program
 
     // Copies overlay statics and a normalized overlay-config.json into the active
     // profile's overlay folder so OBS local-file mode needs no cross-directory fetches.
+    // The OBS overlay is per-profile: each LIVE profile needs its own overlay/index.html so a streamer
+    // can point a separate OBS browser source at each live game. Publishes to the active (editing)
+    // profile as always, plus every other live profile whose local folder exists (a cloud-mode profile
+    // id may have no local folder — skipped; the overlay is a local-file concern).
+    private static void PublishOverlayStaticsForLiveProfiles(string overlayPath, string activeProfilePath, IDataStore store)
+    {
+        PublishOverlayStatics(overlayPath, activeProfilePath);
+        try
+        {
+            var profilesRoot = Path.Combine(_dataRoot, "profiles");
+            foreach (var profile in store.ListProfiles().Where(p => p.IsLive))
+            {
+                var folder = Path.Combine(profilesRoot, profile.Id);
+                if (Directory.Exists(folder)
+                    && !string.Equals(Path.GetFullPath(folder), Path.GetFullPath(activeProfilePath), StringComparison.OrdinalIgnoreCase))
+                    PublishOverlayStatics(overlayPath, folder);
+            }
+        }
+        catch { }
+    }
+
     private static void PublishOverlayStatics(string overlayPath, string dataPath)
     {
         try

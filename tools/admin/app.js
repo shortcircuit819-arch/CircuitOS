@@ -128,6 +128,14 @@ let profileConfigured = false;
 let profileDirty = false;
 let dataPath = "";
 let overlayFilePath = "";
+let profilesRootPath = "";
+
+// The OBS browser-source path for one profile's overlay (statics are published per live profile).
+function profileOverlayPath(profileId) {
+  if (!profilesRootPath) return "";
+  const sep = profilesRootPath.includes("\\") ? "\\" : "/";
+  return [profilesRootPath, profileId, "overlay", "index.html"].join(sep);
+}
 let runtimeInfo = { runtime: "unknown", version: "unknown" };
 let dirty = false;
 let operationalRefreshInFlight = false;
@@ -1573,6 +1581,7 @@ async function loadConfiguration(force = false) {
   const healthPayload = await healthResponse.json();
   runtimeInfo = { runtime: healthPayload.runtime || "unknown", version: healthPayload.version || "unknown" };
   overlayFilePath = healthPayload.overlayFilePath || "";
+  profilesRootPath = healthPayload.profilesRoot || "";
   systemProfile = normalizeProfile(profilePayload.profile);
   profileConfigured = Boolean(profilePayload.isConfigured);
   profileDirty = false;
@@ -1945,6 +1954,20 @@ function renderProfiles() {
     const statusText = isActive ? (profile.isLive ? "Editing + live" : "Editing only") : (profile.isLive ? "Live now" : "Ready to go live");
     card.append(element("div", "pc-status", statusText));
     card.append(element("div", "pc-meta", `Created ${new Date(profile.createdAt).toLocaleDateString()}`));
+    // A live profile runs its own overlay — surface the OBS browser-source path right on the card.
+    const overlayPath = profile.isLive ? profileOverlayPath(profile.id) : "";
+    if (overlayPath) {
+      const row = element("div", "pc-obs-path");
+      row.append(element("span", "", "OBS overlay"), element("code", "", overlayPath));
+      const copy = element("button", "button secondary small", "Copy");
+      copy.type = "button";
+      copy.addEventListener("click", async () => {
+        try { await navigator.clipboard.writeText(overlayPath); showNotice("Overlay path copied — paste it into an OBS browser source (Local file).", "success"); }
+        catch { showNotice("Could not copy — select the path text and copy it manually.", "error"); }
+      });
+      row.append(copy);
+      card.append(row);
+    }
     const actions = element("div", "pc-actions");
     const liveBtn = element("button", `button ${profile.isLive ? "secondary" : "primary"} small`, profile.isLive ? "Stop Live" : "Go Live");
     liveBtn.type = "button";
