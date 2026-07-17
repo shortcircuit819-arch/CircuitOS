@@ -129,37 +129,47 @@ import name de-duplication. See `docs/patch-notes/v0.7.1.md`, `v0.7.2.md`, and `
 - Streamer.bot integration **retired in 0.7.2** — native Twitch is the single supported path ✓
 - `IDataStore` abstraction — data access is interface-driven, so the cloud path is a swap not a rewrite ✓
 
-**What's next:** the visual identity + Design Mode (0.8), a real installer + auto-updater (0.9), then
-hosted cloud and the "CircuitOS on Twitch" extension in the 1.x line (see below). Hosted cloud is a
-security/infrastructure decision analyzed in `docs/feature-requests-analysis.md`.
+**What's next:** **1.0** — the signed stable release. 0.8 and 0.9 have shipped, so the remaining work is
+a code-signing certificate and a public update feed (both below). After that, hosted cloud and the
+"CircuitOS on Twitch" extension in the 1.x line. Hosted cloud is a security/infrastructure decision
+analyzed in `docs/feature-requests-analysis.md`.
 
-### 0.8 - Design & Identity *(next)*
+### 0.8 - Design & Identity ✓ *(shipped 0.8.1)*
 
 *Make CircuitOS look unmistakably its own — intentional, not generic.*
 
 - A design-token layer and a full re-skin of the admin panel to the CircuitOS visual language:
   hairline structure over cards, crisp geometry (no pills), a soft accent glow as the only soft
-  element, and hue-independent bones so any streamer's color theme still looks composed
-- **Design Mode** — a live, in-app visual editor to tune text, colors, spacing, and layout by hand,
-  writing to an overrides layer the app applies (no source edits, no drift)
-- Contrast-aware theming that stays readable and coherent across any accent/base combination
+  element, and hue-independent bones so any streamer's color theme still looks composed ✓
+- **Design Mode** — an in-app overrides layer (roundness + per-token colors + reset), applied over the
+  theme at runtime so the base skin is never edited and nothing drifts ✓
+- Contrast-aware theming that stays readable across any accent/base combination ✓
+- Six curated base themes including a light theme; the streamer picks a theme + one contrast-safe accent ✓
+- Also in 0.8.1: an optional bot chat account, per-profile OBS overlays, and a CSRF fix on the local API ✓
 
-### 0.9 - Distribution & Release Candidate
+### 0.9 - Distribution & Release Candidate ✓ *(shipped 0.9.0)*
 
 *Make it genuinely shippable to non-technical streamers, then prove it's stable.*
 
-- Velopack installer + GitHub auto-updater — replaces "extract a ZIP" with next-next-finish and silent
-  self-updates (see `docs/updater-velopack-plan.md`)
-- Code signing so installs don't trip Windows SmartScreen
-- Release-candidate hardening: feature freeze, fresh-install and update-matrix testing, onboarding /
-  diagnostics / recovery review, documentation pass
+- Velopack installer + GitHub auto-updater — replaces "extract a ZIP" with next-next-finish and in-app
+  self-updates (Settings → About) ✓
+- One-command signed release pipeline (`Build-CircuitOSVelopack.ps1`: publish → pack → sign → upload) ✓
+- Code signing wired and proven end-to-end — **awaiting a certificate** (see `docs/release-signing.md`)
 
-### 1.0 - Signed Stable Release
+### 1.0 - Signed Stable Release *(next)*
 
-- Trusted signed executable and release artifacts
-- One-click install and silent updates for non-technical users
-- Stable compatibility promises for saved data and supported integrations
-- Public installation, update, recovery, and support workflow
+Everything is built; 1.0 is gated on two decisions rather than code:
+
+1. **A code-signing certificate** so installs don't trip SmartScreen. Azure Trusted Signing (~$10/mo,
+   cloud, no hardware token) is the lowest-friction option — traditional certs now require a shipped USB
+   token. See `docs/release-signing.md`.
+2. **A public release feed.** The updater reads GitHub Releases; the app can't ship a token to read a
+   private repo (the same foot-gun as shipping a master key), so releases must be public — either this
+   repo or a dedicated public releases repo. *Going public may also unlock free SignPath Foundation
+   signing, solving both at once.*
+
+Then: the live install → update round-trip test (only testable against a real feed), and the stable
+compatibility promise for saved data and supported integrations.
 
 ### 1.x - Growth toward the economy
 

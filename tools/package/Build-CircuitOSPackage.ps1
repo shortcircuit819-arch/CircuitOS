@@ -135,6 +135,7 @@ foreach ($file in $overlayFiles) {
 }
 
 $guideFiles = @(
+    "installation-and-updates.md",
     "catalog-commands.md",
     "collection-importer.md",
     "collection-command.md",

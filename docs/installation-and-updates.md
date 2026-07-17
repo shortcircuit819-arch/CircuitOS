@@ -1,103 +1,95 @@
 # CircuitOS Installation and Updates
 
-CircuitOS can run against an existing live data folder or as a portable starter
-installation. Circuit Components is the included default game profile.
+## Installing (recommended)
 
-## Build The Recipient Package
+Run **`CircuitOS-win-Setup.exe`**.
 
-Run from the project root:
+It installs for your user only — no admin prompt — and creates Desktop and Start Menu shortcuts. This is
+the recommended way to install, because it's what enables **automatic updates**.
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File tools\package\Build-CircuitOSPackage.ps1
-```
+If Windows shows *"Windows protected your PC — unknown publisher"*, the release you have is unsigned.
+Signed public releases don't show this. Never disable your antivirus to run it.
 
-This creates:
+### Where things live
 
-- `dist\CircuitOS-Release`: inspectable recipient folder
-- `dist\CircuitOS-Windows-x64.zip`: send-ready archive
-- `dist\CircuitOS-Update-<version>.zip`: data-free update archive
+| What | Where |
+|---|---|
+| The program | `%LocalAppData%\CircuitOS` |
+| **Your data** | **`Documents\CircuitOS\Data`** |
 
-The builder uses an explicit file list, creates a fresh empty inventory, omits
-owner-specific paths, and places the OBS files directly under `Data\overlay`.
-Recipients launch the package directly with its top-level `CircuitOS.exe`.
+Your data is deliberately kept **outside** the program folder: collections, inventories, profiles,
+backups, and settings. Updates only ever swap program files — **an update can never touch a viewer's
+collection.**
 
-The builder reports the executable's Authenticode status. Public releases should
-be signed with `tools\package\Sign-CircuitOSRelease.ps1` and a trusted
-code-signing certificate before the ZIP is distributed. See
-`docs\release-signing.md`.
+## Updating
 
-For an existing installation, close CircuitOS and copy the contents of the
-matching update ZIP into the installed CircuitOS folder. The update archive has
-no `Data` directory, so catalog, profile, inventory, boosts, role state, and
-backups are not replaced. `version.json` records the application and data-schema
-versions.
+**Settings → About → Check for updates.** If a newer version exists you'll see the version change and a
+**Download & Restart** button. That's it.
 
-The CircuitOS platform wordmark remains fixed in the administration sidebar and
-local-engine status area. A system profile controls the separate Active Profile
-identity, terminology, and theme, but cannot replace the CircuitOS attribution.
+If the panel says this copy *isn't managed by the updater*, you're running a ZIP copy or a dev build —
+run the latest `Setup.exe` once and you'll be on the updater from then on. Your data carries over
+untouched.
 
-## Launch Modes
+If checking reports a network/fetch error, the release feed isn't reachable — that's the feed, not your
+installation.
 
-- `tools\admin\start-admin.vbs` keeps the existing Circuit Components live-data
-  path used by the project owner.
-- `tools\admin\start-circuitos.vbs` is retained for repository development.
-- Distributed copies place `CircuitOS.exe` at the package root. It discovers
-  the adjacent `App` and `Data` folders automatically.
+## Alternate: portable / ZIP install
 
-The portable starter inventory is empty. The electronics catalog and boost are
-examples that can be replaced in the editor.
+`CircuitOS-Windows-x64.zip` is a self-contained folder you unpack yourself. Launch the top-level
+`CircuitOS.exe`; it finds the adjacent `App` and `Data` folders automatically. A ZIP copy does **not**
+auto-update — to update it, close CircuitOS and copy the contents of the matching
+`CircuitOS-Update-<version>.zip` over your installed folder. That archive has no `Data` directory, so
+your catalog, profiles, inventory, boosts, role state, and backups are never replaced. `version.json`
+records the application and data-schema versions.
 
-For release packaging, use `CircuitOS` as the ZIP root folder and keep the
-`tools`, `data`, and selected `docs` directories in their existing relative
-locations.
+`CircuitOS.exe` is a self-contained Windows x64 application — no .NET runtime, SDK, or PowerShell policy
+changes needed. It uses the Microsoft Edge WebView2 runtime included with current Windows.
 
-The published `CircuitOS.exe` is a self-contained Windows x64 application. A
-recipient does not need PowerShell execution-policy changes, a .NET SDK, or a
-separate .NET runtime. It uses the Microsoft Edge WebView2 Runtime included with
-current Windows and Microsoft Edge installations.
+## First run
 
-Self-contained does not mean trusted. An unsigned new executable can still
-trigger reputation or antivirus warnings. Do not instruct recipients to disable
-security software. Sign public releases and submit suspected false positives to
-the security vendor.
-
-## First Run
-
-When `system-profile.json` is missing, the app opens the required first-run
-wizard. Blank Collection is selected by default, while Circuit Components
-remains available as an example preset. The wizard configures:
+On first launch (no `system-profile.json`) the setup wizard runs once. It configures:
 
 - Game, administrator, and redemption names
 - Item, collection, and currency terminology
-- Inventory, missing, duplicates, leaderboard, balance, collection, and salvage
-  chat commands
-- Background, panel, border, accent, text, and muted colors
+- Your chat commands (inventory, missing, duplicates, leaderboard, balance, collection, salvage)
+- Your **theme and accent color** (six themes including a light one; fine-tune later in
+  **Appearance → Design Mode**)
 
-Fresh release packages intentionally omit `Data\system-profile.json` so the
-wizard runs once. Update packages contain no `Data` folder and therefore never
-restart first-run setup for an existing installation.
-
-Save System Profile to create the live profile. The app uses stable internal
-catalog keys while presenting the configured terminology to administrators and
-chat.
+Fresh installs intentionally omit `Data\system-profile.json` so the wizard runs. Updates never restart
+first-run setup.
 
 `data\system-profile.template.json` documents the version 1 profile schema.
 
-## Go Live On Twitch
+## Go live on Twitch
 
-After saving the profile, open the **Twitch** section and connect your account.
-The one-time login needs no developer account or config files. CircuitOS creates
-and manages the channel-point reward, then handles redemptions, chat commands,
-and pull announcements directly through EventSub — no code to paste.
+Open **Twitch** and connect your account. The one-time login needs no developer account or config files.
+CircuitOS creates and manages the channel-point reward, then handles redemptions, chat commands, and
+pull announcements directly through EventSub.
+
+Optionally connect a **bot chat account** on the same page so replies post from your bot instead of your
+channel account.
 
 ## Verification
 
-Run `!components`, `!scrap`, and one test redemption. Verify that
-`inventory.json` and `overlay\overlay-state.json` update inside the data folder.
+Run `!components`, `!scrap`, and one test redemption. Confirm `inventory.json` and
+`overlay\overlay-state.json` update inside your data folder.
 
 ## Recovery
 
-`system-profile.json` is included in the Backup & Recovery Center. Profile saves
-and restores use the same validation, atomic replacement, and timestamped backup
-rules as the catalog, boost, and Discord role acknowledgement files.
+Every managed config file — catalog, profile, boost, and Discord role acknowledgements — is saved with
+validation, atomic replacement, and a timestamped backup. Restore any of them from the **Backup &
+Recovery Center**. Backups are pruned to the most recent N (Settings → backup retention; default 30).
+
+**Your inventory is never overwritten without a timestamped backup first.**
+
+## Building a release (maintainers)
+
+```powershell
+# Installer + update feed (+ signing, + optional upload) — the modern path
+tools\package\Build-CircuitOSVelopack.ps1 -CertificateThumbprint <THUMBPRINT> -Upload
+
+# Legacy ZIP packages
+tools\package\Build-CircuitOSPackage.ps1
+```
+
+See `docs\release-signing.md` for signing and `docs\updater-velopack-plan.md` for the updater design.
