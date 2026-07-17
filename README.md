@@ -5,7 +5,7 @@ integration — no code to paste**. Circuit Components is the included starter
 profile, while the editor supports custom games, terminology, collections,
 themes, messages, events, and currencies.
 
-Current application version: **0.8.0**
+Current application version: **0.8.1**
 
 ## Current Features
 

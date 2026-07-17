@@ -12,7 +12,7 @@ the end of every working session before stopping.
 |-------|-------|
 | Project | CircuitOS — configurable Twitch collection-game platform |
 | Default game | Circuit Components (electronics-themed) |
-| Current version | **0.8.0** (shipped — "Design & Identity": full card-less re-skin, six curated base themes incl. a light theme, contrast-safe accent, and Design Mode overrides. Native Twitch is the single supported path; Streamer.bot retired in 0.7.2. Optional cloud, per-state overlay images, backup retention). Local mode is the default and unchanged. |
+| Current version | **0.8.1** (shipped — on top of 0.8.0 "Design & Identity": optional **bot chat account** (replies post as the bot), **per-profile OBS overlays** (each live profile its own overlay + path), and a **CSRF/Origin** security fix on the local API. 0.8.0 = full card-less re-skin, six curated themes incl. a light theme, contrast-safe accent, Design Mode overrides). Native Twitch is the single supported path. Local mode is the default and unchanged. |
 | Phase | **0.7 — Native Twitch + Cloud Foundation — shipped (0.7.2 retired Streamer.bot).** Zero-config Twitch login (device flow, no dev account), CircuitOS-managed channel-point reward, native EventSub redemptions + chat commands + pull announcements. Settings page with an optional cloud data backend (bring-your-own Appwrite, safe fallback to local). Multiple live profiles, per-state overlay colors, shared PullEngine/RedemptionEngine/CommandEngine (smoke-tested), reliability/security hardening. Still ahead: Velopack + GitHub installer/updater (gated on creating the repo — `docs/updater-velopack-plan.md`), and a true *hosted* cloud (security/infra decision — `docs/feature-requests-analysis.md`). Deferred features: bot chat account, cross-profile currency (shops/2.0), per-state overlay images. |
 | Repo root | `C:\Dev\CircuitStreamSystem` |
 | Live data path | `C:\Users\nicho\Documents\CircuitOS\Data` (profiles under `Data\profiles\<id>`; active profile `circuit-components`) |
@@ -453,6 +453,15 @@ DataPath/
 ---
 
 ## Session Log
+
+### 2026-07-16 — Claude (claude-opus-4-8) — Cut 0.8.1 (bot account + per-profile overlays + CSRF fix)
+
+Version → **0.8.1** in all four locations (csproj, `/api/health`, `circuitosVersion`, README);
+`docs/patch-notes/v0.8.1.md` added; packaged; tagged `v0.8.1`. Rolls up the three commits since 0.8.0:
+the Origin/CSRF security fix (6fea862), the bot chat account (350570f), and per-profile overlay URLs
+(ae0895c). Sub-feature bump (third part) per docs/versioning.md. Goal set this session: drive to 1.0,
+cutting a release per meaningful update. Next milestone: **0.9 — Distribution & RC** (Velopack in-app
+updater per docs/updater-velopack-plan.md, then signing).
 
 ### 2026-07-16 — Claude (claude-fable-5) — 1.0 feature window: bot chat account + per-profile overlay URLs (no version bump)
 
