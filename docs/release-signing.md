@@ -20,10 +20,30 @@ Proven on 2026-07-16 with a throwaway self-signed certificate: SignTool discover
 
 **So: the day a real certificate exists, signing is a thumbprint swap. No code changes.**
 
-## The one human step — getting a certificate
+## Tooling — already installed (2026-07-16)
 
-There is no way around this: a *trusted* signature requires a CA to validate your identity. That's the
-entire point of the trust model. Pick one:
+Every signing tool CircuitOS can use is present on the dev machine, so there's nothing to install:
+
+- **AzureSignTool 7.0.1** (`azuresigntool`) — for the Azure Trusted Signing path.
+- **Windows SDK SignTool** — `C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\`.
+- **Velopack's embedded signtool** — used automatically by `vpk pack --signParams/--signTemplate`.
+
+## The absolute minimum you must do
+
+Everything else is automated. The only thing no tool or agent can do for you is **prove to a Certificate
+Authority that you are you** — that identity check *is* the trust, so it's inherently yours. Concretely,
+via Azure Trusted Signing (the least-friction option, ~$10/mo, no hardware):
+
+1. Azure Portal → create a **Trusted Signing account** (note the region + endpoint URL).
+2. Complete the one-time **identity validation** (individual ID check).
+3. Create a **certificate profile** (note its name).
+4. Give those values to the build command below. Done — from then on every release signs automatically.
+
+Realistically ~15–30 minutes of your time, once, ever.
+
+## The certificate options — getting one
+
+A *trusted* signature requires a CA to validate your identity. Pick one:
 
 | Option | Cost | Friction | Notes |
 |---|---|---|---|
