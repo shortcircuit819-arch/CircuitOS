@@ -21,13 +21,16 @@ internal sealed record TwitchTokens(
     string DisplayName)
 {
     public const string FileName = "twitch-tokens.local.json";
+    // Optional second login for a dedicated bot chat account (replies post as the bot, not the
+    // broadcaster). Same DPAPI protection; gitignored alongside the main token file.
+    public const string BotFileName = "twitch-bot-tokens.local.json";
 
     // App-specific DPAPI entropy — binds the ciphertext to CircuitOS in addition to the user account.
     private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("CircuitOS.TwitchTokens.v1");
 
-    public static TwitchTokens? TryLoad(string dataRoot)
+    public static TwitchTokens? TryLoad(string dataRoot, string fileName = FileName)
     {
-        var path = Path.Combine(dataRoot, FileName);
+        var path = Path.Combine(dataRoot, fileName);
         if (!File.Exists(path)) return null;
         try
         {
@@ -48,7 +51,7 @@ internal sealed record TwitchTokens(
         catch { return null; }
     }
 
-    public void Save(string dataRoot)
+    public void Save(string dataRoot, string fileName = FileName)
     {
         var json = new JsonObject
         {
@@ -60,7 +63,7 @@ internal sealed record TwitchTokens(
             ["login"] = Login,
             ["displayName"] = DisplayName
         };
-        File.WriteAllText(Path.Combine(dataRoot, FileName), json.ToJsonString(JsonUtil.IndentedOptions), new UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(dataRoot, fileName), json.ToJsonString(JsonUtil.IndentedOptions), new UTF8Encoding(false));
     }
 
     private static string Protect(string plaintext)
@@ -90,8 +93,14 @@ internal static class TwitchAuth
     private static readonly string[] Scopes =
     [
         "channel:read:redemptions", "channel:manage:redemptions",
-        "user:read:chat", "user:write:chat"   // chat commands + replies (slice 3)
+        "user:read:chat", "user:write:chat",  // chat commands + replies (slice 3)
+        "channel:bot"                         // lets an optional bot account post in this channel
     ];
+
+    // Scopes for the optional dedicated bot chat account. The bot only SENDS (replies + pull
+    // announcements post as the bot); redemption intake, reward management, and EventSub chat-read all
+    // stay on the broadcaster login. See docs/feature-requests-analysis.md §1.
+    internal static readonly string[] BotScopes = ["user:read:chat", "user:write:chat", "user:bot"];
     private static readonly HttpClient Http = new();
 
     public static TwitchTokens Login(TwitchOptions opts, string dataRoot)
@@ -156,12 +165,12 @@ internal static class TwitchAuth
 
     // Step 1 of the Device Code Flow: ask Twitch for a device/user code. Needs only the (public)
     // client id. The user then authorizes at VerificationUri (which embeds the code).
-    public static DeviceCodeRequest RequestDeviceCode(TwitchOptions opts)
+    public static DeviceCodeRequest RequestDeviceCode(TwitchOptions opts, string[]? scopes = null)
     {
         var device = PostForm("https://id.twitch.tv/oauth2/device", new Dictionary<string, string>
         {
             ["client_id"] = opts.ClientId,
-            ["scopes"] = string.Join(' ', Scopes)
+            ["scopes"] = string.Join(' ', scopes ?? Scopes)
         });
         return new DeviceCodeRequest(
             device["device_code"]?.ToString() ?? throw new InvalidOperationException("Twitch device endpoint returned no device_code."),
@@ -173,12 +182,13 @@ internal static class TwitchAuth
 
     // Step 2 of the Device Code Flow: poll the token endpoint once. Returns the tokens on success,
     // null while the user hasn't authorized yet (authorization_pending), and throws on a hard error.
-    public static TwitchTokens? PollDeviceToken(TwitchOptions opts, string deviceCode, string dataRoot)
+    public static TwitchTokens? PollDeviceToken(TwitchOptions opts, string deviceCode, string dataRoot,
+        string[]? scopes = null, string fileName = TwitchTokens.FileName)
     {
         var (status, body) = PostFormRaw("https://id.twitch.tv/oauth2/token", new Dictionary<string, string>
         {
             ["client_id"] = opts.ClientId,
-            ["scopes"] = string.Join(' ', Scopes),
+            ["scopes"] = string.Join(' ', scopes ?? Scopes),
             ["device_code"] = deviceCode,
             ["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code"
         });
@@ -193,7 +203,7 @@ internal static class TwitchAuth
             var identity = FetchIdentity(opts.ClientId, accessToken);
             var tokens = new TwitchTokens(accessToken, refreshToken, DateTimeOffset.UtcNow.AddSeconds(tokenExpiresIn),
                 identity.UserId, identity.Login, identity.DisplayName);
-            tokens.Save(dataRoot);
+            tokens.Save(dataRoot, fileName);
             return tokens;
         }
         if (body.Contains("authorization_pending", StringComparison.OrdinalIgnoreCase)) return null;
@@ -224,7 +234,8 @@ internal static class TwitchAuth
     // Exchanges the stored refresh token for a fresh access token (Twitch access tokens last
     // ~4h, so a long stream needs this). Returns updated tokens and re-saves them. Throws if
     // the refresh token is no longer valid (the user must log in again).
-    public static TwitchTokens Refresh(TwitchOptions opts, TwitchTokens current, string dataRoot)
+    public static TwitchTokens Refresh(TwitchOptions opts, TwitchTokens current, string dataRoot,
+        string fileName = TwitchTokens.FileName)
     {
         if (string.IsNullOrWhiteSpace(current.RefreshToken))
             throw new InvalidOperationException("No Twitch refresh token on file — please log in again.");
@@ -247,7 +258,7 @@ internal static class TwitchAuth
             RefreshToken = refreshToken,
             ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(expiresIn)
         };
-        tokens.Save(dataRoot);
+        tokens.Save(dataRoot, fileName);
         return tokens;
     }
 

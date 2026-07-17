@@ -28,12 +28,18 @@ internal static class TwitchRuntime
         var tokens = TwitchTokens.TryLoad(dataRoot);
         if (tokens is null) return null; // not logged in yet
 
+        // Optional dedicated bot chat account: when its tokens exist, chat replies + announcements
+        // post as the bot; absent, everything behaves exactly as before (broadcaster sends).
+        var botTokens = TwitchTokens.TryLoad(dataRoot, TwitchTokens.BotFileName);
+
         return Task.Run(async () =>
         {
             try
             {
                 var session = new TwitchSession(options, tokens, dataRoot);
-                var helix = new TwitchHelix(session);
+                var botSession = botTokens is null ? null : new TwitchSession(options, botTokens, dataRoot, TwitchTokens.BotFileName);
+                var helix = new TwitchHelix(session, botSession);
+                if (botSession is not null) log($"Bot chat account connected: replies will post as @{botSession.Login}.");
                 var rewardRoutes = BuildRewardRoutes(store, (title, cost, prompt) => helix.EnsureReward(title, cost, prompt), log);
                 if (rewardRoutes.Count == 0)
                 {

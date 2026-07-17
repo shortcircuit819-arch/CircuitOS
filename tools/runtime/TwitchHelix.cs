@@ -13,13 +13,17 @@ internal sealed class TwitchSession
 {
     private readonly TwitchOptions _options;
     private readonly string _dataRoot;
+    private readonly string _fileName;
     private TwitchTokens _tokens;
 
-    public TwitchSession(TwitchOptions options, TwitchTokens tokens, string dataRoot)
+    // fileName routes refreshed tokens back to the right store — the broadcaster login by default,
+    // TwitchTokens.BotFileName for the optional bot chat account.
+    public TwitchSession(TwitchOptions options, TwitchTokens tokens, string dataRoot, string fileName = TwitchTokens.FileName)
     {
         _options = options;
         _tokens = tokens;
         _dataRoot = dataRoot;
+        _fileName = fileName;
     }
 
     public string UserId => _tokens.UserId;
@@ -36,7 +40,7 @@ internal sealed class TwitchSession
         }
     }
 
-    public void Refresh() => _tokens = TwitchAuth.Refresh(_options, _tokens, _dataRoot);
+    public void Refresh() => _tokens = TwitchAuth.Refresh(_options, _tokens, _dataRoot, _fileName);
 }
 
 internal sealed record CustomReward(string Id, string Title, int Cost, bool Manageable = true);
@@ -48,8 +52,16 @@ internal sealed class TwitchHelix
 {
     private static readonly HttpClient Http = new();
     private readonly TwitchSession _session;
+    private readonly TwitchSession? _botSession;
 
-    public TwitchHelix(TwitchSession session) => _session = session;
+    // botSession is the optional dedicated bot chat account: when present, chat messages are SENT as
+    // the bot (sender_id + bot token); everything else (rewards, redemptions, EventSub) stays on the
+    // broadcaster session. See docs/feature-requests-analysis.md §1.
+    public TwitchHelix(TwitchSession session, TwitchSession? botSession = null)
+    {
+        _session = session;
+        _botSession = botSession;
+    }
 
     private string RewardsUrl => $"https://api.twitch.tv/helix/channel_points/custom_rewards?broadcaster_id={_session.UserId}";
 
@@ -117,15 +129,18 @@ internal sealed class TwitchHelix
         Send(HttpMethod.Patch, url, new JsonObject { ["status"] = fulfilled ? "FULFILLED" : "CANCELED" });
     }
 
-    // Sends a chat message to the broadcaster's channel as the logged-in user (needs user:write:chat).
+    // Sends a chat message to the broadcaster's channel. With a bot account connected the message
+    // posts AS the bot (sender_id = bot, bot token — Twitch requires the sender's own token);
+    // otherwise it posts as the broadcaster, exactly as before.
     public void SendChatMessage(string text)
     {
+        var sender = _botSession ?? _session;
         Send(HttpMethod.Post, "https://api.twitch.tv/helix/chat/messages", new JsonObject
         {
             ["broadcaster_id"] = _session.UserId,
-            ["sender_id"] = _session.UserId,
+            ["sender_id"] = sender.UserId,
             ["message"] = text
-        });
+        }, session: sender);
     }
 
     // Registers an EventSub subscription bound to an open WebSocket session (no public endpoint
@@ -158,11 +173,12 @@ internal sealed class TwitchHelix
         return rewards;
     }
 
-    private JsonObject Send(HttpMethod method, string url, JsonObject? body, bool retried = false)
+    private JsonObject Send(HttpMethod method, string url, JsonObject? body, bool retried = false, TwitchSession? session = null)
     {
+        var auth = session ?? _session;
         using var request = new HttpRequestMessage(method, url);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _session.AccessToken);
-        request.Headers.Add("Client-Id", _session.ClientId);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
+        request.Headers.Add("Client-Id", auth.ClientId);
         if (body is not null)
             request.Content = new StringContent(body.ToJsonString(JsonUtil.IndentedOptions), Encoding.UTF8, "application/json");
 
@@ -171,8 +187,8 @@ internal sealed class TwitchHelix
 
         if (response.StatusCode == HttpStatusCode.Unauthorized && !retried)
         {
-            _session.Refresh();
-            return Send(method, url, body, retried: true);
+            auth.Refresh();
+            return Send(method, url, body, retried: true, session: auth);
         }
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"Twitch Helix {method} {Trim(url)} → {(int)response.StatusCode}: {text}");

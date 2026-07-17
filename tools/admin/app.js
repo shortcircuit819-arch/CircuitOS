@@ -235,11 +235,11 @@ function readableOn(fg, bg, target = 3.2) {
   return candidate;
 }
 
-let lastSession = { mode: "local", twitch: null, dataPath: "" };
+let lastSession = { mode: "local", twitch: null, twitchBot: null, dataPath: "" };
 let twitchRewardCatalog = { loaded: false, loading: false, error: "", items: [] };
 
-function renderSessionMode(mode, twitch, location) {
-  lastSession = { mode, twitch, dataPath: location || "" };
+function renderSessionMode(mode, twitch, location, twitchBot = null) {
+  lastSession = { mode, twitch, twitchBot, dataPath: location || "" };
   const element = document.getElementById("sessionMode");
   if (!element) return;
   const name = twitch ? twitch.displayName || twitch.login : null;
@@ -336,7 +336,7 @@ async function pollTwitchLogin(start) {
 
 async function onTwitchLoginComplete(result) {
   const health = await (await fetch("/api/health", { cache: "no-store" })).json();
-  renderSessionMode(health.mode || lastSession.mode, health.twitch || null, lastSession.dataPath);
+  renderSessionMode(health.mode || lastSession.mode, health.twitch || null, lastSession.dataPath, health.twitchBot || null);
   twitchRewardCatalog = { loaded: false, loading: false, error: "", items: [] };
   renderSessionPanel();
   renderTwitchSettings();
@@ -358,11 +358,81 @@ async function logoutTwitch() {
   try {
     const response = await fetch("/api/twitch/logout", { method: "POST" });
     if (!response.ok) throw new Error("Logout failed.");
-    renderSessionMode(lastSession.mode, null, lastSession.dataPath);
+    renderSessionMode(lastSession.mode, null, lastSession.dataPath, lastSession.twitchBot);
     twitchRewardCatalog = { loaded: false, loading: false, error: "", items: [] };
     renderSessionPanel();
     renderTwitchSettings();
     showNotice("Logged out of Twitch — cached tokens cleared from this PC.", "success");
+  } catch (error) {
+    showNotice(error.message, "error");
+  }
+}
+
+// ── Bot chat account ──────────────────────────────────────────────────────────
+// Optional second Twitch login so replies + pull announcements post from a dedicated bot account
+// (e.g. @botsefer) instead of the broadcaster. The broadcaster login keeps doing everything else
+// (redemptions, rewards, chat reading). See docs/feature-requests-analysis.md §1.
+
+function renderTwitchBotCard() {
+  const card = document.getElementById("twitchBotCard");
+  if (!card) return;
+  const { twitch, twitchBot } = lastSession;
+  card.replaceChildren();
+  card.hidden = !twitch && !twitchBot; // meaningless until the main account is connected
+
+  const copy = element("div", "twitch-account-copy");
+  copy.append(
+    element("span", "", "BOT CHAT ACCOUNT (OPTIONAL)"),
+    element("strong", "", twitchBot ? `@${twitchBot.login || twitchBot.displayName}` : "Post as a bot"),
+    element("small", "", twitchBot
+      ? "Chat replies and pull announcements post as this bot. Everything else stays on your main account."
+      : "Connect a second Twitch account and replies post as the bot instead of you. If bot messages don't appear, refresh your main login once (it grants the bot permission) or mod the bot.")
+  );
+  const actions = element("div", "twitch-actions");
+  if (twitchBot) {
+    const disconnect = element("button", "button danger", "Disconnect Bot");
+    disconnect.type = "button";
+    disconnect.addEventListener("click", logoutTwitchBot);
+    actions.append(disconnect);
+  } else {
+    const connect = element("button", "button secondary", "Connect Bot Account");
+    connect.type = "button";
+    connect.id = "twitchBotLoginButton";
+    connect.addEventListener("click", loginTwitchBot);
+    actions.append(connect);
+  }
+  card.append(copy, actions);
+}
+
+async function loginTwitchBot() {
+  const button = document.getElementById("twitchBotLoginButton");
+  if (button) { button.disabled = true; button.textContent = "Connecting…"; }
+  try {
+    const startResp = await fetch("/api/twitch/bot/login/start", { method: "POST" });
+    const start = await startResp.json().catch(() => ({}));
+    if (!startResp.ok || !start.ok) throw new Error((start.errors || ["Could not start the bot login."]).join(" "));
+    // Deliberately NOT auto-opened: the streamer must sign in as the BOT account, not the account
+    // their browser is already logged into. Private/incognito window is the reliable way.
+    if (button) button.textContent = `Code: ${start.userCode}`;
+    showNotice(`In a PRIVATE/incognito window, log in to Twitch as your BOT account, then go to ${start.verificationUri} and enter code ${start.userCode}.`, "success");
+    const result = await pollTwitchLogin(start);
+    const health = await (await fetch("/api/health", { cache: "no-store" })).json();
+    renderSessionMode(health.mode || lastSession.mode, health.twitch || null, lastSession.dataPath, health.twitchBot || null);
+    showNotice(`Bot connected: replies will post as @${result.displayName}.`, "success");
+  } catch (error) {
+    showNotice(error.message, "error");
+    renderTwitchBotCard();
+  }
+}
+
+async function logoutTwitchBot() {
+  if (!window.confirm("Disconnect the bot account? Replies will post as your main account again.")) return;
+  try {
+    const response = await fetch("/api/twitch/bot/logout", { method: "POST" });
+    if (!response.ok) throw new Error("Bot disconnect failed.");
+    const health = await (await fetch("/api/health", { cache: "no-store" })).json();
+    renderSessionMode(health.mode || lastSession.mode, health.twitch || null, lastSession.dataPath, health.twitchBot || null);
+    showNotice("Bot account disconnected — replies post as your main account.", "success");
   } catch (error) {
     showNotice(error.message, "error");
   }
@@ -976,6 +1046,8 @@ function renderTwitchSettings() {
   }
   account.append(accountCopy, accountActions);
 
+  renderTwitchBotCard();
+
   utilities.replaceChildren();
   const utilityCards = [
     { title: "Channel Rewards", detail: liveProfiles.length ? "Manage rewards below." : "Mark a profile Live first." },
@@ -1527,7 +1599,7 @@ async function loadConfiguration(force = false) {
   if (!profileConfigured && !firstRunStarterConfiguration) firstRunStarterConfiguration = clone(serializeModel());
   baselineModel = clone(serializeModel());
   document.getElementById("runtimeVersion").textContent = `Version ${healthPayload.version || "unknown"}`;
-  renderSessionMode(healthPayload.mode || "local", healthPayload.twitch || null, dataPath);
+  renderSessionMode(healthPayload.mode || "local", healthPayload.twitch || null, dataPath, healthPayload.twitchBot || null);
   markClean();
   applySystemProfile();
   await loadProfiles().catch(() => {});

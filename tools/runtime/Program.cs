@@ -63,13 +63,16 @@ internal static class Program
     // backend (local vs cloud) and the logged-in Twitch identity.
     private static string _sessionMode = "local";
     private static TwitchTokens? _sessionTwitch;
+    // Optional dedicated bot chat account (second login) — replies post as the bot when connected.
+    private static TwitchTokens? _sessionTwitchBot;
     private static string _dataRoot = "";
     private static bool _headless;
     // Set when cloud mode was requested but couldn't start (fell back to local); shown in Settings.
     private static string? _cloudError;
     // In-flight inline (admin-panel) device logins: loginId -> the device code being polled. Lets the
     // UI show the code and poll /api/twitch/login/poll without blocking a request for the whole flow.
-    private static readonly Dictionary<string, (TwitchOptions Opts, string DeviceCode, DateTimeOffset ExpiresAt)> _pendingDeviceLogins = new();
+    // Bot marks a bot-account login (bot scopes, tokens land in TwitchTokens.BotFileName).
+    private static readonly Dictionary<string, (TwitchOptions Opts, string DeviceCode, DateTimeOffset ExpiresAt, bool Bot)> _pendingDeviceLogins = new();
     private static readonly object _twitchRuntimeLock = new();
     private static CancellationTokenSource? _twitchRuntimeCancellation;
     private static Task? _twitchRuntimeTask;
@@ -159,6 +162,7 @@ internal static class Program
         var service = new CircuitService(store, localStore);
         var overlayDataPath = localStore.DataPath;
         _sessionTwitch = TwitchTokens.TryLoad(options.DataPath);
+        _sessionTwitchBot = TwitchTokens.TryLoad(options.DataPath, TwitchTokens.BotFileName);
         _dataRoot = options.DataPath;
         _headless = options.Headless;
 
@@ -327,7 +331,8 @@ internal static class Program
                     version = "0.8.0",
                     mode = _sessionMode,
                     cloudError = _cloudError,
-                    twitch = _sessionTwitch is null ? null : new { login = _sessionTwitch.Login, displayName = _sessionTwitch.DisplayName, userId = _sessionTwitch.UserId, expiresAt = _sessionTwitch.ExpiresAt }
+                    twitch = _sessionTwitch is null ? null : new { login = _sessionTwitch.Login, displayName = _sessionTwitch.DisplayName, userId = _sessionTwitch.UserId, expiresAt = _sessionTwitch.ExpiresAt },
+                    twitchBot = _sessionTwitchBot is null ? null : new { login = _sessionTwitchBot.Login, displayName = _sessionTwitchBot.DisplayName, userId = _sessionTwitchBot.UserId }
                 });
             else if (request.HttpMethod == "POST" && path == "/api/twitch/logout")
             {
@@ -373,6 +378,16 @@ internal static class Program
                 await SendResultAsync(context, StartDeviceLogin());
             else if (request.HttpMethod == "POST" && path == "/api/twitch/login/poll")
                 await SendResultAsync(context, PollDeviceLogin(service, await ReadBodyAsync(request), cancel));
+            else if (request.HttpMethod == "POST" && path == "/api/twitch/bot/login/start")
+                await SendResultAsync(context, StartDeviceLogin(bot: true));
+            else if (request.HttpMethod == "POST" && path == "/api/twitch/bot/logout")
+            {
+                // Disconnect the bot chat account: replies fall back to posting as the broadcaster.
+                try { var botFile = Path.Combine(_dataRoot, TwitchTokens.BotFileName); if (File.Exists(botFile)) File.Delete(botFile); } catch { }
+                _sessionTwitchBot = null;
+                RefreshNativeTwitch(service, cancel);
+                await SendJsonAsync(context, 200, new { ok = true });
+            }
             else if (request.HttpMethod == "GET" && path == "/api/twitch/rewards")
                 await SendResultAsync(context, ListTwitchRewards());
             else if (request.HttpMethod == "POST" && path == "/api/twitch/reward-sync")
@@ -645,17 +660,20 @@ internal static class Program
     // Inline device login, step 1: issue a device/user code for the admin panel to display. Returns
     // inline=false when a secret is configured (self-host) so the frontend falls back to the blocking
     // browser flow. The device code is held server-side and polled by loginId.
-    private static ServiceResult StartDeviceLogin()
+    private static ServiceResult StartDeviceLogin(bool bot = false)
     {
         try
         {
             var opts = TwitchOptions.Resolve(_dataRoot);
-            if (opts.HasSecret)
+            if (opts.HasSecret && !bot)
                 return new ServiceResult(200, new JsonObject { ["ok"] = true, ["inline"] = false });
-            var request = TwitchAuth.RequestDeviceCode(opts);
+            var request = TwitchAuth.RequestDeviceCode(opts, bot ? TwitchAuth.BotScopes : null);
             // Open the OS browser to the pre-filled activate page (reliable from the host, vs a
             // WebView2 window.open). The panel still shows the code and polls for completion.
-            if (!_headless)
+            // For a BOT login, don't auto-open: the streamer is normally logged into their main
+            // account in the default browser, and the whole point is authorizing a different account
+            // (incognito/second browser). The panel shows the link + code instead.
+            if (!_headless && !bot)
             {
                 try { Process.Start(new ProcessStartInfo(request.VerificationUri) { UseShellExecute = true }); } catch { }
             }
@@ -664,7 +682,7 @@ internal static class Program
             {
                 foreach (var stale in _pendingDeviceLogins.Where(kv => kv.Value.ExpiresAt < DateTimeOffset.UtcNow).Select(kv => kv.Key).ToList())
                     _pendingDeviceLogins.Remove(stale);
-                _pendingDeviceLogins[loginId] = (opts, request.DeviceCode, DateTimeOffset.UtcNow.AddSeconds(request.ExpiresInSeconds));
+                _pendingDeviceLogins[loginId] = (opts, request.DeviceCode, DateTimeOffset.UtcNow.AddSeconds(request.ExpiresInSeconds), bot);
             }
             return new ServiceResult(200, new JsonObject
             {
@@ -688,7 +706,7 @@ internal static class Program
     private static ServiceResult PollDeviceLogin(CircuitService service, JsonObject body, CancellationToken cancel)
     {
         var loginId = body["loginId"]?.ToString() ?? "";
-        (TwitchOptions Opts, string DeviceCode, DateTimeOffset ExpiresAt) pending;
+        (TwitchOptions Opts, string DeviceCode, DateTimeOffset ExpiresAt, bool Bot) pending;
         lock (_pendingDeviceLogins)
         {
             if (!_pendingDeviceLogins.TryGetValue(loginId, out pending))
@@ -701,16 +719,19 @@ internal static class Program
         }
         try
         {
-            var tokens = TwitchAuth.PollDeviceToken(pending.Opts, pending.DeviceCode, _dataRoot);
+            var tokens = TwitchAuth.PollDeviceToken(pending.Opts, pending.DeviceCode, _dataRoot,
+                pending.Bot ? TwitchAuth.BotScopes : null,
+                pending.Bot ? TwitchTokens.BotFileName : TwitchTokens.FileName);
             if (tokens is null)
                 return new ServiceResult(200, new JsonObject { ["ok"] = true, ["status"] = "pending" });
             lock (_pendingDeviceLogins) _pendingDeviceLogins.Remove(loginId);
-            _sessionTwitch = tokens;
+            if (pending.Bot) _sessionTwitchBot = tokens; else _sessionTwitch = tokens;
             RefreshNativeTwitch(service, cancel);
             return new ServiceResult(200, new JsonObject
             {
                 ["ok"] = true,
                 ["status"] = "done",
+                ["bot"] = pending.Bot,
                 ["login"] = tokens.Login,
                 ["displayName"] = tokens.DisplayName,
                 ["userId"] = tokens.UserId
