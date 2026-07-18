@@ -233,3 +233,33 @@ For a safe manual UI and patch-fix workflow, see
 
 See `docs/installation-and-updates.md` for installation and update
 instructions, and `docs/release-signing.md` for the signing workflow.
+
+## License
+
+CircuitOS is open source under the [MIT License](LICENSE).
+
+## Code Signing Policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by the
+[SignPath Foundation](https://signpath.org/).
+
+- Committers and reviewers: [shortcircuit819-arch](https://github.com/shortcircuit819-arch)
+- Approvers: [shortcircuit819-arch](https://github.com/shortcircuit819-arch)
+
+Releases are built from this repository by the public GitHub Actions workflow in
+`.github/workflows/build.yml`; every release is approved manually before it is signed.
+
+## Privacy Policy
+
+CircuitOS collects no telemetry and never transfers data to the developer. The application only
+makes the network connections the streamer sets up themselves:
+
+- **Twitch** — after an explicit one-click login, CircuitOS talks to the Twitch API on the
+  streamer's behalf (channel-point rewards, chat commands, pull announcements). OAuth tokens are
+  stored encrypted on the local machine and can be disconnected at any time.
+- **Optional self-hosted cloud backend** — only if the streamer configures their own Appwrite
+  instance in Settings does profile data sync to that user-controlled server. Local storage is
+  the default.
+- **Update checks** — the built-in updater reads this repository's public GitHub Releases feed.
+
+Everything else — catalogs, viewer inventories, branding, settings — stays on the local machine.
