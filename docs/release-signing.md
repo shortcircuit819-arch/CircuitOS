@@ -1,11 +1,16 @@
 # CircuitOS Release Signing
 
-**Status (2026-07-16): the signing pipeline is BUILT and PROVEN end-to-end. The only missing piece is a
-real certificate**, which requires a validated identity and therefore a human. Everything else is one
-command.
+**Status (2026-07-22): 1.0 ships UNSIGNED. SignPath Foundation denied the application.** The signing
+pipeline is BUILT and PROVEN end-to-end and stays in the repo — the day a certificate exists it is a
+thumbprint swap, no code changes. But signing is **no longer a 1.0 gate**.
 
 Signing matters because an unsigned `Setup.exe` trips SmartScreen ("Windows protected your PC — unknown
-publisher"), which is exactly the moment a non-technical streamer bails.
+publisher"), which is exactly the moment a non-technical streamer bails. Shipping unsigned means
+accepting that cost and mitigating it in the docs instead — see the mitigation section below.
+
+**Important: signing never blocked anything technical.** `Build-CircuitOSVelopack.ps1` takes no signing
+parameters by default; omit `-CertificateThumbprint`/`-SignTemplate` and it publishes an unsigned
+release. The updater, the feed, and the install→update round-trip are all indifferent to signatures.
 
 ## What's already done
 
@@ -34,26 +39,38 @@ Two consequences:
 
 1. **The auto-update feed works now.** The updater reads GitHub Releases; a public repo means the app can
    fetch them without a token. Publish a signed release (`… -Upload`) and in-app updates go live.
-2. **Free code signing is now on the table.** Public OSS projects qualify for **SignPath Foundation**,
-   which signs releases at **no cost**. This is now the recommended path — it removes the money barrier
-   entirely.
+2. ~~**Free code signing is now on the table.**~~ **Superseded 2026-07-22 — SignPath Foundation denied
+   the application.** Public-OSS status did not convert into free signing. The paid options below are
+   what remain.
 
-## Recommended path: SignPath Foundation (free, public OSS)
+## SignPath Foundation — DENIED (2026-07-22)
 
-The one thing no tool or agent can do for you is **prove to a Certificate Authority that you are you** —
-that identity check *is* the trust, so it's irreducibly yours. With SignPath Foundation the rest is free:
+The free-OSS path is closed. CircuitOS applied to the SignPath Foundation program and was **rejected**;
+1.0 ships unsigned as a result. Do not re-plan around SignPath without a new application and a new
+answer from them.
 
-1. Apply to the **SignPath Foundation** program at `https://signpath.org/` (or `about.signpath.io/product/open-source`)
-   — submit the CircuitOS GitHub repo. Approval is a review by them (you, the owner, apply; I can't apply
-   as you).
-2. Once approved, SignPath gives you an **organization id, project/signing-policy slugs, and an API token**.
-   SignPath signs via **submission** (upload the built artifact → they sign → you get it back), typically
-   wired through their **official GitHub Action** in a release workflow, or their CLI/API for a local build.
-3. Add those as repo secrets (for CI) or feed them to the signing step for a local build.
+## Shipping unsigned — how 1.0 mitigates it
 
-That's the whole of your side. If you want, I'll write the GitHub Actions release workflow (public repos
-get **free** Actions minutes) that builds → submits to SignPath → publishes the signed release, so a tag
-push produces a signed 1.0 automatically.
+Without a certificate the mitigation is transparency, not suppression. Three things carry it:
+
+1. **Tell users what they'll see, before they see it.** `docs/installation-and-updates.md` documents the
+   SmartScreen warning as expected, gives the exact click path (**More info** → **Run anyway**), and
+   explains that a certificate proves identity, not safety.
+2. **Publish a SHA-256 checksum with every release**, so anyone can verify the file they downloaded is
+   the file that was built. This is the honest substitute for a signature: it proves integrity, and the
+   public repo + public build provide the provenance a cert would otherwise vouch for.
+3. **Never tell users to disable antivirus.** Collect the vendor + detection name and submit false
+   positives (see the bottom of this doc).
+
+Note the warning **returns on every release**, because each build is a new hash with no SmartScreen
+reputation. Unsigned reputation accrues per-file and effectively resets each version — one more reason
+to revisit signing after 1.0.
+
+## After 1.0 — the paid path stays open
+
+The pipeline is built, so this is a purchase decision and ~15–30 minutes, not an engineering project.
+**Azure Trusted Signing (~$10/mo)** is the lowest-friction option: cloud-based, no USB token, individual
+developers are eligible, and `azuresigntool` is already installed on the dev machine. Details below.
 
 ## Alternative: Azure Trusted Signing (~$10/mo, fits the current pipeline today)
 
@@ -74,15 +91,14 @@ A *trusted* signature requires a CA to validate your identity. Pick one:
 | Option | Cost | Friction | Notes |
 |---|---|---|---|
 | **Azure Trusted Signing** | ~$10/mo | **Lowest** — cloud, no hardware | Recommended. Individual developers are eligible. One-time ID validation, then sign from anywhere. |
-| **SignPath Foundation** | **Free** | Low — but OSS only | Requires CircuitOS to be a **public** open-source repo. See the note below. |
+| ~~SignPath Foundation~~ | — | **CLOSED** | **Applied and denied 2026-07-22.** Not available to CircuitOS. |
 | Traditional OV cert (DigiCert/Sectigo/SSL.com) | ~$100–400/yr | **High** | Since June 2023 the private key must live on FIPS hardware — a **physical USB token gets shipped to you**, or you pay extra for a cloud HSM. |
 | EV cert | ~$300–600/yr | High | Same token problem, but grants instant SmartScreen reputation. |
 
-**Worth knowing — public repo solves two problems at once.** The auto-updater *already* requires the
-GitHub Releases feed to be publicly readable (the app can't ship a token to read a private feed — same
-foot-gun as shipping a master key). If CircuitOS goes public to serve the update feed, it likely also
-becomes eligible for **free** SignPath Foundation signing. If it stays private, publish releases to a
-separate public releases repo and use Azure Trusted Signing.
+**Worth knowing — the public repo still earned its keep.** The auto-updater requires the GitHub Releases
+feed to be publicly readable (the app can't ship a token to read a private feed — same foot-gun as
+shipping a master key). Going public closed that gate permanently. The hoped-for second payoff — free
+SignPath signing — did not materialize, but the feed reason alone justified the move.
 
 ### Azure Trusted Signing — the recommended path
 1. Azure subscription → create a **Trusted Signing account** (region matters; note the endpoint URL).

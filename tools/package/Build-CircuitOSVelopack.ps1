@@ -32,6 +32,9 @@ param(
     [string]$RepoUrl = "https://github.com/shortcircuit819-arch/CircuitOS",
     [string]$TimestampUrl = "http://timestamp.digicert.com",
     [switch]$SkipPublish,
+    # Needed only with -Upload. Defaults to the environment so the token never appears in a command
+    # line, a script, or a shell transcript. Needs 'contents: write' on the repo.
+    [string]$GitHubToken = $env:GITHUB_TOKEN,
     # Re-pack a version that's already in the output folder (dev only). vpk normally refuses, because
     # the folder is the release history it uses to build delta packages — don't use this on a version
     # that has actually shipped; bump the version instead.
@@ -118,7 +121,10 @@ elseif ($SignTemplate) {
     $signArgs = @("--signTemplate", $SignTemplate)
 }
 else {
-    Write-Warning "No signing option supplied — this build will be UNSIGNED and will trip SmartScreen for end users."
+    # Unsigned is the deliberate posture as of 1.0 (SignPath Foundation denied 2026-07-22) — this is a
+    # notice, not a mistake. See docs/release-signing.md. Users are told what to expect in
+    # docs/installation-and-updates.md, and the SHA-256 block below is the integrity substitute.
+    Write-Host "No signing option supplied — this build is UNSIGNED (expected for 1.0). End users will see the SmartScreen 'unknown publisher' prompt." -ForegroundColor Yellow
 }
 
 # ── Pack ─────────────────────────────────────────────────────────────────────────────────────
@@ -140,12 +146,40 @@ if ($signature -and $signature.Status -eq "Valid") {
     Write-Warning "Signed but not trusted on this machine ($($signature.Status)) — expected for a self-signed/test certificate."
 }
 
+# ── SHA-256 checksums — the integrity substitute for an unsigned release ─────────────────────
+# Computed AFTER packing/signing, because both change the bytes. docs/installation-and-updates.md
+# tells users to compare against "the checksum on the release page", so this block is meant to be
+# pasted into the GitHub release body. Deliberately not written into $outputDir: that folder is
+# vpk's release-asset + delta history, and stray files have no business there.
+$checksums = Get-ChildItem -LiteralPath $outputDir -File |
+    Where-Object { $_.Extension -in '.exe', '.zip' } |
+    Sort-Object Name |
+    ForEach-Object { [pscustomobject]@{ File = $_.Name; SHA256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash } }
+
+if ($checksums) {
+    Write-Host "`nSHA-256 — paste into the GitHub release notes:" -ForegroundColor Cyan
+    Write-Host "`n## Verifying your download`n"
+    Write-Host "This release is unsigned, so Windows will show ``"unknown publisher``". Confirm you have the"
+    Write-Host "published file by comparing its hash:`n"
+    Write-Host '```'
+    foreach ($c in $checksums) { Write-Host ("{0}  {1}" -f $c.SHA256, $c.File) }
+    Write-Host '```'
+    Write-Host "`nPowerShell: ``Get-FileHash .\CircuitOS-win-Setup.exe -Algorithm SHA256```n"
+}
+
 # ── Optional: publish the release + update feed to GitHub ────────────────────────────────────
 if ($Upload) {
+    # vpk has no interactive login — without a token the upload just fails.
+    if (-not $GitHubToken) {
+        throw "-Upload requires a GitHub token with 'contents: write' on the repo. Set `$env:GITHUB_TOKEN (or pass -GitHubToken) and re-run. Do not commit the token or paste it into a command line."
+    }
+    # --publish true is NOT optional. vpk defaults to creating a DRAFT release, and a draft is not
+    # publicly readable — the updater would see no feed at all, while the upload reported success.
     Write-Host "Uploading release v$version to $RepoUrl ..." -ForegroundColor Cyan
-    & $vpk upload github --repoUrl $RepoUrl --tag "v$version" --outputDir $outputDir --merge --releaseName "CircuitOS $version"
+    & $vpk upload github --repoUrl $RepoUrl --tag "v$version" --outputDir $outputDir --merge `
+        --releaseName "CircuitOS $version" --token $GitHubToken --publish true
     if ($LASTEXITCODE -ne 0) { throw "vpk upload failed with exit code $LASTEXITCODE." }
-    Write-Host "Uploaded. NOTE: the repo/releases must be PUBLIC for the app's updater to read the feed." -ForegroundColor Yellow
+    Write-Host "Uploaded and PUBLISHED (not a draft) — the updater can only read published releases." -ForegroundColor Green
 }
 
 [pscustomobject]@{
@@ -154,5 +188,6 @@ if ($Upload) {
     Setup           = $setup
     SignatureStatus = if ($signature) { $signature.Status } else { "NotSigned" }
     Signer          = if ($signature) { $signature.SignerCertificate.Subject } else { $null }
+    Checksums       = $checksums
     Uploaded        = [bool]$Upload
 }

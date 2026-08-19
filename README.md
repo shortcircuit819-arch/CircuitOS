@@ -5,7 +5,7 @@ integration — no code to paste**. Circuit Components is the included starter
 profile, while the editor supports custom games, terminology, collections,
 themes, messages, events, and currencies.
 
-Current application version: **0.9.2**
+Current application version: **1.0.0**
 
 ## Current Features
 
@@ -59,7 +59,7 @@ CircuitOS uses intentional pre-release versioning:
   **0.5.1.2**, etc. The third part is a sub-feature; the fourth is an iteration
   within that sub-feature. The milestone number (second part) only advances when
   the current milestone is fully satisfactory — not on a fixed schedule.
-- **1.0** is reserved for the signed, stable public release after feature freeze,
+- **1.0** is reserved for the stable public release after feature freeze,
   migration testing, installer/update testing, and release-candidate validation.
 - **2.0** is reserved for the Shop and Currency Workshop architecture.
 
@@ -129,10 +129,11 @@ import name de-duplication. See `docs/patch-notes/v0.7.1.md`, `v0.7.2.md`, and `
 - Streamer.bot integration **retired in 0.7.2** — native Twitch is the single supported path ✓
 - `IDataStore` abstraction — data access is interface-driven, so the cloud path is a swap not a rewrite ✓
 
-**What's next:** **1.0** — the signed stable release. 0.8 and 0.9 have shipped, so the remaining work is
-a code-signing certificate and a public update feed (both below). After that, hosted cloud and the
-"CircuitOS on Twitch" extension in the 1.x line. Hosted cloud is a security/infrastructure decision
-analyzed in `docs/feature-requests-analysis.md`.
+**What's next:** **1.0** — the stable public release, shipping unsigned. 0.8 and 0.9 have shipped, so the
+remaining work is publishing the first public GitHub Release (the auto-update feed doesn't physically
+exist until then) and running the live install → update round-trip against it (both below). After that,
+hosted cloud and the "CircuitOS on Twitch" extension in the 1.x line. Hosted cloud is a
+security/infrastructure decision analyzed in `docs/feature-requests-analysis.md`.
 
 ### 0.8 - Design & Identity ✓ *(shipped 0.8.1)*
 
@@ -153,23 +154,27 @@ analyzed in `docs/feature-requests-analysis.md`.
 
 - Velopack installer + GitHub auto-updater — replaces "extract a ZIP" with next-next-finish and in-app
   self-updates (Settings → About) ✓
-- One-command signed release pipeline (`Build-CircuitOSVelopack.ps1`: publish → pack → sign → upload) ✓
-- Code signing wired and proven end-to-end — **awaiting a certificate** (see `docs/release-signing.md`)
+- One-command release pipeline (`Build-CircuitOSVelopack.ps1`: publish → pack → optionally sign → upload) ✓
+- Code signing wired and proven end-to-end — **parked, not a 1.0 gate**; a thumbprint swap the day a
+  certificate exists (see `docs/release-signing.md`)
 
-### 1.0 - Signed Stable Release *(next)*
+### 1.0 - Stable Public Release *(next)*
 
-Everything is built; 1.0 is gated on two decisions rather than code:
+Everything is built; 1.0 ships **unsigned**, and the remaining work is release logistics rather than code:
 
-1. **A code-signing certificate** so installs don't trip SmartScreen. Azure Trusted Signing (~$10/mo,
-   cloud, no hardware token) is the lowest-friction option — traditional certs now require a shipped USB
-   token. See `docs/release-signing.md`.
-2. **A public release feed.** The updater reads GitHub Releases; the app can't ship a token to read a
-   private repo (the same foot-gun as shipping a master key), so releases must be public — either this
-   repo or a dedicated public releases repo. *Going public may also unlock free SignPath Foundation
-   signing, solving both at once.*
+1. **Publish the first public GitHub Release.** The updater reads GitHub Releases, so until a release is
+   published the auto-update feed doesn't physically exist. This is the real remaining 1.0 gate. The repo
+   is already public, so the app can fetch the feed without a token (shipping a token to read a private
+   repo would be the same foot-gun as shipping a master key).
+2. **Run the live install → update round-trip test** against that first real feed — the one thing only
+   testable once a release exists — plus the stable compatibility promise for saved data and supported
+   integrations.
 
-Then: the live install → update round-trip test (only testable against a real feed), and the stable
-compatibility promise for saved data and supported integrations.
+Unsigned installs trip Windows SmartScreen ("unknown publisher"). 1.0 mitigates that with transparency,
+not suppression: `docs/installation-and-updates.md` documents the exact **More info → Run anyway** click
+path, and every release publishes a SHA-256 checksum so the download can be verified. The signing pipeline
+stays in the repo — a thumbprint swap the day a certificate exists — as a parked, optional post-1.0 step.
+See `docs/release-signing.md`.
 
 ### 1.x - Growth toward the economy
 
@@ -229,7 +234,8 @@ For a safe manual UI and patch-fix workflow, see
   references before saving.
 - Keep update packages free of user data.
 - Do not advise users to disable antivirus protection.
-- Sign public 1.0+ releases and timestamp the signature.
+- Publish a SHA-256 checksum with every public release so downloads can be verified; sign and timestamp
+  releases if and when a signing certificate is available.
 
 See `docs/installation-and-updates.md` for installation and update
 instructions, and `docs/release-signing.md` for the signing workflow.
@@ -238,16 +244,15 @@ instructions, and `docs/release-signing.md` for the signing workflow.
 
 CircuitOS is open source under the [MIT License](LICENSE).
 
-## Code Signing Policy
+## Code Signing
 
-Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by the
-[SignPath Foundation](https://signpath.org/).
+CircuitOS 1.0 ships **unsigned**, so a fresh install shows Windows SmartScreen's "unknown publisher"
+warning. This is expected: `docs/installation-and-updates.md` documents the **More info → Run anyway**
+click path, and every release publishes a SHA-256 checksum so the downloaded file can be verified against
+the build. Never disable antivirus to work around the warning.
 
-- Committers and reviewers: [shortcircuit819-arch](https://github.com/shortcircuit819-arch)
-- Approvers: [shortcircuit819-arch](https://github.com/shortcircuit819-arch)
-
-Releases are built from this repository by the public GitHub Actions workflow in
-`.github/workflows/build.yml`; every release is approved manually before it is signed.
+The signing pipeline is built and proven end-to-end and stays in the repo; the day a code-signing
+certificate exists, signing is a thumbprint swap with no code changes. See `docs/release-signing.md`.
 
 ## Privacy Policy
 

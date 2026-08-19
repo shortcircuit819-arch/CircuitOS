@@ -7,8 +7,29 @@ Run **`CircuitOS-win-Setup.exe`**.
 It installs for your user only — no admin prompt — and creates Desktop and Start Menu shortcuts. This is
 the recommended way to install, because it's what enables **automatic updates**.
 
-If Windows shows *"Windows protected your PC — unknown publisher"*, the release you have is unsigned.
-Signed public releases don't show this. Never disable your antivirus to run it.
+### Windows will warn you the first time
+
+CircuitOS releases are **not code-signed**, so Windows SmartScreen shows *"Windows protected your PC —
+unknown publisher"* when you run `Setup.exe`. This is expected on every release. It does not mean your
+download is broken or tampered with.
+
+To continue: click **More info**, then **Run anyway**.
+
+The warning comes back on each new version, because every build is a new file that Windows hasn't seen
+before. A code-signing certificate would suppress it — that certificate proves *identity* to Microsoft,
+not safety, and CircuitOS doesn't have one yet.
+
+Because CircuitOS is open source, you can verify your download yourself instead. Every release publishes
+a **SHA-256 checksum**; compare it against your copy:
+
+```powershell
+Get-FileHash .\CircuitOS-win-Setup.exe -Algorithm SHA256
+```
+
+If it matches the checksum on the release page, you have exactly the file that was built and published.
+
+Never disable your antivirus to run CircuitOS. If a scanner flags it, open a GitHub issue with the exact
+vendor and detection name.
 
 ### Where things live
 
