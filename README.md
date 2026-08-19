@@ -158,23 +158,20 @@ security/infrastructure decision analyzed in `docs/feature-requests-analysis.md`
 - Code signing wired and proven end-to-end — **parked, not a 1.0 gate**; a thumbprint swap the day a
   certificate exists (see `docs/release-signing.md`)
 
-### 1.0 - Stable Public Release *(next)*
+### 1.0 - Stable Public Release ✓ *(shipped 2026-08-19)*
 
-Everything is built; 1.0 ships **unsigned**, and the remaining work is release logistics rather than code:
-
-1. **Publish the first public GitHub Release.** The updater reads GitHub Releases, so until a release is
-   published the auto-update feed doesn't physically exist. This is the real remaining 1.0 gate. The repo
-   is already public, so the app can fetch the feed without a token (shipping a token to read a private
-   repo would be the same foot-gun as shipping a master key).
-2. **Run the live install → update round-trip test** against that first real feed — the one thing only
-   testable once a release exists — plus the stable compatibility promise for saved data and supported
-   integrations.
+1.0 shipped **unsigned** as CircuitOS's first public GitHub Release — which brought the auto-update feed
+into existence (the updater reads GitHub Releases, and until v1.0.0 there was nothing to read). Everything
+built across 0.4–0.9 is now a stable, installable release.
 
 Unsigned installs trip Windows SmartScreen ("unknown publisher"). 1.0 mitigates that with transparency,
 not suppression: `docs/installation-and-updates.md` documents the exact **More info → Run anyway** click
-path, and every release publishes a SHA-256 checksum so the download can be verified. The signing pipeline
-stays in the repo — a thumbprint swap the day a certificate exists — as a parked, optional post-1.0 step.
+path, and the release publishes a SHA-256 checksum so the download can be verified. The signing pipeline
+stays in the repo — a thumbprint swap the day a certificate exists — as a parked, optional step.
 See `docs/release-signing.md`.
+
+Remaining validation: the live install → update round-trip against the now-published feed, and the stable
+compatibility promise for saved data and supported integrations.
 
 ### 1.x - Growth toward the economy
 
