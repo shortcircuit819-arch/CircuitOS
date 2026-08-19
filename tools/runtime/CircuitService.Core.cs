@@ -283,6 +283,15 @@ internal sealed partial class CircuitService
     // on restart) — short cooldowns don't need persistence.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTimeOffset> _lastRedeem = new();
 
+    // Serializes the inventory read-modify-write for one profile so a live redemption and a concurrent
+    // admin edit (or a second pull) can't clobber each other. Keyed by profileId, so a live profile and
+    // a separately-edited profile still write independently. In-process only — a second CircuitOS
+    // process pointed at the same data folder is out of scope (documented).
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, object> _inventoryLocks = new();
+    // Key is case-normalized: Windows paths are case-insensitive, so two casings of the same profile id
+    // must map to the SAME lock — otherwise they'd write the same inventory.json under different locks.
+    private static object InventoryLock(string profileId) => _inventoryLocks.GetOrAdd((profileId ?? "").ToLowerInvariant(), _ => new object());
+
     public ServiceResult DispatchRuntimeAction(JsonObject request)
     {
         var action = JsonUtil.String(request, "action");
@@ -295,7 +304,18 @@ internal sealed partial class CircuitService
         if (profile is null) return Error([$"Profile '{profileId}' does not have a system profile."]);
 
         var commands = JsonUtil.Object(profile, "commands") ?? new JsonObject();
-        var inventory = _store.ReadProfileData(profileId, DataKeys.Inventory) ?? new JsonObject();
+        JsonObject inventory;
+        try
+        {
+            inventory = _store.ReadProfileDataStrict(profileId, DataKeys.Inventory) ?? new JsonObject();
+        }
+        catch (Exception readError)
+        {
+            // Inventory exists but won't parse (corruption, a half-synced OneDrive/cloud file). Abort:
+            // proceeding would read the collection as empty and overwrite every viewer. The caller
+            // refunds; the data is left intact for a backup restore.
+            return Error([$"Collection data could not be read, so the action was cancelled to protect it. Restore the latest inventory backup from the Backup & Recovery Center, then try again. ({readError.Message})"], 500);
+        }
         var catalog = _store.ReadProfileData(profileId, DataKeys.Catalog);
         var boost = _store.ReadProfileData(profileId, DataKeys.Boost) ?? new JsonObject();
         if (catalog is null) return Error([$"Profile '{profileId}' does not have a catalog."]);
@@ -333,10 +353,17 @@ internal sealed partial class CircuitService
             if (targetCommand == "salvage")
             {
                 // Salvage mutates inventory (consumes duplicates, credits currency); persist when it
-                // actually changed — otherwise the native !salvage silently lost the write.
-                var salvage = CommandEngine.Salvage(catalog, inventory, ctx, viewerId, viewerName, JsonUtil.String(request, "arg"));
-                if (salvage.Mutated) WriteProfileData(profileId, DataKeys.Inventory, inventory);
-                result = [salvage.Message];
+                // actually changed — otherwise the native !salvage silently lost the write. Locked +
+                // re-read fresh so a concurrent pull or admin edit can't be clobbered.
+                string salvageMessage;
+                lock (InventoryLock(profileId))
+                {
+                    var live = _store.ReadProfileDataStrict(profileId, DataKeys.Inventory) ?? new JsonObject();
+                    var salvage = CommandEngine.Salvage(catalog, live, ctx, viewerId, viewerName, JsonUtil.String(request, "arg"));
+                    if (salvage.Mutated) WriteProfileData(profileId, DataKeys.Inventory, live);
+                    salvageMessage = salvage.Message;
+                }
+                result = [salvageMessage];
             }
             else
             {
@@ -383,16 +410,22 @@ internal sealed partial class CircuitService
                 : new Random();
             // Dup protection from the profile (redeemDupProtectionTurns), not the request.
             var dupProtectionTurns = JsonUtil.Long(profile, "redeemDupProtectionTurns");
-            var redemption = RedemptionEngine.ApplyRedemption(
-                catalog,
-                boost is not null ? boost : null,
-                inventory,
-                viewerId,
-                viewerName,
-                now,
-                rng,
-                dupProtectionTurns > 0 ? (int)dupProtectionTurns : 0);
-            WriteProfileData(profileId, DataKeys.Inventory, inventory);
+            RedemptionResult redemption;
+            lock (InventoryLock(profileId))
+            {
+                // Re-read the inventory INSIDE the lock so a concurrent pull or admin edit can't be lost.
+                var live = _store.ReadProfileDataStrict(profileId, DataKeys.Inventory) ?? new JsonObject();
+                redemption = RedemptionEngine.ApplyRedemption(
+                    catalog,
+                    boost is not null ? boost : null,
+                    live,
+                    viewerId,
+                    viewerName,
+                    now,
+                    rng,
+                    dupProtectionTurns > 0 ? (int)dupProtectionTurns : 0);
+                WriteProfileData(profileId, DataKeys.Inventory, live);
+            }
             WriteOverlayState(profileId, redemption, viewerName, now);
             if (cooldownSeconds > 0 && !string.IsNullOrWhiteSpace(viewerId)) _lastRedeem[cooldownKey] = now;
             var announcements = BuildRedeemAnnouncements(messages, redemption, viewerName);
@@ -512,8 +545,11 @@ internal sealed partial class CircuitService
             if (type == "event")
             {
                 if (!TryBool(collection["enabled"], out _)) errors.Add($"Event '{key}' enabled must be true or false.");
-                if (!DateTimeOffset.TryParse(JsonUtil.String(collection, "activeFromUtc"), out var start) ||
-                    !DateTimeOffset.TryParse(JsonUtil.String(collection, "activeUntilUtc"), out var end) || end <= start)
+                // Naive timestamps are treated as UTC (matching the pull gate and the chat command),
+                // so validation accepts exactly the windows the engines will honor.
+                const DateTimeStyles styles = DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal;
+                if (!DateTimeOffset.TryParse(JsonUtil.String(collection, "activeFromUtc"), CultureInfo.InvariantCulture, styles, out var start) ||
+                    !DateTimeOffset.TryParse(JsonUtil.String(collection, "activeUntilUtc"), CultureInfo.InvariantCulture, styles, out var end) || end <= start)
                     errors.Add($"Event '{key}' needs a valid UTC start before its UTC end.");
             }
             var tiers = JsonUtil.Array(collection, "tiers");

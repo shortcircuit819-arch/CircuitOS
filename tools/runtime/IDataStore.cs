@@ -37,6 +37,11 @@ internal interface IDataStore
     // of ImportProfileData) — used for cross-profile command-collision checks.
     void SetProfileActive(string id, bool active);
     JsonObject? ReadProfileData(string profileId, string key);
+    // Like ReadProfileData, but a file that EXISTS yet won't parse throws instead of returning null.
+    // Use before a read-modify-WRITE so corruption can never masquerade as "no data" and get
+    // overwritten with an empty document. ReadProfileData keeps its null-on-corrupt behavior for the
+    // read-only cross-profile checks that must skip a bad profile gracefully.
+    JsonObject? ReadProfileDataStrict(string profileId, string key);
     void WriteProfileData(string profileId, string key, JsonNode value);
 }
 

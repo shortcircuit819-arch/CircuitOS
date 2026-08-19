@@ -93,6 +93,24 @@ try
     TestDesignOverrides(service);
     TestOverlayImageValidation(service);
 
+    // Batch 1 (1.0.1) inventory data-safety regressions.
+    TestCorruptInventoryStrictRead();
+    TestInventoryBackupBeforeOverwrite();
+    TestInventoryBackupPruningBounded();
+    TestImportRefusesInventory();
+    TestInventoryWriteLockSerialization();
+
+    // Batch 2 (1.0.1) robustness regressions: one bad event collection self-excludes instead of
+    // nuking every viewer's pull, naive timestamps are treated as UTC across the gate + the display,
+    // and the config validator accepts exactly the windows the engines honor.
+    TestBadEventCollectionSelfExcludes();
+    TestNaiveTimestampTreatedAsUtc();
+    TestEventWindowValidatorMatchesEngine();
+
+    // Batch 3 (1.0.1) security regression: a legacy PLAINTEXT token file is re-encrypted immediately on
+    // load (the plaintext window closes on this launch), and an already-encrypted file is never rewritten.
+    TestTwitchTokenReEncryptOnLoad();
+
     Console.WriteLine("Smoke tests passed: first run is safe, the pull + redemption + command engines behave, collection packs round-trip, profiles survive missing metadata, and the Appwrite + Twitch config loaders behave.");
     return 0;
 }
@@ -433,6 +451,204 @@ static void TestBackupRetention()
     }
 }
 
+// ── Batch 1 data-safety regressions (CircuitOS 1.0.1) ─────────────────────────
+// Lock in the inventory write-path guards: a corrupt inventory must never read as empty (the wipe
+// guard), every overwrite snapshots the prior file first, snapshots stay bounded, imports never touch
+// inventory, and the per-profile lock serializes concurrent read-modify-writes with no lost update.
+// Each test is hermetic — its own temp data folder + LocalFileDataStore, matching TestBackupRetention.
+
+static string FreshDataDir()
+{
+    var dir = Path.Combine(Path.GetTempPath(), "CircuitOSBatch1-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(dir);
+    return dir;
+}
+
+static JsonObject Viewer(string name) => new()
+{
+    ["displayName"] = name,
+    ["components"] = new JsonObject { ["starter_alpha"] = 1 }
+};
+
+// (1) A present-but-corrupt inventory must THROW on the strict read the write path uses — never read as
+// empty (which the caller would then write back, wiping every viewer). ReadProfileData stays lenient
+// (null), and a genuinely absent inventory is null from BOTH. This is the guard that prevents the wipe.
+static void TestCorruptInventoryStrictRead()
+{
+    var dir = FreshDataDir();
+    try
+    {
+        var store = new LocalFileDataStore(dir);
+
+        // Absent inventory: null from both reads (there is nothing to protect yet).
+        Require(store.ReadProfileData("default", DataKeys.Inventory) is null, "Absent inventory should read as null (lenient).");
+        Require(store.ReadProfileDataStrict("default", DataKeys.Inventory) is null, "Absent inventory should read as null (strict).");
+
+        // Corrupt the inventory file with non-JSON garbage.
+        var invPath = Path.Combine(dir, "profiles", "default", "inventory.json");
+        File.WriteAllText(invPath, "{ this is not valid json >>> garbage");
+
+        // Lenient read swallows it → null (the very "looks empty" trap the strict read exists to stop).
+        Require(store.ReadProfileData("default", DataKeys.Inventory) is null, "Corrupt inventory reads as null on the lenient path.");
+        // Strict read THROWS — corruption can never masquerade as "no data" and get overwritten.
+        RequireThrows<Exception>(() => store.ReadProfileDataStrict("default", DataKeys.Inventory),
+            "A corrupt inventory must throw on the strict read, never read as empty.");
+
+        Console.WriteLine("Corrupt inventory: strict read throws (wipe guard), lenient read is null, absent is null from both.");
+    }
+    finally { try { Directory.Delete(dir, true); } catch { } }
+}
+
+// (2) Overwriting an existing inventory must snapshot the PRIOR contents into config-backups first, as a
+// managed inventory_<yyyyMMdd_HHmmss_fff>.json that ListBackups()/FindBackup recognize (not orphaned).
+static void TestInventoryBackupBeforeOverwrite()
+{
+    var dir = FreshDataDir();
+    try
+    {
+        var store = new LocalFileDataStore(dir);
+
+        // First write: the file does not exist yet, so there is nothing to back up.
+        store.WriteProfileData("default", DataKeys.Inventory, new JsonObject { ["viewer-a"] = Viewer("A") });
+        Require(store.ListBackups().Count(b => b.Key == DataKeys.Inventory) == 0,
+            "The first inventory write (no prior file) must not create a backup.");
+
+        // Overwrite: the prior contents must be snapshotted before the new bytes land.
+        store.WriteProfileData("default", DataKeys.Inventory,
+            new JsonObject { ["viewer-a"] = Viewer("A"), ["viewer-b"] = Viewer("B") });
+
+        var invBackups = store.ListBackups().Where(b => b.Key == DataKeys.Inventory).ToList();
+        Require(invBackups.Count == 1, $"Overwriting an existing inventory should create exactly one managed backup (got {invBackups.Count}).");
+
+        // ListBackups recognizing it (Key == Inventory, "Viewer Inventory") proves the filename matches
+        // the managed inventory_<timestamp>.json shape — i.e. it is NOT an orphaned file.
+        var entry = invBackups[0];
+        Require(entry.Label == "Viewer Inventory", "The inventory snapshot should be a recognized managed backup, not orphaned.");
+        Require(store.FindBackup(entry.FileName).Key == DataKeys.Inventory, "FindBackup should resolve the inventory snapshot as managed.");
+
+        // And it captured the PRIOR contents (viewer-a only), not the new inventory.
+        var snapshot = store.ReadBackupJson(entry.FileName);
+        Require(snapshot.ContainsKey("viewer-a") && !snapshot.ContainsKey("viewer-b"),
+            "The snapshot must capture the PRIOR inventory (viewer-a only), taken before the overwrite.");
+
+        Console.WriteLine("Inventory overwrite: prior contents are snapshotted first and recognized by ListBackups (not orphaned).");
+    }
+    finally { try { Directory.Delete(dir, true); } catch { } }
+}
+
+// (3) Many successive inventory writes must leave at most `backupRetention` snapshots, not unbounded.
+static void TestInventoryBackupPruningBounded()
+{
+    Require(LocalFileDataStore.DefaultBackupRetention == 30, "The default inventory backup retention should be 30.");
+
+    var dir = FreshDataDir();
+    try
+    {
+        var store = new LocalFileDataStore(dir);
+        const int keep = 5;
+        AppSettings.Set(dir, "backupRetention", keep);
+
+        // Seed the file (first write makes no backup), then overwrite far more times than the retention.
+        // Every overwrite snapshots the prior file; the store must prune back to `keep`.
+        store.WriteProfileData("default", DataKeys.Inventory, new JsonObject { ["v0"] = Viewer("v0") });
+        for (var i = 1; i <= keep + 8; i++)
+        {
+            WaitForNextTimestamp();  // distinct millisecond → snapshots don't collide by filename
+            store.WriteProfileData("default", DataKeys.Inventory, new JsonObject { [$"v{i}"] = Viewer($"v{i}") });
+        }
+
+        var count = store.ListBackups().Count(b => b.Key == DataKeys.Inventory);
+        Require(count == keep, $"Successive inventory writes must prune to backupRetention ({keep}); found {count}.");
+
+        Console.WriteLine($"Inventory backup pruning: {keep + 8} overwrites left exactly {keep} snapshots (bounded, not unbounded).");
+    }
+    finally { try { Directory.Delete(dir, true); } catch { } }
+}
+
+// Busy-waits until the millisecond-resolution timestamp advances, so successive inventory snapshots get
+// distinct filenames (the store names them inventory_yyyyMMdd_HHmmss_fff.json).
+static void WaitForNextTimestamp()
+{
+    var start = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
+    while (DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") == start) { }
+}
+
+// (4) ImportProfileData must refuse any inventory entry and never write inventory.json — imports target a
+// freshly created profile and must never become a silent, unbacked, non-atomic inventory clobber.
+static void TestImportRefusesInventory()
+{
+    var dir = FreshDataDir();
+    try
+    {
+        var store = new LocalFileDataStore(dir);
+        store.CreateProfile("import-target", "Import Target");
+        var invPath = Path.Combine(dir, "profiles", "import-target", "inventory.json");
+
+        RequireThrows<InvalidDataException>(
+            () => store.ImportProfileData("import-target", new Dictionary<string, JsonNode>
+            {
+                [DataKeys.Inventory] = new JsonObject { ["viewer-x"] = Viewer("X") }
+            }),
+            "Importing an inventory entry must be refused.");
+        Require(!File.Exists(invPath), "A refused inventory import must never write inventory.json.");
+
+        // Even mixed into a multi-key import, inventory is still refused and never written.
+        RequireThrows<InvalidDataException>(
+            () => store.ImportProfileData("import-target", new Dictionary<string, JsonNode>
+            {
+                [DataKeys.Boost] = new JsonObject { ["enabled"] = false },
+                [DataKeys.Inventory] = new JsonObject { ["viewer-y"] = Viewer("Y") }
+            }),
+            "A multi-key import carrying inventory must still be refused.");
+        Require(!File.Exists(invPath), "A refused mixed import must still never write inventory.json.");
+
+        Console.WriteLine("Import guard: ImportProfileData refuses any inventory entry and never writes inventory.json.");
+    }
+    finally { try { Directory.Delete(dir, true); } catch { } }
+}
+
+// (5) The per-profile inventory lock must serialize concurrent read-modify-writes so no update is lost.
+// Both parallel redeems and a redeem racing an admin edit share InventoryLock(profileId). The redeem
+// path, however, does one UNLOCKED pre-read of inventory.json (CircuitService.Core.cs) that races at the
+// OS file level with a concurrent atomic replace — that would make a redeem-driven parallel test flaky
+// for reasons unrelated to the lock. So this drives concurrent admin removals (ResetViewer), whose read
+// AND write are both inside the lock: the focused, deterministic test of the lock's correctness. N
+// threads each remove a distinct viewer from one shared inventory; a broken lock would let a
+// last-write-wins overwrite resurrect already-removed viewers, leaving some removals lost.
+static void TestInventoryWriteLockSerialization()
+{
+    var dir = FreshDataDir();
+    try
+    {
+        var store = new LocalFileDataStore(dir);
+        var service = new CircuitService(store);
+        const int n = 60;
+
+        var seed = new JsonObject();
+        for (var i = 0; i < n; i++) seed[$"viewer-{i}"] = Viewer($"Viewer {i}");
+        store.WriteProfileData(store.ActiveProfileId, DataKeys.Inventory, seed);
+
+        var failures = new System.Collections.Concurrent.ConcurrentBag<string>();
+        Parallel.For(0, n, i =>
+        {
+            try
+            {
+                var res = service.ResetViewer(new JsonObject { ["viewerId"] = $"viewer-{i}" });
+                if (res.Status != 200) failures.Add($"viewer-{i}:{res.Status}");
+            }
+            catch (Exception ex) { failures.Add($"viewer-{i}:{ex.GetType().Name}"); }
+        });
+        Require(failures.IsEmpty, "Every concurrent inventory removal should succeed: " + string.Join(", ", failures));
+
+        var remaining = store.ReadProfileDataStrict(store.ActiveProfileId, DataKeys.Inventory) ?? new JsonObject();
+        Require(remaining.Count == 0,
+            $"The inventory lock must serialize concurrent writes with no lost update: expected 0 viewers left, found {remaining.Count}.");
+
+        Console.WriteLine($"Inventory write lock: {n} concurrent read-modify-write removals serialized with no lost update.");
+    }
+    finally { try { Directory.Delete(dir, true); } catch { } }
+}
+
 static void TestRuntimeDispatch(CircuitService service, IDataStore store, string dataRoot)
 {
     var profileId = "dispatch-" + Guid.NewGuid().ToString("N")[..8];
@@ -480,9 +696,11 @@ static void TestRuntimeDispatch(CircuitService service, IDataStore store, string
     {
         [DataKeys.Profile] = secondProfile,
         [DataKeys.Catalog] = catalog,
-        [DataKeys.Boost] = boost,
-        [DataKeys.Inventory] = inventory
+        [DataKeys.Boost] = boost
     });
+    // Import refuses inventory now (Batch 1 data-safety fix), so seed the starting empty inventory
+    // through the sanctioned write path instead of ImportProfileData.
+    store.WriteProfileData(profileId, DataKeys.Inventory, inventory);
 
     var activate = service.InvokeProfileOperation(new JsonObject { ["operation"] = "activate", ["id"] = profileId });
     Require(activate.Status == 200, "Second profile should activate for runtime-dispatch test.");
@@ -925,6 +1143,213 @@ static JsonObject MakeEvent(string name, double weight, bool enabled, string fro
     return collection;
 }
 
+// ── Batch 2 (1.0.1) robustness regressions ───────────────────────────────────
+// Lock in the redemption/date-handling hardening: (1) an enabled EVENT collection with a broken
+// schedule self-excludes instead of throwing on every pull, (2) naive (no-'Z') timestamps are treated
+// as UTC so the pull/chat gate and the availability display agree on one half-open boundary, and (3)
+// the CircuitService config validator accepts exactly the windows the engines honor.
+
+// (1) THE KEY FIX. RedemptionEngine.SelectCollection walks EVERY collection on each pull. Before Batch 2,
+// IsCollectionActive THREW InvalidDataException on a missing/unparseable/reversed event schedule, so a
+// single misconfigured event made every viewer's redemption throw. Now a bad event is simply skipped
+// (mirroring the already-tolerant CommandEngine.IsEventActive), and a valid collection still pulls. The
+// old throwing behavior can't be invoked here (the code is already fixed and the method is private), so
+// the guard we lock in is the observable one: a malformed AND a reversed enabled event, alongside a
+// valid permanent collection, never throw and never divert a pull away from the valid collection.
+static void TestBadEventCollectionSelfExcludes()
+{
+    var catalog = new JsonObject
+    {
+        ["collections"] = new JsonObject
+        {
+            ["good"] = MakeCollection("Good", 100, "g1", "g2"),
+            // Enabled event whose schedule is unparseable garbage.
+            ["malformed"] = MakeEvent("Malformed", 50, true, "not-a-date", "also-bogus", "m1"),
+            // Enabled event whose window is reversed (until <= from).
+            ["reversed"] = MakeEvent("Reversed", 50, true, "2026-06-30T00:00:00Z", "2026-06-01T00:00:00Z", "r1")
+        }
+    };
+    var collections = (JsonObject)catalog["collections"]!;
+    var now = DateTimeOffset.Parse("2026-06-15T00:00:00Z");
+
+    // SelectCollection must not throw, and can only ever land on the valid permanent collection.
+    var rng = new Random(2024);
+    for (var i = 0; i < 5000; i++)
+        Require(RedemptionEngine.SelectCollection(collections, null, now, rng).Key == "good",
+            "A malformed/reversed enabled event must self-exclude; only the valid collection should be selectable.");
+
+    // Full ApplyRedemption pipeline: still doesn't throw, still pulls from the valid collection, still writes.
+    var inventory = new JsonObject();
+    var result = RedemptionEngine.ApplyRedemption(catalog, null, inventory, "viewer-a", "Viewer A", now, new Random(5));
+    Require(result.CollectionKey == "good", "ApplyRedemption should pull from the valid collection despite the bad events.");
+    Require(result.Pull.PartId is "g1" or "g2", "The pulled part must come from the valid collection.");
+    Require(inventory["viewer-a"] is JsonObject, "The viewer's inventory must be written despite the bad events.");
+
+    // Self-exclusion is exactly what keeps a pull alive: strip the valid collection, and the same two bad
+    // events now surface the graceful "nothing to pull" InvalidDataException — never a schedule-parse crash.
+    var onlyBad = new JsonObject
+    {
+        ["malformed"] = MakeEvent("Malformed", 50, true, "not-a-date", "also-bogus", "m1"),
+        ["reversed"] = MakeEvent("Reversed", 50, true, "2026-06-30T00:00:00Z", "2026-06-01T00:00:00Z", "r1")
+    };
+    RequireThrows<InvalidDataException>(() => RedemptionEngine.SelectCollection(onlyBad, null, now, new Random(1)),
+        "With only bad events, selection should fail gracefully (nothing to pull), not crash parsing a schedule.");
+
+    Console.WriteLine("Bad event self-exclude: a malformed + a reversed enabled event no longer fail every pull; the valid collection still pulls.");
+}
+
+// (2) Naive (no zone suffix) timestamps are treated as UTC everywhere, so a window written without 'Z'
+// resolves to the SAME instants as the 'Z' form, and the gate (IsEventActive, observed through Missing)
+// agrees with the display (AvailabilityStatus, observed through CollectionDetail) at every boundary —
+// no drift by the streamer's local offset. Also pins the half-open boundary: active on [from, until).
+static void TestNaiveTimestampTreatedAsUtc()
+{
+    var ctx = EventTestContext();
+
+    // Returns (does the gate treat the event as active?, the availability display string) for a window + now.
+    (bool GateActive, string Availability) Probe(string from, string until, DateTimeOffset now)
+    {
+        var catalog = new JsonObject
+        {
+            ["collections"] = new JsonObject
+            {
+                ["always"] = MakeCollection("Always", 100, "a1"),
+                ["festival"] = MakeEvent("Festival", 50, true, from, until, "f1")
+            }
+        };
+        var inventory = new JsonObject { ["v"] = new JsonObject { ["displayName"] = "V", ["components"] = new JsonObject() } };
+        // Missing lists ONLY active events, so a "Festival:" line means the gate considers it active.
+        var missing = CommandEngine.Missing(catalog, inventory, ctx, "v", "V", now);
+        var gateActive = missing.Any(l => l.Contains("Festival:", StringComparison.Ordinal));
+        // CollectionDetail's summary line carries the AvailabilityStatus display string.
+        var detail = CommandEngine.CollectionDetail(catalog, inventory, ctx, "v", "V", "festival", now);
+        return (gateActive, detail[0]);
+    }
+
+    const string fromNaive = "2026-06-01T00:00:00", untilNaive = "2026-06-30T00:00:00";
+    const string fromZ = "2026-06-01T00:00:00Z", untilZ = "2026-06-30T00:00:00Z";
+
+    var before = DateTimeOffset.Parse("2026-05-15T00:00:00Z");
+    var inside = DateTimeOffset.Parse("2026-06-15T00:00:00Z");
+    var startBoundary = DateTimeOffset.Parse("2026-06-01T00:00:00Z"); // == from
+    var endBoundary = DateTimeOffset.Parse("2026-06-30T00:00:00Z");   // == until
+
+    // Naive and 'Z' windows must be indistinguishable at every probe point (naive == UTC).
+    foreach (var now in new[] { before, startBoundary, inside, endBoundary })
+    {
+        var naive = Probe(fromNaive, untilNaive, now);
+        var zed = Probe(fromZ, untilZ, now);
+        Require(naive.GateActive == zed.GateActive && naive.Availability == zed.Availability,
+            $"A naive window must resolve identically to the 'Z' window at {now:yyyy-MM-ddTHH:mm:ssZ}.");
+    }
+
+    // Gate <-> display agreement, and the exact half-open boundary (>= from && < until).
+    var atStart = Probe(fromNaive, untilNaive, startBoundary);
+    Require(atStart.GateActive && atStart.Availability.Contains("Event active until 2026-06-30"),
+        "At now == from the event is ACTIVE (inclusive start) and the display agrees.");
+    var atEnd = Probe(fromNaive, untilNaive, endBoundary);
+    Require(!atEnd.GateActive && atEnd.Availability.Contains("Event ended 2026-06-30"),
+        "At now == until the event is OVER (exclusive end / half-open) and the display agrees.");
+    var whenInside = Probe(fromNaive, untilNaive, inside);
+    Require(whenInside.GateActive && whenInside.Availability.Contains("Event active until 2026-06-30"),
+        "Inside the window the gate is active and the display says 'active until'.");
+    var whenBefore = Probe(fromNaive, untilNaive, before);
+    Require(!whenBefore.GateActive && whenBefore.Availability.Contains("Event starts 2026-06-01"),
+        "Before the window the gate is inactive and the display says 'starts'.");
+
+    Console.WriteLine("Naive timestamps: naive windows resolve identically to 'Z' windows; the pull/chat gate and the availability display agree on one half-open UTC boundary.");
+}
+
+// (3) The CircuitService config validator must accept exactly the windows the engines honor: a naive
+// (no-'Z') window the engine considers valid is ACCEPTED, and a reversed window (until <= from) is
+// REJECTED with an event-specific error. Hermetic: its own temp data folder + store, like the Batch 1 tests.
+static void TestEventWindowValidatorMatchesEngine()
+{
+    JsonObject Components(string from, string until) => new()
+    {
+        ["schemaVersion"] = 1,
+        ["collections"] = new JsonObject
+        {
+            ["always"] = new JsonObject
+            {
+                ["displayName"] = "Always",
+                ["type"] = "permanent",
+                ["weight"] = 100,
+                ["salvageValue"] = 1,
+                ["parts"] = new JsonArray { new JsonObject { ["id"] = "always_a", ["name"] = "Alpha" } }
+            },
+            ["festival"] = new JsonObject
+            {
+                ["displayName"] = "Festival",
+                ["type"] = "event",
+                ["weight"] = 50,
+                ["salvageValue"] = 2,
+                ["enabled"] = true,
+                ["activeFromUtc"] = from,
+                ["activeUntilUtc"] = until,
+                ["parts"] = new JsonArray { new JsonObject { ["id"] = "festival_a", ["name"] = "Fest Alpha" } }
+            }
+        }
+    };
+    JsonObject DisabledBoost() => new() { ["enabled"] = false, ["displayName"] = "Featured Boost", ["collectionMultipliers"] = new JsonObject() };
+
+    var dir = FreshDataDir();
+    try
+    {
+        var store = new LocalFileDataStore(dir);
+        var service = new CircuitService(store);
+
+        // (a) A naive-as-UTC window the engine honors must be ACCEPTED.
+        var accepted = service.SaveConfiguration(new JsonObject
+        {
+            ["components"] = Components("2026-06-01T00:00:00", "2026-06-30T00:00:00"),
+            ["boost"] = DisabledBoost()
+        });
+        Require(accepted.Status == 200,
+            "The validator must accept a naive-as-UTC event window the engine considers valid: "
+                + string.Join("; ", (accepted.Body["errors"] as JsonArray ?? new JsonArray()).Select(e => e?.ToString())));
+
+        // Cross-check the engine agrees this same saved window is live mid-window.
+        var collections = (JsonObject)(store.ReadProfileData(store.ActiveProfileId, DataKeys.Catalog)
+            ?? throw new InvalidOperationException("Saved catalog should be readable."))["collections"]!;
+        var mid = DateTimeOffset.Parse("2026-06-15T00:00:00Z");
+        var sawFestival = false;
+        var rng = new Random(3);
+        for (var i = 0; i < 4000 && !sawFestival; i++)
+            if (RedemptionEngine.SelectCollection(collections, null, mid, rng).Key == "festival") sawFestival = true;
+        Require(sawFestival, "The engine must treat the accepted naive window as live mid-window (validator matches engine).");
+
+        // (b) A reversed window (until <= from) must be REJECTED, naming the offending event.
+        var rejected = service.SaveConfiguration(new JsonObject
+        {
+            ["components"] = Components("2026-06-30T00:00:00Z", "2026-06-01T00:00:00Z"),
+            ["boost"] = DisabledBoost()
+        });
+        Require(rejected.Status != 200, "The validator must reject a reversed event window.");
+        var errors = rejected.Body["errors"] as JsonArray ?? new JsonArray();
+        Require(errors.Any(e => (e?.ToString() ?? "").Contains("festival", StringComparison.Ordinal)),
+            "The reversed-window rejection should name the offending event collection.");
+
+        Console.WriteLine("Event-window validator: accepts a naive-as-UTC window the engine honors, rejects a reversed window (validator matches engine).");
+    }
+    finally { try { Directory.Delete(dir, true); } catch { } }
+}
+
+// A minimal, valid CommandContext for the event-window tests (only the templates these tests read matter).
+static CommandContext EventTestContext() => new(
+    GameName: "Circuit",
+    ItemSingular: "component", ItemPlural: "components",
+    CollectionSingular: "collection", RedemptionName: "Circuit Component", CurrencyName: "Scrap",
+    CollectionCommand: "collection", SalvageCommand: "salvage",
+    NoInventoryTemplate: "@{viewer} you don't have any {itemPlural} yet.",
+    BalanceTemplate: "@{viewer} {currency} balance: {balance}.",
+    NoDuplicatesTemplate: "@{viewer} you don't have any duplicate {itemPlural} yet.",
+    CollectionUsageTemplate: "@{viewer} usage: !{collectionCommand} <{collectionSingular}>",
+    CollectionSummaryTemplate: "@{viewer} {collection}: {owned}/{total} | {status}{availability}",
+    SalvageUsageTemplate: "@{viewer} usage: !{salvageCommand} <{collectionSingular}> or !{salvageCommand} all",
+    NothingToSalvageTemplate: "@{viewer} you have no extra copies to salvage in {selection}.",
+    SalvageSuccessTemplate: "@{viewer} salvaged {count} extra {itemWord} for {earned} {currency}. Balance: {balance}.");
+
 // Verifies AppwriteOptions.TryLoad: file parsing, env override, defaults, null when
 // absent, and validation. Uses a throwaway folder and temporary env vars — no secrets.
 static void TestAppwriteOptions()
@@ -1009,6 +1434,73 @@ static void TestTwitchOptions()
         RequireThrows<InvalidDataException>(() => TwitchOptions.TryLoad(dir), "Missing clientSecret should throw.");
 
         Console.WriteLine("TwitchOptions: file load, default redirect, validation, and secret redaction passed.");
+    }
+    finally
+    {
+        if (Directory.Exists(dir)) Directory.Delete(dir, true);
+    }
+}
+
+// Verifies the Batch 3 (1.0.1) security fix in TwitchTokens.TryLoad: a legacy PLAINTEXT token file is
+// re-encrypted at rest immediately on load — the tokens still load with their original values, but the
+// on-disk file becomes DPAPI-protected (protected == true, the plaintext tokens gone from the bytes) on
+// THIS launch instead of waiting up to ~4h for the next save/refresh. And an already-encrypted file must
+// NOT be rewritten on every subsequent load: DPAPI re-encryption would change the ciphertext, so a
+// byte-for-byte identical file across a second TryLoad proves there is no per-launch write-churn.
+// Hermetic — its own temp data folder, like the config-loader tests. Windows-only (DPAPI), as is the suite.
+static void TestTwitchTokenReEncryptOnLoad()
+{
+    var dir = Path.Combine(Path.GetTempPath(), "CircuitOSTwitchTokens-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(dir);
+    var path = Path.Combine(dir, TwitchTokens.FileName);
+    const string accessPlain = "legacy-access-token-PLAINTEXT-abc123";
+    const string refreshPlain = "legacy-refresh-token-PLAINTEXT-def456";
+    var expiresAt = new DateTimeOffset(2027, 3, 4, 5, 6, 7, TimeSpan.Zero);
+    try
+    {
+        // Write a LEGACY plaintext token file: the shape Save() produces, but with no "protected" flag
+        // and readable access/refresh tokens (the pre-DPAPI on-disk format an in-place upgrade inherits).
+        var legacy = new JsonObject
+        {
+            ["accessToken"] = accessPlain,
+            ["refreshToken"] = refreshPlain,
+            ["expiresAt"] = expiresAt.ToString("O"),
+            ["userId"] = "user-legacy-1",
+            ["login"] = "legacy_streamer",
+            ["displayName"] = "Legacy Streamer"
+        };
+        File.WriteAllText(path, legacy.ToJsonString());
+        Require(File.ReadAllText(path).Contains(accessPlain), "Sanity: the seeded legacy file should start as readable plaintext.");
+
+        // (a) TryLoad returns the tokens with every field intact...
+        var tokens = TwitchTokens.TryLoad(dir) ?? throw new InvalidOperationException("Legacy plaintext tokens should load.");
+        Require(tokens.AccessToken == accessPlain, "The access token value must survive the legacy load.");
+        Require(tokens.RefreshToken == refreshPlain, "The refresh token value must survive the legacy load.");
+        Require(tokens.ExpiresAt == expiresAt, "expiresAt must survive the legacy load.");
+        Require(tokens.Login == "legacy_streamer", "login must survive the legacy load.");
+        Require(tokens.UserId == "user-legacy-1", "userId must survive the legacy load.");
+
+        // (b) ...and the file on disk is now ENCRYPTED: protected == true and the plaintext tokens are gone.
+        var afterLoad = File.ReadAllText(path);
+        var reencrypted = JsonNode.Parse(afterLoad) as JsonObject
+            ?? throw new InvalidOperationException("The re-encrypted token file should still be a JSON object.");
+        Require(reencrypted["protected"]?.GetValue<bool>() == true, "The legacy file must be re-saved with protected == true on load.");
+        Require(!afterLoad.Contains(accessPlain), "The plaintext access token must no longer appear in the file after re-encryption.");
+        Require(!afterLoad.Contains(refreshPlain), "The plaintext refresh token must no longer appear in the file after re-encryption.");
+
+        // (c) An already-encrypted file must NOT be rewritten on the next load (no per-launch write-churn).
+        // If it re-saved, DPAPI's randomized ciphertext would change the bytes — so an identical hash proves it didn't.
+        var hashBefore = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
+        var writeBefore = File.GetLastWriteTimeUtc(path);
+        var reloaded = TwitchTokens.TryLoad(dir) ?? throw new InvalidOperationException("The re-encrypted tokens should still load.");
+        Require(reloaded.AccessToken == accessPlain, "The re-encrypted token must still decrypt to the original access token.");
+        Require(reloaded.RefreshToken == refreshPlain, "The re-encrypted token must still decrypt to the original refresh token.");
+        Require(Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))) == hashBefore,
+            "An already-encrypted token file must not be rewritten on load (identical bytes prove no re-encrypt churn).");
+        Require(File.GetLastWriteTimeUtc(path) == writeBefore,
+            "An already-encrypted token file's last-write time must not change on load.");
+
+        Console.WriteLine("Twitch token re-encrypt: a legacy plaintext file loads intact and is encrypted at rest on load; an already-encrypted file is not rewritten (no churn).");
     }
     finally
     {

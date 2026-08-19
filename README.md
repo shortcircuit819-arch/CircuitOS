@@ -5,7 +5,7 @@ integration — no code to paste**. Circuit Components is the included starter
 profile, while the editor supports custom games, terminology, collections,
 themes, messages, events, and currencies.
 
-Current application version: **1.0.0**
+Current application version: **1.0.1**
 
 ## Current Features
 
@@ -129,11 +129,8 @@ import name de-duplication. See `docs/patch-notes/v0.7.1.md`, `v0.7.2.md`, and `
 - Streamer.bot integration **retired in 0.7.2** — native Twitch is the single supported path ✓
 - `IDataStore` abstraction — data access is interface-driven, so the cloud path is a swap not a rewrite ✓
 
-**What's next:** **1.0** — the stable public release, shipping unsigned. 0.8 and 0.9 have shipped, so the
-remaining work is publishing the first public GitHub Release (the auto-update feed doesn't physically
-exist until then) and running the live install → update round-trip against it (both below). After that,
-hosted cloud and the "CircuitOS on Twitch" extension in the 1.x line. Hosted cloud is a
-security/infrastructure decision analyzed in `docs/feature-requests-analysis.md`.
+1.0 shipped as the first public GitHub Release, which brought the auto-update feed into existence. After
+1.0: hosted cloud and the "CircuitOS on Twitch" extension in the 1.x line (see below).
 
 ### 0.8 - Design & Identity ✓ *(shipped 0.8.1)*
 

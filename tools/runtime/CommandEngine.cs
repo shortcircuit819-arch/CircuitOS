@@ -360,24 +360,34 @@ internal static class CommandEngine
     private static bool IsEventActive(JsonObject collection, DateTimeOffset now)
     {
         if (collection["enabled"] is not JsonValue enabled || !enabled.TryGetValue<bool>(out var on) || !on) return false;
-        if (!DateTimeOffset.TryParse(AsString(collection["activeFromUtc"]), CultureInfo.InvariantCulture, DateTimeStyles.None, out var from) ||
-            !DateTimeOffset.TryParse(AsString(collection["activeUntilUtc"]), CultureInfo.InvariantCulture, DateTimeStyles.None, out var until) ||
-            until <= from)
-            return false;
-        return now >= from.ToUniversalTime() && now < until.ToUniversalTime();
+        if (!TryReadEventWindow(collection, out var from, out var until)) return false;
+        return now >= from && now < until;
+    }
+
+    // Parses an event collection's UTC window from its schedule fields. Naive (no zone suffix)
+    // timestamps are treated as UTC, matching RedemptionEngine's pull gate and the admin validator,
+    // so the chat window and the pull window can never drift by the streamer's local offset;
+    // zone-suffixed ("Z") timestamps are unaffected. Both the gate (IsEventActive) and the display
+    // (AvailabilityStatus) read the window through here so they can't diverge near a boundary.
+    // Returns false on a missing / unparseable / reversed schedule.
+    private static bool TryReadEventWindow(JsonObject collection, out DateTimeOffset from, out DateTimeOffset until)
+    {
+        const DateTimeStyles styles = DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal;
+        from = default;
+        until = default;
+        return DateTimeOffset.TryParse(AsString(collection["activeFromUtc"]), CultureInfo.InvariantCulture, styles, out from)
+            && DateTimeOffset.TryParse(AsString(collection["activeUntilUtc"]), CultureInfo.InvariantCulture, styles, out until)
+            && until > from;
     }
 
     private static string AvailabilityStatus(JsonObject collection, DateTimeOffset now)
     {
         if (!string.Equals(AsString(collection["type"]), "event", StringComparison.OrdinalIgnoreCase)) return "";
         if (collection["enabled"] is not JsonValue enabled || !enabled.TryGetValue<bool>(out var on) || !on) return " | Event disabled";
-        if (!DateTimeOffset.TryParse(AsString(collection["activeFromUtc"]), CultureInfo.InvariantCulture, DateTimeStyles.None, out var from) ||
-            !DateTimeOffset.TryParse(AsString(collection["activeUntilUtc"]), CultureInfo.InvariantCulture, DateTimeStyles.None, out var until) ||
-            until <= from)
-            return " | Event schedule invalid";
-        if (now < from.ToUniversalTime()) return " | Event starts " + from.ToUniversalTime().ToString("yyyy-MM-dd");
-        if (now >= until.ToUniversalTime()) return " | Event ended " + until.ToUniversalTime().ToString("yyyy-MM-dd");
-        return " | Event active until " + until.ToUniversalTime().ToString("yyyy-MM-dd");
+        if (!TryReadEventWindow(collection, out var from, out var until)) return " | Event schedule invalid";
+        if (now < from) return " | Event starts " + from.ToString("yyyy-MM-dd");
+        if (now >= until) return " | Event ended " + until.ToString("yyyy-MM-dd");
+        return " | Event active until " + until.ToString("yyyy-MM-dd");
     }
 
     private static string CompletionStatus(int owned, int total, string? completedAt)

@@ -30,6 +30,7 @@ internal sealed class AppwriteDataStore : IDataStore
         ("featured-boost", DataKeys.Boost, "Featured Boost"),
         ("discord-role-awards", DataKeys.Roles, "Discord Role Awards"),
         ("system-profile", DataKeys.Profile, "System Profile"),
+        ("inventory", DataKeys.Inventory, "Viewer Inventory"),
     ];
 
     private readonly AppwriteOptions _options;
@@ -297,8 +298,25 @@ internal sealed class AppwriteDataStore : IDataStore
         return row is null ? null : ParseJsonColumn(row, key);
     }
 
+    // A cloud row is never half-written the way a local file can be, but keep the contract: a present-
+    // but-unparseable row throws (via ParseJsonColumn) rather than reading as null. See IDataStore.
+    public JsonObject? ReadProfileDataStrict(string profileId, string key)
+    {
+        var row = TryGetRow(profileId, key);
+        return row is null ? null : ParseJsonColumn(row, key);
+    }
+
     public void WriteProfileData(string profileId, string key, JsonNode value)
     {
+        // Inventory is snapshotted before every overwrite (backup-then-replace), like WriteAtomic — so
+        // a cloud pull can't overwrite a viewer's collection with no recovery point (house rule #2).
+        if (key == DataKeys.Inventory)
+        {
+            var existing = TryGetRow(profileId, key);
+            var prior = existing is not null ? JsonColumn(existing) : null;
+            if (!string.IsNullOrWhiteSpace(prior))
+                UpsertJson(profileId + "#bak", key, prior);
+        }
         UpsertJson(profileId, key, value.ToJsonString(JsonUtil.IndentedOptions));
     }
     private void WriteProfileMeta(string profileId, string name)

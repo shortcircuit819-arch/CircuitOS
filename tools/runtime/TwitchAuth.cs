@@ -11,7 +11,7 @@ namespace CircuitOS.Runtime;
 // Cached Twitch tokens + identity, persisted to <dataRoot>/twitch-tokens.local.json (gitignored).
 // The access/refresh tokens are encrypted at rest with Windows DPAPI (CurrentUser scope) so a stolen
 // file can't be replayed on another machine/account. Legacy plaintext files still load (then re-save
-// encrypted on the next write), so an in-place upgrade doesn't force a re-login.
+// encrypted immediately on load), so an in-place upgrade doesn't force a re-login.
 internal sealed record TwitchTokens(
     string AccessToken,
     string RefreshToken,
@@ -40,13 +40,21 @@ internal sealed record TwitchTokens(
             if (string.IsNullOrWhiteSpace(userId)) return null;
             var encrypted = json["protected"] is JsonValue p && p.TryGetValue<bool>(out var on) && on;
             string Field(string name) => encrypted ? Unprotect(json[name]?.ToString()) : json[name]?.ToString() ?? "";
-            return new TwitchTokens(
+            var tokens = new TwitchTokens(
                 Field("accessToken"),
                 Field("refreshToken"),
                 DateTimeOffset.TryParse(json["expiresAt"]?.ToString(), out var dt) ? dt : DateTimeOffset.MinValue,
                 userId!,
                 json["login"]?.ToString() ?? "",
                 json["displayName"]?.ToString() ?? "");
+            // Legacy plaintext file: re-save encrypted right now so the plaintext window closes on this
+            // launch instead of on the next save/refresh (up to ~4h later). Best-effort — a backup-write
+            // failure must not break login. Reuses the same encrypt-and-save path as every other write.
+            if (!encrypted)
+            {
+                try { tokens.Save(dataRoot, fileName); } catch { /* keep loading even if the re-save fails */ }
+            }
+            return tokens;
         }
         catch { return null; }
     }

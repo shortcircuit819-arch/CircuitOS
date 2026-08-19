@@ -50,7 +50,7 @@
       <section class="wizard-step" data-wizard-step="2" hidden>
         <div class="wizard-step-heading">
           <div class="panel-kicker">GAME IDENTITY</div>
-          <h2>Name the experience</h2>
+          <h2>Name your game</h2>
           <p>These names appear in the editor, your overlay, and chat. "Redemption name" is the channel-point reward viewers redeem to pull; the singular/plural just keep chat messages reading naturally.</p>
         </div>
         <div class="wizard-field-grid">
@@ -292,7 +292,7 @@ Item Three</textarea></label>
 
       <nav class="nav" aria-label="Admin sections">
         <button class="nav-button active" data-view="overview">Overview</button>
-        <details class="nav-group" id="settingsNav">
+        <details class="nav-group" id="settingsNav" open>
           <summary>Configure</summary>
           <div class="nav-group-items">
             <button class="nav-button" data-view="branding">Game Profile</button>
@@ -301,7 +301,7 @@ Item Three</textarea></label>
             <button class="nav-button" data-view="messages">Messages</button>
           </div>
         </details>
-        <details class="nav-group" id="collectionsNav">
+        <details class="nav-group" id="collectionsNav" open>
           <summary>Catalog</summary>
           <div class="nav-group-items">
             <button class="nav-button" data-view="collections">Main Collections</button>
@@ -309,7 +309,7 @@ Item Three</textarea></label>
             <button class="nav-button" data-view="boost">Featured Boost</button>
           </div>
         </details>
-        <details class="nav-group" id="viewersNav">
+        <details class="nav-group" id="viewersNav" open>
           <summary>Community</summary>
           <div class="nav-group-items">
             <button class="nav-button" data-view="viewers">Inventory</button>
@@ -319,7 +319,7 @@ Item Three</textarea></label>
           </div>
         </details>
         <button class="nav-button" data-view="twitch">Twitch</button>
-        <details class="nav-group" id="toolsNav">
+        <details class="nav-group" id="toolsNav" open>
           <summary>Tools</summary>
           <div class="nav-group-items">
             <button class="nav-button" data-view="ratelab">Rate Lab</button>
@@ -366,7 +366,7 @@ Item Three</textarea></label>
               </div>
               <span id="profileStatus" class="metric-chip"></span>
             </div>
-            <p class="profile-help">These choices shape the names and chat commands across your game — the overlay and chat replies.</p>
+            <p class="profile-help">These names and chat commands appear everywhere in your game — in the overlay and in chat replies.</p>
             <div class="profile-fields">
               <label class="field"><span>Game name</span><input id="profileGameName" type="text" maxlength="80"></label>
               <label class="field"><span>Panel nickname</span><input id="profileAdminName" type="text" maxlength="80" title="Name shown in the sidebar under your game name. Also used as the control panel title."></label>
@@ -485,7 +485,7 @@ Item Three</textarea></label>
               </div>
               <span id="twitchStatusChip" class="metric-chip">CHECKING</span>
             </div>
-            <p class="profile-help">Native Twitch is the 0.7 path: log in, verify readiness, then let CircuitOS manage rewards and redemptions without pasted C#.</p>
+            <p class="profile-help">Log in once, and CircuitOS creates and manages your channel-point reward and handles redemptions for you — no developer account, no code to paste.</p>
             <div id="twitchAccountCard" class="twitch-account-card"></div>
             <div id="twitchBotCard" class="twitch-account-card twitch-bot-card"></div>
           </article>
@@ -545,7 +545,7 @@ Item Three</textarea></label>
           <article class="panel clickable-card" data-jump-view="collections">
             <div class="panel-header">
               <div>
-                <div class="panel-kicker">CATALOG REACH</div>
+                <div class="panel-kicker">COLLECTION OWNERSHIP</div>
                 <h2 id="collectionHealthTitle">Collection Health</h2>
               </div>
               <button id="editCollectionsButton" class="button small" data-jump-view="collections">Edit Collections</button>
@@ -569,7 +569,7 @@ Item Three</textarea></label>
           <article class="panel clickable-card" data-jump-view="economy">
             <div class="panel-header">
               <div>
-                <div class="panel-kicker">ECONOMY PULSE</div>
+                <div class="panel-kicker">SCRAP &amp; DUPLICATES</div>
                 <h2 id="overviewEconomyTitle">Scrap &amp; Duplicates</h2>
               </div>
               <button class="button small" data-jump-view="economy">Open Economy</button>
@@ -611,7 +611,7 @@ Item Three</textarea></label>
           <article class="panel">
             <div class="panel-header">
               <div>
-                <div class="panel-kicker">DUPLICATE PRESSURE</div>
+                <div class="panel-kicker">UNCLAIMED SCRAP</div>
                 <h2 id="collectionEconomyTitle">Unclaimed Scrap by Collection</h2>
               </div>
             </div>
@@ -620,7 +620,7 @@ Item Three</textarea></label>
           <article class="panel">
             <div class="panel-header">
               <div>
-                <div class="panel-kicker">CIRCULATION</div>
+                <div class="panel-kicker">TOP BALANCES</div>
                 <h2 id="currencyLeaderTitle">Top Scrap Balances</h2>
               </div>
             </div>

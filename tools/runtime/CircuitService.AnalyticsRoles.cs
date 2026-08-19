@@ -163,13 +163,17 @@ internal sealed partial class CircuitService
     {
         var viewerId = JsonUtil.String(body, "viewerId");
         if (string.IsNullOrWhiteSpace(viewerId)) return Error(["A viewer ID is required."]);
-        var inventory = _store.TryRead(DataKeys.Inventory) ?? new JsonObject();
-        if (!inventory.ContainsKey(viewerId)) return Error([$"Viewer '{viewerId}' not found in inventory."]);
-        var displayName = JsonUtil.String(inventory[viewerId] as JsonObject, "displayName", viewerId);
-        inventory.Remove(viewerId);
-        var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
-        _store.WriteAtomic(DataKeys.Inventory, inventory, "inventory", timestamp);
-        return Ok(new JsonObject { ["ok"] = true, ["viewerId"] = viewerId, ["displayName"] = displayName });
+        // Same per-profile lock + millisecond-timestamped managed backup as the redemption path, so an
+        // admin edit and a live pull can't clobber each other and the snapshot is restorable.
+        lock (InventoryLock(_store.ActiveProfileId))
+        {
+            var inventory = _store.TryRead(DataKeys.Inventory) ?? new JsonObject();
+            if (!inventory.ContainsKey(viewerId)) return Error([$"Viewer '{viewerId}' not found in inventory."]);
+            var displayName = JsonUtil.String(inventory[viewerId] as JsonObject, "displayName", viewerId);
+            inventory.Remove(viewerId);
+            _store.WriteAtomic(DataKeys.Inventory, inventory, "inventory", Timestamp());
+            return Ok(new JsonObject { ["ok"] = true, ["viewerId"] = viewerId, ["displayName"] = displayName });
+        }
     }
 
     public ServiceResult RemoveInventoryItem(JsonObject body)
@@ -178,16 +182,18 @@ internal sealed partial class CircuitService
         var itemId = JsonUtil.String(body, "itemId");
         if (string.IsNullOrWhiteSpace(viewerId) || string.IsNullOrWhiteSpace(itemId))
             return Error(["A viewer ID and item ID are required."]);
-        var inventory = _store.TryRead(DataKeys.Inventory) ?? new JsonObject();
-        var viewer = inventory[viewerId] as JsonObject;
-        if (viewer is null) return Error([$"Viewer '{viewerId}' not found in inventory."]);
-        var components = JsonUtil.Object(viewer, "components");
-        if (components is null || !components.ContainsKey(itemId))
-            return Error([$"Item '{itemId}' not found in this viewer's inventory."]);
-        components.Remove(itemId);
-        var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
-        _store.WriteAtomic(DataKeys.Inventory, inventory, "inventory", timestamp);
-        return Ok(new JsonObject { ["ok"] = true, ["viewerId"] = viewerId, ["itemId"] = itemId });
+        lock (InventoryLock(_store.ActiveProfileId))
+        {
+            var inventory = _store.TryRead(DataKeys.Inventory) ?? new JsonObject();
+            var viewer = inventory[viewerId] as JsonObject;
+            if (viewer is null) return Error([$"Viewer '{viewerId}' not found in inventory."]);
+            var components = JsonUtil.Object(viewer, "components");
+            if (components is null || !components.ContainsKey(itemId))
+                return Error([$"Item '{itemId}' not found in this viewer's inventory."]);
+            components.Remove(itemId);
+            _store.WriteAtomic(DataKeys.Inventory, inventory, "inventory", Timestamp());
+            return Ok(new JsonObject { ["ok"] = true, ["viewerId"] = viewerId, ["itemId"] = itemId });
+        }
     }
 
     private static JsonObject EmptyAnalyticsSummary() => new()

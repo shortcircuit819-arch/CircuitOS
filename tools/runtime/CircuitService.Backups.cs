@@ -12,6 +12,7 @@ internal sealed partial class CircuitService
             (DataKeys.Boost, "Featured Boost"),
             (DataKeys.Roles, "Discord Role Awards"),
             (DataKeys.Profile, "System Profile"),
+            (DataKeys.Inventory, "Viewer Inventory"),
         };
         var liveFiles = new JsonArray();
         foreach (var (key, label) in targetDefs)
@@ -71,7 +72,14 @@ internal sealed partial class CircuitService
         }
         if (operation != "restore") return Error(["Unknown backup operation."]);
         if (errors.Count > 0) return Error(errors);
-        var preRestore = _store.WriteAtomic(entry.Key, content, BackupLabelFromKey(entry.Key), Timestamp());
+        // Restoring inventory takes the same per-profile lock as a live pull, so a restore and a
+        // redemption landing together can't interleave.
+        string? preRestore;
+        if (entry.Key == DataKeys.Inventory)
+            lock (InventoryLock(_store.ActiveProfileId))
+                preRestore = _store.WriteAtomic(entry.Key, content, BackupLabelFromKey(entry.Key), Timestamp());
+        else
+            preRestore = _store.WriteAtomic(entry.Key, content, BackupLabelFromKey(entry.Key), Timestamp());
         return Ok(new JsonObject
         {
             ["ok"] = true, ["restoredFile"] = entry.FileName, ["target"] = entry.Label,
@@ -85,6 +93,7 @@ internal sealed partial class CircuitService
         DataKeys.Boost => "featured-boost",
         DataKeys.Roles => "discord-role-awards",
         DataKeys.Profile => "system-profile",
+        DataKeys.Inventory => "inventory",
         _ => key
     };
 
@@ -109,6 +118,23 @@ internal sealed partial class CircuitService
         DataKeys.Boost => ValidateConfiguration(_store.ReadRequired(DataKeys.Catalog), content),
         DataKeys.Roles => ValidateRoleState(content),
         DataKeys.Profile => ValidateProfile(content),
+        DataKeys.Inventory => ValidateInventory(content),
         _ => ["Unknown backup target."]
     };
+
+    // Inventory is a map of viewerId -> viewer object. Light shape check so a restore can't drop a
+    // structurally broken document over live collections.
+    private static List<string> ValidateInventory(JsonObject content)
+    {
+        var errors = new List<string>();
+        foreach (var (viewerId, node) in content)
+        {
+            if (node is not JsonObject)
+            {
+                errors.Add($"Inventory entry '{viewerId}' is not a viewer object.");
+                break;
+            }
+        }
+        return errors;
+    }
 }

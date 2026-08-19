@@ -173,11 +173,24 @@ function clearNotice() {
 function markDirty() {
   dirty = true;
   saveButton.textContent = "Save *";
+  updateTopbarSave();
 }
 
 function markClean() {
   dirty = false;
   saveButton.textContent = "Save";
+  updateTopbarSave();
+}
+
+// The topbar Save posts serializeModel() to /api/save — i.e. the catalog collections and the Featured
+// Boost, and nothing else. Game Profile, Appearance, Messages, and Overlay persist through their own
+// endpoints (/api/profile, /api/overlay-config) behind their own Save buttons, so the topbar Save does
+// NOT cover their edits: disable it on those pages so a click there isn't mistaken for saving them.
+// Exception: if the catalog itself is dirty, keep it live so those edits can still be flushed anywhere.
+const OWN_SAVE_VIEWS = new Set(["branding", "appearance", "messages", "overlay"]);
+function updateTopbarSave() {
+  const view = document.querySelector(".view.active")?.id?.replace(/View$/, "") || "overview";
+  saveButton.disabled = OWN_SAVE_VIEWS.has(view) && !dirty;
 }
 
 function normalizeProfile(value) {
@@ -672,6 +685,10 @@ function applySystemProfile() {
   // A legible foreground for accent-filled controls (primary buttons, count badges): black or white,
   // whichever contrasts better with the accent — so the label stays readable on any accent + theme.
   root.style.setProperty("--on-accent", contrastRatio("#ffffff", c.accent) >= 3.0 ? "#ffffff" : "#000000");
+  // Native controls (date/number pickers, spinners, scrollbars) follow the theme's lightness, so a light
+  // base like Daylight no longer renders them dark-chromed. Derived from the resolved page background so
+  // it also tracks a custom light Design Mode override, not just the named Daylight theme.
+  root.style.colorScheme = relLuminance(hexTriple(c.background)) > 0.32 ? "light" : "dark";
   // Guarantee legible body/label text on the panel surface, whatever the streamer picked.
   root.style.setProperty("--text", readableOn(c.text, c.panel, 4.5));
   root.style.setProperty("--muted", readableOn(c.muted, c.panel, 3.0));
@@ -1107,8 +1124,12 @@ function renderTwitchSettings() {
     const empty = element("div", "twitch-empty-state");
     empty.append(
       element("strong", "", "Choose a live profile first"),
-      element("span", "", "Open Profiles and mark the game you want Twitch to run as Live.")
+      element("span", "", "Open the profiles manager and mark the game you want Twitch to run as Live.")
     );
+    const manageProfiles = element("button", "button small", "Manage profiles");
+    manageProfiles.type = "button";
+    manageProfiles.addEventListener("click", () => switchView("profiles"));
+    empty.append(manageProfiles);
     rewards.append(empty);
     return;
   }
@@ -1760,6 +1781,22 @@ function renderAll() {
   renderTwitchSettings();
   renderBoost();
   renderViewOnDemand(activeView);
+}
+
+// Item edits (add/remove/tier-assign) re-render every view via renderAll(), which rebuilds the collection
+// cards and would snap each open .parts-list-scroll container back to the top. Capture each open list's
+// scrollTop (keyed by collection) and restore it after the rebuild, so curating a large collection doesn't
+// bounce to the top on every edit.
+function renderPreservingPartsScroll() {
+  const saved = new Map();
+  for (const el of document.querySelectorAll(".parts-list-scroll")) {
+    if (el.dataset.collectionKey) saved.set(el.dataset.collectionKey, el.scrollTop);
+  }
+  renderAll();
+  for (const el of document.querySelectorAll(".parts-list-scroll")) {
+    const top = saved.get(el.dataset.collectionKey);
+    if (top != null) el.scrollTop = top;
+  }
 }
 
 async function renderSettings() {
@@ -3605,7 +3642,7 @@ function buildCollectionCard(collection, query = "") {
     while (existing.has(id)) { n++; id = `${collection.key}_item_${n}`; }
     value.parts.push({ id, name: `New ${titleCase(systemProfile.itemSingular)}` });
     markDirty();
-    renderAll();
+    renderPreservingPartsScroll();
   });
   partsHeader.append(addPart);
   body.append(partsHeader);
@@ -3628,7 +3665,7 @@ function buildCollectionCard(collection, query = "") {
       const tid = tierSelect.value;
       for (const part of value.parts) part.tier = tid;
       markDirty();
-      renderAll();
+      renderPreservingPartsScroll();
     });
     const assignUnassigned = element("button", "button secondary small", "Assign unassigned");
     assignUnassigned.type = "button";
@@ -3639,16 +3676,31 @@ function buildCollectionCard(collection, query = "") {
         if (!part.tier || !validIds.has(part.tier)) part.tier = tid;
       }
       markDirty();
-      renderAll();
+      renderPreservingPartsScroll();
     });
     bulkRow.append(tierSelect, assignAll, assignUnassigned);
     body.append(bulkRow);
   }
 
   const list = element("div", "parts-list parts-list-scroll");
+  list.dataset.collectionKey = collection.key;   // lets renderPreservingPartsScroll() restore this list's position
+  const selectedParts = new Set();
+  const rowSelectors = [];
+  let syncBulkRemove = () => {};                  // reassigned once the bulk-remove row exists (below)
   visibleParts.forEach(({ part, index }) => {
     const row = element("div", hasTiers ? "part-row part-row-tiered" : "part-row");
+    const selectLabel = element("label", "toggle");
+    selectLabel.title = "Select for bulk removal";
+    const selectBox = document.createElement("input");
+    selectBox.type = "checkbox";
+    selectBox.addEventListener("change", () => {
+      if (selectBox.checked) selectedParts.add(part); else selectedParts.delete(part);
+      syncBulkRemove();
+    });
+    selectLabel.append(selectBox, document.createElement("span"));
+    rowSelectors.push({ part, selectBox });
     row.append(
+      selectLabel,
       makeField("Display name", "text", part.name, next => { part.name = next; })
     );
     if (hasTiers) {
@@ -3671,11 +3723,48 @@ function buildCollectionCard(collection, query = "") {
       row.append(tierField);
     }
     const remove = element("button", "button danger small", "Remove");
-    remove.addEventListener("click", () => { value.parts.splice(index, 1); markDirty(); renderAll(); });
+    remove.addEventListener("click", () => { value.parts.splice(index, 1); markDirty(); renderPreservingPartsScroll(); });
     row.append(remove);
     list.append(row);
   });
-  if (!visibleParts.length) list.append(element("div", "empty-state", `No ${systemProfile.itemPlural} in this ${systemProfile.collectionSingular} match the current search.`));
+  if (!visibleParts.length) {
+    list.append(element("div", "empty-state", `No ${systemProfile.itemPlural} in this ${systemProfile.collectionSingular} match the current search.`));
+  } else {
+    // Lightweight multi-select removal, mirroring the bulk-assign row: a "select all" toggle plus one
+    // "Remove selected" action, appended above the list so it sits with the other bulk controls.
+    const bulkRemoveRow = element("div", "bulk-assign-row");
+    const selectAllLabel = element("label", "toggle");
+    const selectAll = document.createElement("input");
+    selectAll.type = "checkbox";
+    selectAllLabel.append(selectAll, document.createElement("span"), document.createTextNode("Select all"));
+    const removeSelected = element("button", "button danger small", "Remove selected");
+    removeSelected.type = "button";
+    removeSelected.disabled = true;
+    syncBulkRemove = () => {
+      const n = selectedParts.size;
+      removeSelected.disabled = n === 0;
+      removeSelected.textContent = n ? `Remove selected (${n})` : "Remove selected";
+      selectAll.checked = n > 0 && n === rowSelectors.length;
+      selectAll.indeterminate = n > 0 && n < rowSelectors.length;
+    };
+    selectAll.addEventListener("change", () => {
+      for (const { part, selectBox } of rowSelectors) {
+        selectBox.checked = selectAll.checked;
+        if (selectAll.checked) selectedParts.add(part); else selectedParts.delete(part);
+      }
+      syncBulkRemove();
+    });
+    removeSelected.addEventListener("click", () => {
+      const n = selectedParts.size;
+      if (!n) return;
+      if (!window.confirm(`Remove ${n} selected ${n === 1 ? systemProfile.itemSingular : systemProfile.itemPlural}? Viewer inventory is not affected.`)) return;
+      value.parts = value.parts.filter(p => !selectedParts.has(p));
+      markDirty();
+      renderPreservingPartsScroll();
+    });
+    bulkRemoveRow.append(selectAllLabel, removeSelected);
+    body.append(bulkRemoveRow);
+  }
   body.append(list);
 
   const tiersHeader = element("div", "parts-header");
@@ -4384,7 +4473,7 @@ async function _saveCatalogData() {
     renderAll();
     return result.backups?.length || 0;
   } finally {
-    saveButton.disabled = false;
+    updateTopbarSave();
   }
 }
 
@@ -4812,6 +4901,7 @@ function switchView(view) {
   document.querySelectorAll(".nav-button").forEach(node => node.classList.toggle("active", node.dataset.view === view));
   document.getElementById("viewTitle").textContent = getViewTitle(view);
   renderViewOnDemand(view);
+  updateTopbarSave();
   window.scrollTo({ top: 0 });
 }
 

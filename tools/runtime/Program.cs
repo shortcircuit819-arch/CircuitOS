@@ -72,6 +72,9 @@ internal static class Program
     private static TwitchTokens? _sessionTwitchBot;
     private static string _dataRoot = "";
     private static bool _headless;
+    // The loopback port the HttpListener actually bound to (ResolvePort may pick another if 8787 is
+    // busy). Used to pin the CSRF Origin allowlist to the admin panel's real origin.
+    private static int _port;
     // Set when cloud mode was requested but couldn't start (fell back to local); shown in Settings.
     private static string? _cloudError;
     // In-flight inline (admin-panel) device logins: loginId -> the device code being polled. Lets the
@@ -197,6 +200,7 @@ internal static class Program
         try
         {
             var port = ResolvePort(options.Port);
+            _port = port;
             if (options.Headless)
                 Console.WriteLine($"Listening on http://127.0.0.1:{port}/");
             using var listener = new HttpListener();
@@ -344,7 +348,7 @@ internal static class Program
                     overlayFilePath = Path.Combine(overlayDataPath, "overlay", "index.html"),
                     profilesRoot = Path.Combine(_dataRoot, "profiles"),
                     runtime = ".NET",
-                    version = "1.0.0",
+                    version = "1.0.1",
                     mode = _sessionMode,
                     cloudError = _cloudError,
                     twitch = _sessionTwitch is null ? null : new { login = _sessionTwitch.Login, displayName = _sessionTwitch.DisplayName, userId = _sessionTwitch.UserId, expiresAt = _sessionTwitch.ExpiresAt },
@@ -550,13 +554,17 @@ internal static class Program
     }
 
     // Companion to IsAllowedHost (see the CSRF note at the call site): if a browser attributed the
-    // request to a web origin, it must be a loopback origin. "Origin: null" (sandboxed iframes,
-    // file:// pages) is NOT loopback and is rejected — the OBS overlay never calls the API cross-origin.
+    // request to a web origin, it must be a loopback origin ON OUR PORT. Pinning the port stops a
+    // *different* local server the streamer happens to open from CSRFing us; the admin panel is served
+    // from this same origin (127.0.0.1/localhost on _port), so its own POSTs still pass. "Origin: null"
+    // (sandboxed iframes, file:// pages) is NOT loopback and is rejected — the OBS overlay never calls
+    // the API cross-origin.
     private static bool IsAllowedOrigin(HttpListenerRequest request)
     {
         var origin = request.Headers["Origin"];
         if (string.IsNullOrEmpty(origin)) return true;
         if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return false;
+        if (uri.Port != _port) return false;
         return uri.Host is "127.0.0.1" or "localhost" or "::1";
     }
 
@@ -1031,6 +1039,7 @@ internal static class Program
         context.Response.ContentType = contentType;
         context.Response.ContentLength64 = body.Length;
         context.Response.Headers["Cache-Control"] = "no-store";
+        context.Response.Headers["X-Content-Type-Options"] = "nosniff";
         await context.Response.OutputStream.WriteAsync(body);
     }
 

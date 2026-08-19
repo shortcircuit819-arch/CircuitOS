@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -12,6 +13,7 @@ internal sealed class LocalFileDataStore : ILocalDataStore
         ("featured-boost", DataKeys.Boost, "Featured Boost"),
         ("discord-role-awards", DataKeys.Roles, "Discord Role Awards"),
         ("system-profile", DataKeys.Profile, "System Profile"),
+        ("inventory", DataKeys.Inventory, "Viewer Inventory"),
     ];
 
     // Keep at most this many timestamped config backups per file type by default (0 = keep all).
@@ -270,9 +272,14 @@ internal sealed class LocalFileDataStore : ILocalDataStore
         if (!Directory.Exists(profileDir)) throw new InvalidDataException($"Profile '{profileId}' does not exist.");
         foreach (var (key, value) in data)
         {
+            // Never let an import be the silent in-place clobber of a live inventory. Imports target a
+            // freshly created profile and never carry inventory; refuse it explicitly so a future caller
+            // can't turn this into an unbacked, non-atomic inventory overwrite.
+            if (key == DataKeys.Inventory)
+                throw new InvalidDataException("Import must not write viewer inventory.");
             var path = KeyToProfilePath(profileDir, key);
             if (path is null) continue;
-            File.WriteAllText(path, value.ToJsonString(JsonUtil.IndentedOptions), new UTF8Encoding(false));
+            WriteFileAtomic(path, value, keepRollingBackup: false);
         }
     }
 
@@ -293,11 +300,58 @@ internal sealed class LocalFileDataStore : ILocalDataStore
         catch { return null; }
     }
 
+    // Strict read for the write path: null only when the file is genuinely absent; a present-but-
+    // unparseable file THROWS instead of reading as null (which the caller would turn into an empty
+    // document and write back over everyone). See IDataStore.ReadProfileDataStrict.
+    public JsonObject? ReadProfileDataStrict(string profileId, string key)
+    {
+        var path = KeyToProfilePath(GetProfilePath(profileId), key);
+        if (path is null || !File.Exists(path)) return null;
+        return ParseFile(path);
+    }
+
     public void WriteProfileData(string profileId, string key, JsonNode value)
     {
-        var path = KeyToProfilePath(GetProfilePath(profileId), key) ?? throw new InvalidDataException($"Unsupported profile data key: {key}");
-        WriteFileAtomic(path, value, keepRollingBackup: key == DataKeys.Inventory);
+        var profileDir = GetProfilePath(profileId);
+        var path = KeyToProfilePath(profileDir, key) ?? throw new InvalidDataException($"Unsupported profile data key: {key}");
+        if (key == DataKeys.Inventory)
+            WriteInventoryAtomic(profileDir, path, value);
+        else
+            WriteFileAtomic(path, value, keepRollingBackup: false);
     }
+
+    // Inventory is the product's irreplaceable data. Before every overwrite, snapshot the current file
+    // into config-backups/ as a TIMESTAMPED, retained, restorable backup (not a single one-deep .bak),
+    // then swap the new bytes atomically, then prune to the retention limit. The snapshot lands in the
+    // TARGET profile's folder, so a live-but-not-edited profile still backs up to its own config-backups.
+    private void WriteInventoryAtomic(string profileDir, string path, JsonNode value)
+    {
+        var backupDir = Path.Combine(profileDir, "config-backups");
+        if (File.Exists(path))
+        {
+            Directory.CreateDirectory(backupDir);
+            File.Copy(path, Path.Combine(backupDir, $"inventory_{Timestamp()}.json"), overwrite: true);
+        }
+        WriteFileAtomic(path, value, keepRollingBackup: false);
+        PruneInventoryBackups(backupDir);
+    }
+
+    // Trims inventory_* snapshots in one profile's config-backups to the retention limit. Scoped to the
+    // given folder because the general PruneBackups only touches the ACTIVE profile's backup path.
+    private void PruneInventoryBackups(string backupDir)
+    {
+        var keep = AppSettings.GetInt(_rootDataPath, "backupRetention", DefaultBackupRetention);
+        if (keep <= 0 || !Directory.Exists(backupDir)) return;
+        var snapshots = Directory.GetFiles(backupDir, "inventory_*.json")
+            .Where(file => Regex.IsMatch(Path.GetFileName(file), @"^inventory_\d{8}_\d{6}_\d{3}\.json$"))
+            .OrderByDescending(file => Path.GetFileName(file));
+        foreach (var stale in snapshots.Skip(keep))
+        {
+            try { File.Delete(stale); } catch { }
+        }
+    }
+
+    private static string Timestamp() => DateTime.Now.ToString("yyyyMMdd_HHmmss_fff", CultureInfo.InvariantCulture);
 
     public void WriteOverlayState(string profileId, JsonObject state)
     {

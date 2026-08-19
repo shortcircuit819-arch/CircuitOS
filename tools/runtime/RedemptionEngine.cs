@@ -158,7 +158,7 @@ internal static class RedemptionEngine
             totalWeight += weight;
         }
         if (keys.Count == 0 || totalWeight <= 0)
-            throw new InvalidDataException("No collections have a positive weight.");
+            throw new InvalidDataException("Nothing to pull right now: no collection is enabled, inside its event window, and has a positive weight.");
 
         var roll = rng.NextDouble() * totalWeight;
         double cumulative = 0;
@@ -195,8 +195,10 @@ internal static class RedemptionEngine
         const DateTimeStyles styles = DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal;
         var validFrom = DateTimeOffset.TryParse(collection["activeFromUtc"]?.ToString() ?? "", CultureInfo.InvariantCulture, styles, out var from);
         var validUntil = DateTimeOffset.TryParse(collection["activeUntilUtc"]?.ToString() ?? "", CultureInfo.InvariantCulture, styles, out var until);
-        if (!validFrom || !validUntil || until <= from)
-            throw new InvalidDataException($"Event collection has an invalid UTC schedule: {key}");
+        // A malformed / unparseable / reversed schedule makes THIS event collection inactive rather
+        // than throwing: SelectCollection walks every collection on each pull, so one bad event must
+        // not fail every viewer's redemption. Mirrors CommandEngine.IsEventActive.
+        if (!validFrom || !validUntil || until <= from) return false;
         return now >= from && now < until;
     }
 
