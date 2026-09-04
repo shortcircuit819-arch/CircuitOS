@@ -1,0 +1,36 @@
+name: Bug report
+description: Report a reproducible problem with CircuitOS.
+body:
+  - type: markdown
+    attributes:
+      value: "Please search existing issues first. Never attach OAuth tokens, cloud keys, or private viewer data. Redact diagnostics and screenshots."
+  - type: input
+    id: version
+    attributes:
+      label: CircuitOS version
+      description: Found in Settings → About.
+    validations:
+      required: true
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation type
+      options:
+        - Windows installer
+        - Portable ZIP
+        - Source build
+        - Other or unsure
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Environment and diagnostics
+      description: Windows version, local or Appwrite storage, error text, and redacted screenshots or diagnostics if relevant.

@@ -2,34 +2,19 @@
 
 ## Installing (recommended)
 
-Run **`CircuitOS-win-Setup.exe`**.
+Download **CircuitOS-win-Setup.exe** from the [latest release](https://github.com/shortcircuit819-arch/CircuitOS/releases/latest) or [itch.io](https://shortcircuit819.itch.io/circuitos). Run it and complete setup. The installer enables in-app updates.
 
-It installs for your user only — no admin prompt — and creates Desktop and Start Menu shortcuts. This is
-the recommended way to install, because it's what enables **automatic updates**.
+Requirements: Windows x64 and Microsoft Edge WebView2. The .NET runtime is bundled. Live redemptions require channel-point rewards to be available on your Twitch channel.
 
-### Windows will warn you the first time
+### Verify your download
 
-CircuitOS releases are **not code-signed**, so Windows SmartScreen shows *"Windows protected your PC —
-unknown publisher"* when you run `Setup.exe`. This is expected on every release. It does not mean your
-download is broken or tampered with.
-
-To continue: click **More info**, then **Run anyway**.
-
-The warning comes back on each new version, because every build is a new file that Windows hasn't seen
-before. A code-signing certificate would suppress it — that certificate proves *identity* to Microsoft,
-not safety, and CircuitOS doesn't have one yet.
-
-Because CircuitOS is open source, you can verify your download yourself instead. Every release publishes
-a **SHA-256 checksum**; compare it against your copy:
+Current releases are unsigned. Windows may show an unknown-publisher or SmartScreen warning. Compare your file with the SHA-256 checksum in the matching GitHub release notes:
 
 ```powershell
 Get-FileHash .\CircuitOS-win-Setup.exe -Algorithm SHA256
 ```
 
-If it matches the checksum on the release page, you have exactly the file that was built and published.
-
-Never disable your antivirus to run CircuitOS. If a scanner flags it, open a GitHub issue with the exact
-vendor and detection name.
+A matching checksum confirms your file matches the published asset; it does not establish that software is risk-free. If you choose to run the verified file and Windows offers the option, select **More info → Run anyway**. Do not disable antivirus. Report unexpected detections with the vendor and detection name.
 
 ### Where things live
 
@@ -40,7 +25,7 @@ vendor and detection name.
 
 Your data — collections, inventories, profiles, backups, settings — is deliberately kept **outside** the
 versioned program folder. An update swaps the `current` folder; your `Data` sits beside it, untouched.
-**An update can never touch a viewer's collection.** On first launch the app seeds `Data` with a starter
+Keep a backup before updating: storage separation protects saves from application replacement but does not replace recovery precautions. On first launch the app seeds `Data` with a starter
 catalog so the setup wizard has something to work with. (Settings → About → *Open data folder* jumps
 straight there.)
 
@@ -50,23 +35,18 @@ straight there.)
 **Download & Restart** button. That's it.
 
 If the panel says this copy *isn't managed by the updater*, you're running a ZIP copy or a dev build —
-run the latest `Setup.exe` once and you'll be on the updater from then on. Your data carries over
-untouched.
+use the installer for managed updates. Before switching from a ZIP or custom data folder, back it up and note its path; do not assume the installed copy will select the same folder.
 
 If checking reports a network/fetch error, the release feed isn't reachable — that's the feed, not your
 installation.
 
 ## Alternate: portable / ZIP install
 
-`CircuitOS-Windows-x64.zip` is a self-contained folder you unpack yourself. Launch the top-level
-`CircuitOS.exe`; it finds the adjacent `App` and `Data` folders automatically. A ZIP copy does **not**
-auto-update — to update it, close CircuitOS and copy the contents of the matching
-`CircuitOS-Update-<version>.zip` over your installed folder. That archive has no `Data` directory, so
-your catalog, profiles, inventory, boosts, role state, and backups are never replaced. `version.json`
-records the application and data-schema versions.
+The current release provides **CircuitOS-win-Portable.zip**. Extract it into a new folder and launch CircuitOS.exe. Portable copies do not use the managed installer update flow.
 
-`CircuitOS.exe` is a self-contained Windows x64 application — no .NET runtime, SDK, or PowerShell policy
-changes needed. It uses the Microsoft Edge WebView2 runtime included with current Windows.
+Before replacing a portable copy, close CircuitOS, back up its data, and note the location shown by **Settings → About → Open data folder**. Extract the newer release into a separate folder. CircuitOS discovers an existing Data folder near the executable when present; otherwise it falls back to %LocalAppData%\CircuitOS\Data. A custom --data launch option overrides discovery. A portable executable does not necessarily mean saves live beside it.
+
+Old CircuitOS-Update-&lt;version&gt;.zip instructions belong to the legacy packaging workflow; those archives are not shipped with 1.0.2.
 
 ## First run
 
@@ -94,7 +74,7 @@ channel account.
 
 ## Verification
 
-Run `!components`, `!scrap`, and one test redemption. Confirm `inventory.json` and
+Run your configured inventory and balance commands (`!components` and `!scrap` in the starter profile), then one test redemption. Confirm `inventory.json` and
 `overlay\overlay-state.json` update inside your data folder.
 
 ## Recovery
@@ -108,11 +88,8 @@ Recovery Center**. Backups are pruned to the most recent N (Settings → backup 
 ## Building a release (maintainers)
 
 ```powershell
-# Installer + update feed (+ signing, + optional upload) — the modern path
-tools\package\Build-CircuitOSVelopack.ps1 -CertificateThumbprint <THUMBPRINT> -Upload
-
-# Legacy ZIP packages
-tools\package\Build-CircuitOSPackage.ps1
+# Build current unsigned installer, portable ZIP, and update feed locally
+tools\package\Build-CircuitOSVelopack.ps1
 ```
 
-See `docs\release-signing.md` for signing and `docs\updater-velopack-plan.md` for the updater design.
+See [release signing](release-signing.md) and [versioning](versioning.md) before publishing.

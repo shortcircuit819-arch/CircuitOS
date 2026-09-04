@@ -1,0 +1,17 @@
+name: Feature request
+description: Suggest an improvement for streamers or viewers.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe who encounters it and a concrete example from your stream.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Suggested behavior
+      description: Describe the result you want and any alternatives you have tried.
+    validations:
+      required: true

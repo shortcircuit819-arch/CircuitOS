@@ -15,7 +15,9 @@ and after every profile switch it copies `index.html`, `styles.css`, and
 
 For the default install that is:
 
-`C:\Users\nicho\Documents\CircuitOS\Data\profiles\circuit-components\overlay`
+`%LocalAppData%\CircuitOS\Data\profiles\circuit-components\overlay`
+
+Custom and portable installations may use a different data folder. Use the path displayed by CircuitOS.
 
 You no longer create this folder or copy files by hand. CircuitOS writes
 `overlay-state.json` into the same folder after the first successful pull.
