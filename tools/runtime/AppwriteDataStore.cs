@@ -52,6 +52,8 @@ internal sealed class AppwriteDataStore : IDataStore
 
     public string ActiveProfileId => _profileId;
 
+    public IDataStore ForProfile(string profileId) => new AppwriteDataStore(_options, _userId, profileId);
+
     // The backup namespace holds one prior-version snapshot per data key for this profile.
     private string BackupProfileId => _profileId + "#bak";
 
@@ -74,21 +76,23 @@ internal sealed class AppwriteDataStore : IDataStore
 
     public string? WriteAtomic(string key, JsonNode value, string backupLabel, string timestamp)
     {
+        var profileId = _profileId;
         // Snapshot the current version into the backup namespace before overwriting,
         // then upsert the live row. Mirrors the local store's "backup-then-replace".
         string? backupFileName = null;
-        var existing = TryGetRow(_profileId, key);
+        var existing = TryGetRow(profileId, key);
         if (existing is not null)
         {
             var prior = JsonColumn(existing);
             if (!string.IsNullOrWhiteSpace(prior))
             {
-                UpsertJson(BackupProfileId, key, prior);
-                if (ManagedBackups.Any(m => m.Key == key))
-                    backupFileName = $"{backupLabel}_{timestamp}.json";
+                var snapshot = UpsertJson(profileId + "#bak", key, prior);
+                var managed = ManagedBackups.FirstOrDefault(m => m.Key == key);
+                if (managed.Key is not null)
+                    backupFileName = $"{managed.Prefix}_{ParseUpdatedAt(snapshot).UtcDateTime:yyyyMMdd_HHmmss_fff}.json";
             }
         }
-        UpsertJson(_profileId, key, value.ToJsonString(JsonUtil.IndentedOptions));
+        UpsertJson(profileId, key, value.ToJsonString(JsonUtil.IndentedOptions));
         return backupFileName;
     }
 
@@ -136,18 +140,26 @@ internal sealed class AppwriteDataStore : IDataStore
     public BackupFileEntry FindBackup(string fileName)
     {
         var (key, label, prefix) = ResolveBackupFile(fileName);
-        var row = TryGetRow(BackupProfileId, key)
-            ?? throw new FileNotFoundException("Backup was not found.");
+        var row = ReadMatchingBackup(fileName, key, prefix);
         var json = JsonColumn(row) ?? "";
         return new BackupFileEntry(fileName, key, label, Encoding.UTF8.GetByteCount(json), ParseUpdatedAt(row));
     }
 
     public JsonObject ReadBackupJson(string fileName)
     {
-        var (key, _, _) = ResolveBackupFile(fileName);
+        var (key, _, prefix) = ResolveBackupFile(fileName);
+        var row = ReadMatchingBackup(fileName, key, prefix);
+        return ParseJsonColumn(row, key);
+    }
+
+    private Row ReadMatchingBackup(string fileName, string key, string prefix)
+    {
         var row = TryGetRow(BackupProfileId, key)
             ?? throw new FileNotFoundException("Backup was not found.");
-        return ParseJsonColumn(row, key);
+        var currentName = $"{prefix}_{ParseUpdatedAt(row).UtcDateTime:yyyyMMdd_HHmmss_fff}.json";
+        if (!string.Equals(fileName, currentName, StringComparison.Ordinal))
+            throw new FileNotFoundException("This cloud recovery point has been replaced. Refresh the backup list before restoring.");
+        return row;
     }
 
     public static void MigrateRowsToTenant(AppwriteOptions options, string fromUserId, string toUserId)
@@ -161,7 +173,7 @@ internal sealed class AppwriteDataStore : IDataStore
             .SetProject(options.ProjectId)
             .SetKey(options.ApiKey);
         var tables = new TablesDB(client);
-        var rows = Run(tables.ListRows(options.DatabaseId, options.CollectionId, new List<string> { Query.Limit(1000) })).Rows
+        var rows = AllRows(tables, options)
             .Where(row => string.Equals(RowUserId(row), fromUserId, StringComparison.Ordinal))
             .ToList();
 
@@ -278,6 +290,9 @@ internal sealed class AppwriteDataStore : IDataStore
 
     public void ImportProfileData(string profileId, IDictionary<string, JsonNode> data)
     {
+        // Validate the whole import before writing any part of it.
+        if (data.ContainsKey(DataKeys.Inventory))
+            throw new InvalidDataException("Import must not write viewer inventory.");
         foreach (var (key, value) in data)
             UpsertJson(profileId, key, value.ToJsonString(JsonUtil.IndentedOptions));
     }
@@ -336,7 +351,7 @@ internal sealed class AppwriteDataStore : IDataStore
 
     // ── Helpers ────────────────────────────────────────────────────────────────
 
-    private void UpsertJson(string profileId, string key, string json)
+    private Row UpsertJson(string profileId, string key, string json)
     {
         _ = JsonNode.Parse(json); // validate before persisting
         var data = new Dictionary<string, object>
@@ -350,9 +365,9 @@ internal sealed class AppwriteDataStore : IDataStore
         // derived id: update in place when it exists, create with a fresh id otherwise.
         var existing = TryGetRow(profileId, key);
         if (existing is not null)
-            Run(_tables.UpdateRow(_options.DatabaseId, _options.CollectionId, existing.Id, data));
+            return Run(_tables.UpdateRow(_options.DatabaseId, _options.CollectionId, existing.Id, data));
         else
-            Run(_tables.CreateRow(_options.DatabaseId, _options.CollectionId, ID.Unique(), data));
+            return Run(_tables.CreateRow(_options.DatabaseId, _options.CollectionId, ID.Unique(), data));
     }
 
     // Resolve a row by the unique index (userId, profileId, dataKey) and return it with
@@ -384,19 +399,38 @@ internal sealed class AppwriteDataStore : IDataStore
         // Avoid server-side query filters here; the cloud tables endpoint is rejecting them
         // with an invalid-query error in this environment. We fetch the tenant's rows once and
         // apply the necessary filters in memory instead.
-        return Run(_tables.ListRows(_options.DatabaseId, _options.CollectionId, new List<string> { Query.Limit(1000) })).Rows
+        return AllRows(_tables, _options)
             .Where(row => string.Equals(RowUserId(row), _userId, StringComparison.Ordinal))
             .ToList();
     }
 
     private static Row? FindRow(TablesDB tables, AppwriteOptions options, string userId, string profileId, string dataKey)
     {
-        var rows = Run(tables.ListRows(options.DatabaseId, options.CollectionId, new List<string> { Query.Limit(1000) })).Rows
+        var rows = AllRows(tables, options)
             .Where(row => string.Equals(RowUserId(row), userId, StringComparison.Ordinal) &&
                           string.Equals(RowProfileId(row), profileId, StringComparison.Ordinal) &&
                           string.Equals(RowDataKey(row), dataKey, StringComparison.Ordinal))
             .ToList();
         return rows.FirstOrDefault();
+    }
+
+    private static List<Row> AllRows(TablesDB tables, AppwriteOptions options)
+    {
+        const int pageSize = 1000;
+        var rows = new List<Row>();
+        string? cursor = null;
+        while (true)
+        {
+            var queries = new List<string> { Query.Limit(pageSize) };
+            if (cursor is not null) queries.Add(Query.CursorAfter(cursor));
+            var page = Run(tables.ListRows(options.DatabaseId, options.CollectionId, queries)).Rows;
+            rows.AddRange(page);
+            if (page.Count < pageSize) return rows;
+            var nextCursor = page[^1].Id;
+            if (nextCursor == cursor)
+                throw new InvalidDataException("Appwrite pagination did not advance; refusing an incomplete table read.");
+            cursor = nextCursor;
+        }
     }
 
     private static string? RowUserId(Row row) => row.Data.TryGetValue("userId", out var v) ? v?.ToString() : null;
@@ -422,4 +456,3 @@ internal sealed class AppwriteDataStore : IDataStore
 
     private static T Run<T>(Task<T> task) => task.GetAwaiter().GetResult();
 }
-

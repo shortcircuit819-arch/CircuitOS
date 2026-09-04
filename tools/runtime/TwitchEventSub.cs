@@ -1,5 +1,4 @@
 using System.Net.WebSockets;
-using System.Text;
 using System.Text.Json.Nodes;
 
 namespace CircuitOS.Runtime;
@@ -21,6 +20,8 @@ internal sealed class TwitchEventSub
     private readonly Action<RedemptionEvent> _onRedemption;
     private readonly Action<ChatMessage>? _onChat;
     private readonly Action<string> _log;
+    private readonly Func<Uri, CancellationToken, Task<WebSocket>> _connect;
+    private readonly TimeSpan _retryDelay;
 
     // Twitch may replay a notification; the spec requires dedup by metadata.message_id. We keep the
     // recently-seen ids (with arrival time) and drop repeats so a replay can't double-process a pull.
@@ -31,13 +32,23 @@ internal sealed class TwitchEventSub
     private int _keepaliveSeconds = 10;
     private const int KeepaliveGraceSeconds = 5;
 
-    public TwitchEventSub(TwitchSession session, TwitchHelix helix, Action<RedemptionEvent> onRedemption, Action<ChatMessage>? onChat, Action<string> log)
+    public TwitchEventSub(TwitchSession session, TwitchHelix helix, Action<RedemptionEvent> onRedemption, Action<ChatMessage>? onChat, Action<string> log,
+        Func<Uri, CancellationToken, Task<WebSocket>>? connect = null, TimeSpan? retryDelay = null)
     {
         _session = session;
         _helix = helix;
         _onRedemption = onRedemption;
         _onChat = onChat;
         _log = log;
+        _connect = connect ?? ConnectSocketAsync;
+        _retryDelay = retryDelay ?? TimeSpan.FromSeconds(3);
+    }
+
+    private static async Task<WebSocket> ConnectSocketAsync(Uri uri, CancellationToken cancel)
+    {
+        var socket = new ClientWebSocket();
+        try { await socket.ConnectAsync(uri, cancel); return socket; }
+        catch { socket.Dispose(); throw; }
     }
 
     public async Task RunAsync(CancellationToken cancel)
@@ -49,55 +60,123 @@ internal sealed class TwitchEventSub
             {
                 url = await ConnectAndListenAsync(url, cancel) ?? DefaultUrl;
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cancel.IsCancellationRequested)
             {
                 break;
             }
             catch (Exception ex)
             {
                 _log($"EventSub connection dropped: {ex.Message}. Reconnecting in 3s…");
-                try { await Task.Delay(TimeSpan.FromSeconds(3), cancel); } catch (OperationCanceledException) { break; }
+                try { await Task.Delay(_retryDelay, cancel); } catch (OperationCanceledException) { break; }
                 url = DefaultUrl;
             }
         }
     }
 
-    // Connects, handles messages until the socket closes or a reconnect is requested.
-    // Returns a reconnect URL when Twitch sends session_reconnect, otherwise null. Throws
-    // TimeoutException if no message arrives within the keepalive window so RunAsync reconnects.
+    // A requested handover keeps receiving on the old socket until the replacement welcome.
+    // Both readers are network-only; notification callbacks remain serialized on this loop.
     private async Task<string?> ConnectAndListenAsync(string url, CancellationToken cancel)
     {
-        using var socket = new ClientWebSocket();
-        await socket.ConnectAsync(new Uri(url), cancel);
-
-        var buffer = new byte[16 * 1024];
-        var builder = new StringBuilder();
-        while (!cancel.IsCancellationRequested)
+        var socket = await _connect(new Uri(url), cancel);
+        try
         {
-            builder.Clear();
-            WebSocketReceiveResult result;
-            do
+            while (!cancel.IsCancellationRequested)
             {
-                result = await ReceiveWithKeepaliveAsync(socket, buffer, cancel);
-                if (result.MessageType == WebSocketMessageType.Close)
-                {
-                    try { await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", cancel); } catch { }
-                    return null;
-                }
-                builder.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
-            }
-            while (!result.EndOfMessage);
+                var message = await ReadMessageAsync(socket, cancel);
+                if (message is null) return null;
+                var reconnectUrl = HandleMessage(message);
+                if (reconnectUrl is null) continue;
 
-            if (JsonNode.Parse(builder.ToString()) is not JsonObject message) continue;
-            var reconnectUrl = HandleMessage(message);
-            if (reconnectUrl is not null) return reconnectUrl;
+                using var oldReadCancel = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+                using var replacementCancel = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+                replacementCancel.CancelAfter(TimeSpan.FromSeconds(30));
+                var replacement = ConnectReplacementAsync(reconnectUrl, replacementCancel.Token);
+                Task<JsonObject?>? oldRead = null;
+                var oldClosed = false;
+                try
+                {
+                    while (!replacement.IsCompleted)
+                    {
+                        oldRead = ReadMessageAsync(socket, oldReadCancel.Token);
+                        await Task.WhenAny(oldRead, replacement);
+                        if (replacement.IsCompleted) break;
+                        var oldMessage = await oldRead;
+                        oldRead = null;
+                        if (oldMessage is null) { oldClosed = true; break; }
+                        HandleMessage(oldMessage);
+                    }
+                    var (next, welcome) = await replacement;
+                    // A fast welcome does not mean the old socket's receive buffer is empty.
+                    // Complete its close handshake while draining notifications already in flight.
+                    // Canceling ReceiveAsync here would abort the socket and discard those pulls.
+                    oldReadCancel.CancelAfter(TimeSpan.FromSeconds(5));
+                    try
+                    {
+                        if (socket.State is not (WebSocketState.Closed or WebSocketState.Aborted))
+                            await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Reconnect complete", oldReadCancel.Token);
+                        while (!oldClosed)
+                        {
+                            var oldMessage = await (oldRead ?? ReadMessageAsync(socket, oldReadCancel.Token));
+                            oldRead = null;
+                            if (oldMessage is null) break;
+                            HandleMessage(oldMessage);
+                        }
+                    }
+                    catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
+                    {
+                        _log("Old EventSub connection did not finish its close handshake; replacement is ready.");
+                    }
+                    socket.Dispose();
+                    socket = next;
+                    HandleMessage(welcome, subscribe: false); // subscriptions were transferred by Twitch
+                }
+                catch
+                {
+                    // Observe/clean up an in-flight replacement if the old connection failed first.
+                    oldReadCancel.Cancel();
+                    if (oldRead is not null) { try { await oldRead; } catch { } }
+                    replacementCancel.Cancel();
+                    try { var pending = await replacement; pending.Socket.Dispose(); } catch { }
+                    throw;
+                }
+            }
+            return null;
         }
-        return null;
+        finally { socket.Dispose(); }
     }
 
+    private async Task<(WebSocket Socket, JsonObject Welcome)> ConnectReplacementAsync(string url, CancellationToken cancel)
+    {
+        var socket = await _connect(new Uri(url), cancel);
+        try
+        {
+            var welcome = await ReadMessageAsync(socket, cancel);
+            if (welcome?["metadata"]?["message_type"]?.ToString() != "session_welcome")
+                throw new InvalidDataException("Twitch replacement connection did not send a welcome message.");
+            return (socket, welcome);
+        }
+        catch { socket.Dispose(); throw; }
+    }
+
+    private async Task<JsonObject?> ReadMessageAsync(WebSocket socket, CancellationToken cancel)
+    {
+        var buffer = new byte[16 * 1024];
+        using var message = new MemoryStream();
+        WebSocketReceiveResult result;
+        do
+        {
+            result = await ReceiveWithKeepaliveAsync(socket, buffer, cancel);
+            if (result.MessageType == WebSocketMessageType.Close) return null;
+            message.Write(buffer, 0, result.Count);
+        }
+        while (!result.EndOfMessage);
+        // Decode only after assembling the message: a UTF-8 character may cross frame boundaries.
+        return JsonNode.Parse(message.ToArray()) as JsonObject
+            ?? throw new InvalidDataException("Twitch WebSocket message must be a JSON object.");
+    }
     // A single ReceiveAsync bounded by the keepalive window. If nothing (event OR keepalive) arrives
     // in time, the connection is presumed dead: abort the socket and throw so RunAsync reconnects.
-    private async Task<WebSocketReceiveResult> ReceiveWithKeepaliveAsync(ClientWebSocket socket, byte[] buffer, CancellationToken cancel)
+    private async Task<WebSocketReceiveResult> ReceiveWithKeepaliveAsync(WebSocket socket, byte[] buffer, CancellationToken cancel)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancel);
         timeout.CancelAfter(TimeSpan.FromSeconds(_keepaliveSeconds + KeepaliveGraceSeconds));
@@ -112,7 +191,7 @@ internal sealed class TwitchEventSub
         }
     }
 
-    private string? HandleMessage(JsonObject message)
+    private string? HandleMessage(JsonObject message, bool subscribe = true)
     {
         var metadata = message["metadata"] as JsonObject;
         var type = metadata?["message_type"]?.ToString();
@@ -129,7 +208,7 @@ internal sealed class TwitchEventSub
                 var session = payload?["session"] as JsonObject;
                 if (session?["keepalive_timeout_seconds"]?.GetValue<int>() is int ka && ka > 0) _keepaliveSeconds = ka;
                 var sessionId = session?["id"]?.ToString();
-                if (!string.IsNullOrEmpty(sessionId)) Subscribe(sessionId!);
+                if (subscribe && !string.IsNullOrEmpty(sessionId)) Subscribe(sessionId!);
                 break;
             case "session_reconnect":
                 return (payload?["session"] as JsonObject)?["reconnect_url"]?.ToString();
@@ -173,6 +252,7 @@ internal sealed class TwitchEventSub
         catch (Exception ex)
         {
             _log($"Failed to create the redemption subscription: {ex.Message}");
+            throw; // mandatory: reconnect/retry instead of remaining alive with chat only
         }
 
         if (_onChat is not null)

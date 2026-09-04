@@ -292,7 +292,7 @@ internal sealed partial class CircuitService
     // must map to the SAME lock — otherwise they'd write the same inventory.json under different locks.
     private static object InventoryLock(string profileId) => _inventoryLocks.GetOrAdd((profileId ?? "").ToLowerInvariant(), _ => new object());
 
-    public ServiceResult DispatchRuntimeAction(JsonObject request)
+    public ServiceResult DispatchRuntimeAction(JsonObject request, Action? onInventoryWriteStarted = null)
     {
         var action = JsonUtil.String(request, "action");
         if (string.IsNullOrWhiteSpace(action)) return Error(["Runtime action is required."]);
@@ -424,6 +424,9 @@ internal sealed partial class CircuitService
                     now,
                     rng,
                     dupProtectionTurns > 0 ? (int)dupProtectionTurns : 0);
+                // A remote write can commit and then time out. The Twitch caller must distinguish
+                // failures before this point from an ambiguous/committed inventory write.
+                onInventoryWriteStarted?.Invoke();
                 WriteProfileData(profileId, DataKeys.Inventory, live);
             }
             WriteOverlayState(profileId, redemption, viewerName, now);
@@ -739,4 +742,3 @@ internal sealed partial class CircuitService
         ["ok"] = false, ["errors"] = ToJsonArray(errors)
     });
 }
-

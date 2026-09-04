@@ -41,13 +41,22 @@ internal sealed partial class CircuitService
 
     public ServiceResult InvokeBackupOperation(JsonObject request)
     {
+        var target = _store.ForProfile(_store.ActiveProfileId);
+        // Pin the target before waiting and keep the backup read/validation/write in the same
+        // inventory critical section. A live pull cannot replace a rolling backup mid-restore.
+        lock (InventoryLock(target.ActiveProfileId))
+            return InvokeBackupOperation(target, request);
+    }
+
+    private ServiceResult InvokeBackupOperation(IDataStore target, JsonObject request)
+    {
         var operation = JsonUtil.String(request, "operation");
         BackupFileEntry entry;
-        try { entry = _store.FindBackup(JsonUtil.String(request, "fileName")); }
+        try { entry = target.FindBackup(JsonUtil.String(request, "fileName")); }
         catch (Exception exception) { return Error([exception.Message]); }
 
         JsonObject content;
-        try { content = _store.ReadBackupJson(entry.FileName); }
+        try { content = target.ReadBackupJson(entry.FileName); }
         catch (Exception exception)
         {
             var message = $"Backup JSON could not be parsed: {exception.Message}";
@@ -55,31 +64,24 @@ internal sealed partial class CircuitService
             return Ok(new JsonObject
             {
                 ["ok"] = true, ["file"] = BackupFileObject(entry), ["content"] = null,
-                ["liveContent"] = _store.TryRead(entry.Key),
+                ["liveContent"] = target.TryRead(entry.Key),
                 ["validationErrors"] = ToJsonArray([message])
             });
         }
 
-        var errors = ValidateBackup(entry, content);
+        var errors = ValidateBackup(target, entry, content);
         if (operation == "preview")
         {
             return Ok(new JsonObject
             {
                 ["ok"] = true, ["file"] = BackupFileObject(entry), ["content"] = content,
-                ["liveContent"] = _store.TryRead(entry.Key),
+                ["liveContent"] = target.TryRead(entry.Key),
                 ["validationErrors"] = ToJsonArray(errors)
             });
         }
         if (operation != "restore") return Error(["Unknown backup operation."]);
         if (errors.Count > 0) return Error(errors);
-        // Restoring inventory takes the same per-profile lock as a live pull, so a restore and a
-        // redemption landing together can't interleave.
-        string? preRestore;
-        if (entry.Key == DataKeys.Inventory)
-            lock (InventoryLock(_store.ActiveProfileId))
-                preRestore = _store.WriteAtomic(entry.Key, content, BackupLabelFromKey(entry.Key), Timestamp());
-        else
-            preRestore = _store.WriteAtomic(entry.Key, content, BackupLabelFromKey(entry.Key), Timestamp());
+        var preRestore = target.WriteAtomic(entry.Key, content, BackupLabelFromKey(entry.Key), Timestamp());
         return Ok(new JsonObject
         {
             ["ok"] = true, ["restoredFile"] = entry.FileName, ["target"] = entry.Label,
@@ -112,10 +114,10 @@ internal sealed partial class CircuitService
         return errors;
     }
 
-    private List<string> ValidateBackup(BackupFileEntry entry, JsonObject content) => entry.Key switch
+    private List<string> ValidateBackup(IDataStore target, BackupFileEntry entry, JsonObject content) => entry.Key switch
     {
-        DataKeys.Catalog => ValidateConfiguration(content, _store.TryRead(DataKeys.Boost) ?? DefaultBoost()),
-        DataKeys.Boost => ValidateConfiguration(_store.ReadRequired(DataKeys.Catalog), content),
+        DataKeys.Catalog => ValidateConfiguration(content, target.TryRead(DataKeys.Boost) ?? DefaultBoost()),
+        DataKeys.Boost => ValidateConfiguration(target.ReadRequired(DataKeys.Catalog), content),
         DataKeys.Roles => ValidateRoleState(content),
         DataKeys.Profile => ValidateProfile(content),
         DataKeys.Inventory => ValidateInventory(content),

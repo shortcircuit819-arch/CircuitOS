@@ -14,20 +14,36 @@ internal sealed class TwitchSession
     private readonly TwitchOptions _options;
     private readonly string _dataRoot;
     private readonly string _fileName;
-    private TwitchTokens _tokens;
+    private readonly TwitchTokenCache.State _state;
+    private readonly string _userId;
+    private readonly string _login;
+    private string _lastAccessToken;
+    private readonly HttpClient? _http;
 
     // fileName routes refreshed tokens back to the right store — the broadcaster login by default,
     // TwitchTokens.BotFileName for the optional bot chat account.
-    public TwitchSession(TwitchOptions options, TwitchTokens tokens, string dataRoot, string fileName = TwitchTokens.FileName)
+    public TwitchSession(TwitchOptions options, TwitchTokens tokens, string dataRoot, string fileName = TwitchTokens.FileName, HttpClient? http = null)
     {
         _options = options;
-        _tokens = tokens;
+        _state = TwitchTokenCache.For(dataRoot, fileName);
+        _userId = tokens.UserId;
+        _login = tokens.Login;
+        _lastAccessToken = tokens.AccessToken;
+        lock (_state.Gate)
+        {
+            if (!_state.Initialized)
+            {
+                _state.Tokens = TwitchTokens.TryLoad(dataRoot, fileName) ?? tokens;
+                _state.Initialized = true;
+            }
+        }
         _dataRoot = dataRoot;
         _fileName = fileName;
+        _http = http;
     }
 
-    public string UserId => _tokens.UserId;
-    public string Login => _tokens.Login;
+    public string UserId => _userId;
+    public string Login => _login;
     public string ClientId => _options.ClientId;
 
     // A valid bearer token — refreshes if within 5 minutes of expiry.
@@ -35,12 +51,46 @@ internal sealed class TwitchSession
     {
         get
         {
-            if (DateTimeOffset.UtcNow >= _tokens.ExpiresAt - TimeSpan.FromMinutes(5)) Refresh();
-            return _tokens.AccessToken;
+            lock (_state.Gate)
+            {
+                var tokens = CurrentTokens();
+                if (DateTimeOffset.UtcNow >= tokens.ExpiresAt - TimeSpan.FromMinutes(5))
+                    tokens = TwitchAuth.Refresh(_options, tokens, _dataRoot, _fileName, _http);
+                return _lastAccessToken = tokens.AccessToken;
+            }
         }
     }
 
-    public void Refresh() => _tokens = TwitchAuth.Refresh(_options, _tokens, _dataRoot, _fileName);
+    public void Refresh()
+    {
+        lock (_state.Gate)
+        {
+            var tokens = CurrentTokens();
+            // Another caller may already have refreshed the token which received the 401.
+            if (tokens.AccessToken == _lastAccessToken)
+                tokens = TwitchAuth.Refresh(_options, tokens, _dataRoot, _fileName, _http);
+            _lastAccessToken = tokens.AccessToken;
+        }
+    }
+
+    private TwitchTokens CurrentTokens()
+    {
+        var tokens = _state.Tokens;
+        if (tokens is null || tokens.UserId != _userId)
+            throw new InvalidOperationException("The Twitch session ended or changed accounts. Reconnect before using Twitch.");
+        return tokens;
+    }
+
+    public static void ClearTokens(string dataRoot, string fileName = TwitchTokens.FileName)
+    {
+        var state = TwitchTokenCache.For(dataRoot, fileName);
+        lock (state.Gate)
+        {
+            File.Delete(Path.Combine(dataRoot, fileName));
+            state.Tokens = null;
+            state.Initialized = true;
+        }
+    }
 }
 
 internal sealed record CustomReward(string Id, string Title, int Cost, bool Manageable = true);
@@ -53,14 +103,16 @@ internal sealed class TwitchHelix
     private static readonly HttpClient Http = new();
     private readonly TwitchSession _session;
     private readonly TwitchSession? _botSession;
+    private readonly HttpClient _http;
 
     // botSession is the optional dedicated bot chat account: when present, chat messages are SENT as
     // the bot (sender_id + bot token); everything else (rewards, redemptions, EventSub) stays on the
     // broadcaster session. See docs/feature-requests-analysis.md §1.
-    public TwitchHelix(TwitchSession session, TwitchSession? botSession = null)
+    public TwitchHelix(TwitchSession session, TwitchSession? botSession = null, HttpClient? http = null)
     {
         _session = session;
         _botSession = botSession;
+        _http = http ?? Http;
     }
 
     private string RewardsUrl => $"https://api.twitch.tv/helix/channel_points/custom_rewards?broadcaster_id={_session.UserId}";
@@ -182,7 +234,7 @@ internal sealed class TwitchHelix
         if (body is not null)
             request.Content = new StringContent(body.ToJsonString(JsonUtil.IndentedOptions), Encoding.UTF8, "application/json");
 
-        using var response = Http.Send(request);
+        using var response = _http.Send(request);
         var text = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
 
         if (response.StatusCode == HttpStatusCode.Unauthorized && !retried)
@@ -199,6 +251,4 @@ internal sealed class TwitchHelix
     // Drop the query string (it carries the broadcaster id) from error messages.
     private static string Trim(string url) => url.Split('?')[0];
 }
-
-
 

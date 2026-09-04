@@ -117,6 +117,7 @@ let collections = [];
 let boost = { enabled: false, displayName: "Featured Boost", collectionMultipliers: {} };
 let analytics = { summary: {}, collections: [], viewers: [] };
 let roleAwards = { roleNames: {}, awards: [], summary: { pending: 0, assigned: 0, total: 0 } };
+let roleNamesDirty = false;
 let selectedViewerId = "";
 let lastSimulation = null;
 let baselineModel = null;
@@ -856,16 +857,17 @@ async function saveSystemProfile() {
     showNotice(errors.join(" "), "error");
     return;
   }
+  const submittedProfile = JSON.stringify(systemProfile);
   try {
     const response = await fetch("/api/profile", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(systemProfile)
+      body: submittedProfile
     });
     const result = await response.json();
     if (!response.ok || !result.ok) throw new Error((result.errors || ["Profile save failed."]).join(" "));
     profileConfigured = true;
-    profileDirty = false;
+    profileDirty = JSON.stringify(systemProfile) !== submittedProfile;
     renderAll();
     updateProfileStatus();
     await refreshBackupIndex(false);
@@ -1577,7 +1579,7 @@ function serializeModel() {
 }
 
 async function loadConfiguration(force = false) {
-  if ((dirty || profileDirty) && !force && !window.confirm("Discard unsaved editor changes and refresh all live data?")) return false;
+  if ((dirty || profileDirty || overlayDirty || roleNamesDirty) && !force && !window.confirm("Discard unsaved editor changes and refresh all live data?")) return false;
   clearNotice();
   const [configResponse, analyticsResponse, rolesResponse, backupsResponse, profileResponse, healthResponse, overlayConfigResponse] = await Promise.all([
     fetch("/api/config", { cache: "no-store" }),
@@ -1597,6 +1599,7 @@ async function loadConfiguration(force = false) {
   const payload = await configResponse.json();
   analytics = await analyticsResponse.json();
   roleAwards = await rolesResponse.json();
+  roleNamesDirty = false;
   backupCenter = await backupsResponse.json();
   const profilePayload = await profileResponse.json();
   const healthPayload = await healthResponse.json();
@@ -2686,6 +2689,8 @@ function renderRoleAwards() {
   renderRoleAwardList("pendingRoleAwards", (roleAwards.awards || []).filter(award => !award.assigned), false);
   renderRoleAwardList("assignedRoleAwards", (roleAwards.awards || []).filter(award => award.assigned), true);
 
+  // Operational polling can update awards without replacing a role name being edited.
+  if (roleNamesDirty) return;
   const settings = document.getElementById("roleNameSettings");
   settings.replaceChildren();
   for (const [key, roleName] of Object.entries(roleAwards.roleNames || {})) {
@@ -2697,6 +2702,7 @@ function renderRoleAwards() {
     input.maxLength = 100;
     input.value = roleName;
     input.dataset.collectionKey = key;
+    input.addEventListener("input", () => { roleNamesDirty = true; });
     row.append(input);
     settings.append(row);
   }
@@ -2768,6 +2774,8 @@ async function saveRoleNames() {
     });
     const result = await response.json();
     if (!response.ok || !result.ok) throw new Error((result.errors || ["Role name save failed."]).join(" "));
+    roleNamesDirty = Array.from(document.querySelectorAll("#roleNameSettings input"))
+      .some(input => input.value.trim() !== roleNames[input.dataset.collectionKey]);
     await refreshRoleAwards();
     await refreshBackupIndex(false);
     showNotice("Discord role names saved with a timestamped backup.", "success");
@@ -2786,9 +2794,10 @@ function simulationModel() {
     if (!collectionParts.length || rate.percent <= 0) continue;
     const collectionProb = rate.percent / 100;
 
-    if (collectionTiers.length > 0) {
-      const totalTierWeight = collectionTiers.reduce((sum, t) => sum + Math.max(0, Number(t.weight) || 0), 0);
-      for (const tier of collectionTiers) {
+    const eligibleTiers = collectionTiers.filter(t => Number(t.weight) > 0 && collectionParts.some(p => p.tier === t.id));
+    if (eligibleTiers.length > 0) {
+      const totalTierWeight = eligibleTiers.reduce((sum, t) => sum + Number(t.weight), 0);
+      for (const tier of eligibleTiers) {
         const tierWeight = Math.max(0, Number(tier.weight) || 0);
         if (totalTierWeight <= 0 || tierWeight <= 0) continue;
         const tierProb = (tierWeight / totalTierWeight) * collectionProb;
@@ -2796,14 +2805,6 @@ function simulationModel() {
         if (!tierParts.length) continue;
         const probability = tierProb / tierParts.length;
         for (const part of tierParts) {
-          parts.push({ collectionKey: rate.key, collectionName: rate.name, partName: part.name, probability });
-        }
-      }
-      // Parts without a tier assignment fall back to equal odds across all parts
-      const untiered = collectionParts.filter(p => !collectionTiers.some(t => t.id === p.tier));
-      if (untiered.length) {
-        const probability = collectionProb / collectionParts.length;
-        for (const part of untiered) {
           parts.push({ collectionKey: rate.key, collectionName: rate.name, partName: part.name, probability });
         }
       }
@@ -4453,11 +4454,12 @@ function addCollection(type) {
 
 async function _saveCatalogData() {
   saveButton.disabled = true;
+  const submittedCatalog = JSON.stringify(serializeModel());
   try {
     const response = await fetch("/api/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(serializeModel())
+      body: submittedCatalog
     });
     const result = await response.json();
     if (!response.ok || !result.ok) throw new Error((result.errors || ["Save failed."]).join(" "));
@@ -4469,7 +4471,7 @@ async function _saveCatalogData() {
     if (analyticsResponse.ok) analytics = await analyticsResponse.json();
     if (rolesResponse.ok) roleAwards = await rolesResponse.json();
     if (backupsResponse.ok) backupCenter = await backupsResponse.json();
-    markClean();
+    if (JSON.stringify(serializeModel()) === submittedCatalog) markClean();
     renderAll();
     return result.backups?.length || 0;
   } finally {
@@ -4873,18 +4875,20 @@ function scaleOverlayPreview() {
 async function saveOverlayConfig() {
   const button = document.getElementById("saveOverlayButton");
   button.disabled = true;
+  const submittedOverlay = JSON.stringify({ config: overlayConfig });
   try {
     const response = await fetch("/api/overlay-config", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ config: overlayConfig })
+      body: submittedOverlay
     });
     const result = await response.json();
     if (!response.ok || !result.ok) throw new Error((result.errors || ["Save failed."]).join(" "));
-    overlayDirty = false;
+    overlayDirty = JSON.stringify({ config: overlayConfig }) !== submittedOverlay;
+    button.disabled = !overlayDirty;
     const frame = document.getElementById("overlayPreviewFrame");
-    if (frame) frame.src = `/overlay/index.html?preview=1&t=${Date.now()}`;
-    showNotice("Overlay config saved. Preview refreshed.", "success");
+    if (frame && !overlayDirty) frame.src = `/overlay/index.html?preview=1&t=${Date.now()}`;
+    showNotice(overlayDirty ? "Overlay config saved. Newer edits are still unsaved." : "Overlay config saved. Preview refreshed.", "success");
   } catch (error) {
     button.disabled = false;
     showNotice(error.message, "error");
@@ -5095,7 +5099,7 @@ document.querySelectorAll("[data-preview-state]").forEach(btn => {
 window.addEventListener("resize", scaleOverlayPreview);
 
 window.addEventListener("beforeunload", event => {
-  if (!dirty && !profileDirty) return;
+  if (!dirty && !profileDirty && !overlayDirty && !roleNamesDirty) return;
   event.preventDefault();
   event.returnValue = "";
 });
@@ -5112,8 +5116,6 @@ document.addEventListener("visibilitychange", () => {
 });
 
 loadConfiguration(true).catch(error => showNotice(error.message, "error"));
-
-
 
 
 

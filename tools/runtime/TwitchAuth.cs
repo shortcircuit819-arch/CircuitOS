@@ -5,8 +5,24 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using System.Collections.Concurrent;
 
 namespace CircuitOS.Runtime;
+
+// Every session for a token file shares this state, including admin requests and the listener.
+// Keep an empty state after logout so an in-flight request cannot resurrect an old snapshot.
+internal static class TwitchTokenCache
+{
+    internal sealed class State
+    {
+        public readonly object Gate = new();
+        public bool Initialized;
+        public TwitchTokens? Tokens;
+    }
+    private static readonly ConcurrentDictionary<string, State> States = new(StringComparer.OrdinalIgnoreCase);
+    internal static State For(string dataRoot, string fileName) =>
+        States.GetOrAdd(Path.GetFullPath(Path.Combine(dataRoot, fileName)), _ => new State());
+}
 
 // Cached Twitch tokens + identity, persisted to <dataRoot>/twitch-tokens.local.json (gitignored).
 // The access/refresh tokens are encrypted at rest with Windows DPAPI (CurrentUser scope) so a stolen
@@ -61,17 +77,30 @@ internal sealed record TwitchTokens(
 
     public void Save(string dataRoot, string fileName = FileName)
     {
-        var json = new JsonObject
+        var state = TwitchTokenCache.For(dataRoot, fileName);
+        lock (state.Gate)
         {
-            ["protected"] = true,
-            ["accessToken"] = Protect(AccessToken),
-            ["refreshToken"] = Protect(RefreshToken),
-            ["expiresAt"] = ExpiresAt.ToString("O"),
-            ["userId"] = UserId,
-            ["login"] = Login,
-            ["displayName"] = DisplayName
-        };
-        File.WriteAllText(Path.Combine(dataRoot, fileName), json.ToJsonString(JsonUtil.IndentedOptions), new UTF8Encoding(false));
+            var json = new JsonObject
+            {
+                ["protected"] = true,
+                ["accessToken"] = Protect(AccessToken),
+                ["refreshToken"] = Protect(RefreshToken),
+                ["expiresAt"] = ExpiresAt.ToString("O"),
+                ["userId"] = UserId,
+                ["login"] = Login,
+                ["displayName"] = DisplayName
+            };
+            var path = Path.Combine(dataRoot, fileName);
+            var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllText(temporary, json.ToJsonString(JsonUtil.IndentedOptions), new UTF8Encoding(false));
+                File.Move(temporary, path, overwrite: true);
+                state.Tokens = this;
+                state.Initialized = true;
+            }
+            finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        }
     }
 
     private static string Protect(string plaintext)
@@ -243,7 +272,7 @@ internal static class TwitchAuth
     // ~4h, so a long stream needs this). Returns updated tokens and re-saves them. Throws if
     // the refresh token is no longer valid (the user must log in again).
     public static TwitchTokens Refresh(TwitchOptions opts, TwitchTokens current, string dataRoot,
-        string fileName = TwitchTokens.FileName)
+        string fileName = TwitchTokens.FileName, HttpClient? http = null)
     {
         if (string.IsNullOrWhiteSpace(current.RefreshToken))
             throw new InvalidOperationException("No Twitch refresh token on file — please log in again.");
@@ -255,7 +284,7 @@ internal static class TwitchAuth
         };
         // Public-client (device-flow) tokens refresh without a secret; only include it when present.
         if (opts.HasSecret) form["client_secret"] = opts.ClientSecret;
-        var token = PostForm("https://id.twitch.tv/oauth2/token", form);
+        var token = PostForm("https://id.twitch.tv/oauth2/token", form, http);
         var accessToken = token["access_token"]?.ToString()
             ?? throw new InvalidOperationException("No access_token in Twitch refresh response.");
         var refreshToken = token["refresh_token"]?.ToString() ?? current.RefreshToken;
@@ -287,9 +316,9 @@ internal static class TwitchAuth
                 first["display_name"]?.ToString() ?? "");
     }
 
-    private static JsonObject PostForm(string url, Dictionary<string, string> form)
+    private static JsonObject PostForm(string url, Dictionary<string, string> form, HttpClient? http = null)
     {
-        var (status, text) = PostFormRaw(url, form);
+        var (status, text) = PostFormRaw(url, form, http);
         if (status is < 200 or >= 300)
             throw new InvalidOperationException($"Twitch token endpoint returned {status}: {text}");
         return JsonNode.Parse(text) as JsonObject
@@ -298,10 +327,10 @@ internal static class TwitchAuth
 
     // POSTs a form and returns the raw (status, body) without throwing on non-2xx — the device-flow
     // poll needs to read the "authorization_pending" body rather than treat it as an error.
-    private static (int Status, string Body) PostFormRaw(string url, Dictionary<string, string> form)
+    private static (int Status, string Body) PostFormRaw(string url, Dictionary<string, string> form, HttpClient? http = null)
     {
         using var content = new FormUrlEncodedContent(form);
-        using var response = Http.PostAsync(url, content).GetAwaiter().GetResult();
+        using var response = (http ?? Http).PostAsync(url, content).GetAwaiter().GetResult();
         var text = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
         return ((int)response.StatusCode, text);
     }

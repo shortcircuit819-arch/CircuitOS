@@ -8,6 +8,10 @@ internal interface IDataStore
 {
     string ActiveProfileId { get; }
 
+    // Independent view for one operation. Creating it must not change the persisted editing
+    // selection, and later switches on the original store must not retarget this view.
+    IDataStore ForProfile(string profileId);
+
     bool Exists(string key);
     JsonObject ReadRequired(string key);
     JsonObject? TryRead(string key);

@@ -15,6 +15,10 @@ namespace CircuitOS.Runtime;
 // publish releases to a public releases repo and point RepoUrl there.
 internal static class UpdateService
 {
+    private static string[] _restartArguments = [];
+
+    public static void ConfigureRestart(RuntimeOptions options, bool cloud) =>
+        _restartArguments = options.GetRestartArguments(cloud);
     // The release feed. `vpk upload github --tag vX.Y.Z` publishes here; the app checks the same place.
     private const string RepoUrl = "https://github.com/shortcircuit819-arch/CircuitOS";
 
@@ -74,7 +78,7 @@ internal static class UpdateService
             if (info is null)
                 return new UpdateStatus(true, false, null, current, null);
             await mgr.DownloadUpdatesAsync(info).ConfigureAwait(false);
-            mgr.ApplyUpdatesAndRestart(info); // replaces the process — nothing after this runs on success
+            mgr.ApplyUpdatesAndRestart(info, _restartArguments); // replaces the process — nothing after this runs on success
             return new UpdateStatus(true, true, info.TargetFullRelease.Version.ToString(), current, null);
         }
         catch (Exception ex)

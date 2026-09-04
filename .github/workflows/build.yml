@@ -23,6 +23,22 @@ jobs:
       - name: Run smoke tests
         run: dotnet run --project tools/runtime.tests/CircuitOS.Runtime.SmokeTests.csproj -c Release -- data
 
+      - name: Build runtime for startup regressions
+        run: dotnet build tools/runtime/CircuitOS.Runtime.csproj -c Release
+
+      - name: Run cloud and startup regressions
+        run: dotnet run --project tools/cloud.tests/CircuitOS.Cloud.Tests.csproj -c Release -- --runtime tools/runtime/bin/Release/net9.0-windows/CircuitOS.dll
+
+      - name: Run Twitch regressions
+        run: dotnet run --project tools/twitch.tests/CircuitOS.Twitch.Tests.csproj -c Release
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run admin editor regressions
+        run: node --test tools/admin.tests/editor-state.test.cjs
+
       - name: Install Velopack CLI
         run: dotnet tool install -g vpk
 

@@ -13,9 +13,6 @@
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Program.cs" />
-    <Compile Include="ReviewRegressionTests.cs" />
-    <Compile Include="..\runtime\RuntimeOptions.cs" Link="RuntimeOptions.cs" />
     <Compile Include="..\runtime\JsonUtil.cs" Link="JsonUtil.cs" />
     <Compile Include="..\runtime\IDataStore.cs" Link="IDataStore.cs" />
     <Compile Include="..\runtime\AppSettings.cs" Link="AppSettings.cs" />
@@ -35,5 +32,8 @@
     <Compile Include="..\runtime\CircuitService.Backups.cs" Link="CircuitService.Backups.cs" />
     <Compile Include="..\runtime\CircuitService.AnalyticsRoles.cs" Link="CircuitService.AnalyticsRoles.cs" />
     <Compile Include="..\runtime\CircuitService.Overlay.cs" Link="CircuitService.Overlay.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
   </ItemGroup>
 </Project>

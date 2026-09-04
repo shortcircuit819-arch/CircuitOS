@@ -47,6 +47,15 @@ internal sealed class LocalFileDataStore : ILocalDataStore
     public string BackupPath => Path.Combine(_profileDataPath, "config-backups");
     public string ActiveProfileId => _activeProfileId;
 
+    private LocalFileDataStore(string rootDataPath, string profileId)
+    {
+        _rootDataPath = rootDataPath;
+        _activeProfileId = profileId;
+        _profileDataPath = GetProfilePath(profileId);
+    }
+
+    public IDataStore ForProfile(string profileId) => new LocalFileDataStore(_rootDataPath, profileId);
+
     // ── JSON document CRUD ──────────────────────────────────────────────────
 
     private string KeyToPath(string key) =>
@@ -241,8 +250,7 @@ internal sealed class LocalFileDataStore : ILocalDataStore
     public void SwitchProfile(string id)
     {
         var profileDir = GetProfilePath(id);
-        if (!File.Exists(Path.Combine(profileDir, "profile-meta.json")))
-            throw new InvalidDataException($"Profile '{id}' does not exist.");
+        ReadOrRecoverProfileMeta(id);
         WriteActiveProfileId(id);
         _activeProfileId = id;
         _profileDataPath = profileDir;
@@ -260,10 +268,29 @@ internal sealed class LocalFileDataStore : ILocalDataStore
     public void RenameProfile(string id, string name)
     {
         var metaPath = Path.Combine(GetProfilePath(id), "profile-meta.json");
-        if (!File.Exists(metaPath)) throw new InvalidDataException($"Profile '{id}' does not exist.");
-        var meta = ParseFile(metaPath);
+        var meta = ReadOrRecoverProfileMeta(id);
         meta["name"] = name;
-        File.WriteAllText(metaPath, meta.ToJsonString(JsonUtil.IndentedOptions), new UTF8Encoding(false));
+        WriteFileAtomic(metaPath, meta, keepRollingBackup: true);
+    }
+
+    private JsonObject ReadOrRecoverProfileMeta(string id)
+    {
+        var profileDir = GetProfilePath(id);
+        var metaPath = Path.Combine(profileDir, "profile-meta.json");
+        if (File.Exists(metaPath))
+        {
+            try { return ParseFile(metaPath); }
+            catch (System.Text.Json.JsonException) { }
+            catch (InvalidDataException) { }
+        }
+        if (!LooksLikeProfile(profileDir)) throw new InvalidDataException($"Profile '{id}' does not exist.");
+        // Recovery only repairs metadata; never modify the catalog/inventory or automatically go live.
+        var recovered = new JsonObject
+        {
+            ["id"] = id, ["name"] = id, ["createdAt"] = DateTime.UtcNow.ToString("O"), ["active"] = false
+        };
+        WriteFileAtomic(metaPath, recovered, keepRollingBackup: true);
+        return recovered;
     }
 
     public void ImportProfileData(string profileId, IDictionary<string, JsonNode> data)
@@ -516,4 +543,3 @@ internal sealed class LocalFileDataStore : ILocalDataStore
         return null;
     }
 }
-

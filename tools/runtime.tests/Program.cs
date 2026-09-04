@@ -110,6 +110,7 @@ try
     // Batch 3 (1.0.1) security regression: a legacy PLAINTEXT token file is re-encrypted immediately on
     // load (the plaintext window closes on this launch), and an already-encrypted file is never rewritten.
     TestTwitchTokenReEncryptOnLoad();
+    ReviewRegressionTests.Run();
 
     Console.WriteLine("Smoke tests passed: first run is safe, the pull + redemption + command engines behave, collection packs round-trip, profiles survive missing metadata, and the Appwrite + Twitch config loaders behave.");
     return 0;
@@ -1515,4 +1516,3 @@ static void RequireThrows<TException>(Action action, string message) where TExce
     catch (Exception ex) { throw new InvalidOperationException($"{message} (threw {ex.GetType().Name} instead of {typeof(TException).Name})"); }
     throw new InvalidOperationException($"{message} (did not throw)");
 }
-

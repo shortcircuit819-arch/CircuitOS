@@ -241,6 +241,8 @@ internal static class TwitchRuntime
         }
         var profileId = route.ProfileId;
         log($"Redemption: {redemption.UserName} -> '{redemption.RewardTitle}'  [profile {profileId}]");
+        var inventoryWriteStarted = false;
+        var statusAttempted = false;
         try
         {
             var result = service.DispatchRuntimeAction(new JsonObject
@@ -249,10 +251,11 @@ internal static class TwitchRuntime
                 ["profileId"] = profileId,
                 ["viewerId"] = redemption.UserId,
                 ["viewerName"] = redemption.UserName
-            });
+            }, () => inventoryWriteStarted = true);
             var fulfilled = result.Status == 200;
             if (route.Manageable)
             {
+                statusAttempted = true;
                 helix.UpdateRedemptionStatus(redemption.RewardId, redemption.RedemptionId, fulfilled);
                 log(fulfilled
                     ? "  -> FULFILLED (pull recorded, inventory saved)."
@@ -291,6 +294,22 @@ internal static class TwitchRuntime
         catch (Exception ex)
         {
             log($"  -> error handling redemption: {ex.Message}");
+            if (route.Manageable && !inventoryWriteStarted && !statusAttempted)
+            {
+                try
+                {
+                    helix.UpdateRedemptionStatus(redemption.RewardId, redemption.RedemptionId, fulfilled: false);
+                    log("  -> CANCELED (refunded): pull failed before an inventory write began.");
+                }
+                catch (Exception refundError)
+                {
+                    log($"  -> refund failed for redemption {redemption.RedemptionId}: {refundError.Message}");
+                }
+            }
+            else if (inventoryWriteStarted)
+            {
+                log($"  -> inventory write was attempted for redemption {redemption.RedemptionId}; verify inventory and Twitch status before any manual refund.");
+            }
         }
     }
 

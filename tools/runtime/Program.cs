@@ -7,61 +7,6 @@ using System.Text.Json.Nodes;
 
 namespace CircuitOS.Runtime;
 
-internal sealed record RuntimeOptions(string DataPath, string UiPath, string OverlayPath, int Port, bool Headless)
-{
-    public static RuntimeOptions Parse(string[] args)
-    {
-        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var flags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        for (var index = 0; index < args.Length; index++)
-        {
-            var arg = args[index];
-            if (arg is "--headless" or "--no-browser" or "--check-appwrite" or "--appwrite-roundtrip" or "--push-to-appwrite" or "--appwrite-profiles" or "--appwrite-backups" or "--twitch-login" or "--twitch-reward" or "--twitch-listen" or "--cloud") { flags.Add(arg); continue; }
-            if (arg.StartsWith("--", StringComparison.Ordinal) && index + 1 < args.Length) values[arg] = args[++index];
-        }
-
-        var basePath = Path.GetFullPath(AppContext.BaseDirectory);
-        var uiPath = Path.GetFullPath(values.GetValueOrDefault("--ui", FindFolderContaining(
-            "index.html",
-            Path.Combine(basePath, "App"),
-            basePath,
-            Path.Combine(basePath, "..")) ?? Path.Combine(basePath, "App")));
-        // An installed (Velopack) build ships no Data beside the exe: its writable data lives in a stable
-        // per-user folder that SURVIVES updates, because the versioned program folder is replaced on every
-        // update. Portable/ZIP still finds Data next to the exe; dev finds the repo data/ via candidates.
-        var installedDataDefault = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CircuitOS", "Data");
-        var dataPath = Path.GetFullPath(values.GetValueOrDefault("--data", FindFolderContaining(
-            "components.json",
-            Path.Combine(basePath, "Data"),
-            Path.Combine(basePath, "..", "Data"),
-            Path.Combine(uiPath, "..", "Data"),
-            Path.Combine(uiPath, "..", "..", "data")) ?? installedDataDefault));
-        var overlayPath = Path.GetFullPath(values.GetValueOrDefault("--overlay", FindFolderContaining(
-            "overlay.js",
-            Path.Combine(basePath, "Overlay"),
-            Path.Combine(basePath, "..", "Overlay"),
-            Path.Combine(uiPath, "..", "Overlay"),
-            Path.Combine(uiPath, "..", "..", "overlays", "lower-quarter"),
-            Path.Combine(dataPath, "overlay")) ?? Path.Combine(dataPath, "overlay")));
-        var port = int.TryParse(values.GetValueOrDefault("--port", "8787"), out var parsedPort) && parsedPort is > 0 and < 65536
-            ? parsedPort
-            : 8787;
-        return new RuntimeOptions(dataPath, uiPath, overlayPath, port,
-            flags.Contains("--headless") || flags.Contains("--no-browser"));
-    }
-
-    private static string? FindFolderContaining(string requiredFile, params string[] candidates)
-    {
-        foreach (var candidate in candidates)
-        {
-            var fullPath = Path.GetFullPath(candidate);
-            if (File.Exists(Path.Combine(fullPath, requiredFile))) return fullPath;
-        }
-        return null;
-    }
-}
-
 internal static class Program
 {
     // Session info surfaced in /api/health so the admin panel can show the data
@@ -162,7 +107,8 @@ internal static class Program
                     catch (Exception ex) { Console.Error.WriteLine($"Tenant migration warning: {ex.Message}"); }
                 }
                 var cloudStore = new AppwriteDataStore(opts, tenant, localStore.ActiveProfileId);
-                _ = cloudStore.Exists(DataKeys.Catalog); // connectivity probe — throws if unreachable
+                if (!cloudStore.Exists(DataKeys.Catalog))
+                    throw new InvalidOperationException("The selected cloud profile has no catalog yet. Your local game is still available; open Settings to choose local storage or configure an existing cloud profile.");
                 store = cloudStore;
                 _sessionMode = "cloud";
             }
@@ -201,6 +147,7 @@ internal static class Program
         {
             var port = ResolvePort(options.Port);
             _port = port;
+            UpdateService.ConfigureRestart(options with { Port = port }, args.Contains("--cloud"));
             if (options.Headless)
                 Console.WriteLine($"Listening on http://127.0.0.1:{port}/");
             using var listener = new HttpListener();
@@ -268,10 +215,7 @@ internal static class Program
     {
         lock (_twitchRuntimeLock)
         {
-            _twitchRuntimeCancellation?.Cancel();
-            _twitchRuntimeCancellation?.Dispose();
-            _twitchRuntimeCancellation = null;
-            _twitchRuntimeTask = null;
+            StopNativeTwitch();
             if (appCancel.IsCancellationRequested) return;
 
             var linked = CancellationTokenSource.CreateLinkedTokenSource(appCancel);
@@ -291,9 +235,19 @@ internal static class Program
         lock (_twitchRuntimeLock)
         {
             _twitchRuntimeCancellation?.Cancel();
-            _twitchRuntimeCancellation?.Dispose();
-            _twitchRuntimeCancellation = null;
-            _twitchRuntimeTask = null;
+            try
+            {
+                // Cancellation stops socket reads, but a synchronous redemption may still be
+                // saving inventory. Let it finish before another listener starts or logout returns.
+                _twitchRuntimeTask?.GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException) { }
+            finally
+            {
+                _twitchRuntimeCancellation?.Dispose();
+                _twitchRuntimeCancellation = null;
+                _twitchRuntimeTask = null;
+            }
         }
     }
     private static async Task RunServerAsync(
@@ -348,7 +302,7 @@ internal static class Program
                     overlayFilePath = Path.Combine(overlayDataPath, "overlay", "index.html"),
                     profilesRoot = Path.Combine(_dataRoot, "profiles"),
                     runtime = ".NET",
-                    version = "1.0.1",
+                    version = "1.0.2",
                     mode = _sessionMode,
                     cloudError = _cloudError,
                     twitch = _sessionTwitch is null ? null : new { login = _sessionTwitch.Login, displayName = _sessionTwitch.DisplayName, userId = _sessionTwitch.UserId, expiresAt = _sessionTwitch.ExpiresAt },
@@ -356,9 +310,9 @@ internal static class Program
                 });
             else if (request.HttpMethod == "POST" && path == "/api/twitch/logout")
             {
-                try { var tokenFile = Path.Combine(_dataRoot, TwitchTokens.FileName); if (File.Exists(tokenFile)) File.Delete(tokenFile); } catch { }
-                _sessionTwitch = null;
                 StopNativeTwitch();
+                TwitchSession.ClearTokens(_dataRoot);
+                _sessionTwitch = null;
                 await SendJsonAsync(context, 200, new { ok = true });
             }
             else if (request.HttpMethod == "POST" && path == "/api/twitch/login")
@@ -421,7 +375,8 @@ internal static class Program
             else if (request.HttpMethod == "POST" && path == "/api/twitch/bot/logout")
             {
                 // Disconnect the bot chat account: replies fall back to posting as the broadcaster.
-                try { var botFile = Path.Combine(_dataRoot, TwitchTokens.BotFileName); if (File.Exists(botFile)) File.Delete(botFile); } catch { }
+                StopNativeTwitch();
+                TwitchSession.ClearTokens(_dataRoot, TwitchTokens.BotFileName);
                 _sessionTwitchBot = null;
                 RefreshNativeTwitch(service, cancel);
                 await SendJsonAsync(context, 200, new { ok = true });
@@ -776,7 +731,7 @@ internal static class Program
                 // bot" would then be a no-op. Reject clearly and discard the token we just saved.
                 if (_sessionTwitch is not null && string.Equals(tokens.UserId, _sessionTwitch.UserId, StringComparison.Ordinal))
                 {
-                    try { var f = Path.Combine(_dataRoot, TwitchTokens.BotFileName); if (File.Exists(f)) File.Delete(f); } catch { }
+                    TwitchSession.ClearTokens(_dataRoot, TwitchTokens.BotFileName);
                     return new ServiceResult(200, new JsonObject
                     {
                         ["ok"] = false,
