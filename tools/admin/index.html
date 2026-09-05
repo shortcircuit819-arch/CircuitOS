@@ -14,7 +14,7 @@
         <div>
           <div class="brand-kicker">CIRCUITOS FIRST RUN</div>
           <h1 id="wizardTitle">Build Your Collection Game</h1>
-          <p>Start blank or use the Circuit Components starter. Once setup is done, connect Twitch and you're live.</p>
+          <p>Start blank or use the Circuit Components starter. Then follow the stream setup guide to connect Twitch, configure your reward, and check the overlay.</p>
         </div>
       </header>
 
@@ -497,7 +497,7 @@ Item Three</textarea></label>
                 <h2>Twitch Tools</h2>
               </div>
             </div>
-            <p class="profile-help">Keep the Twitch page focused on things you can do: rewards, native mode, and fallback setup.</p>
+            <p class="profile-help">Connect your channel and manage its rewards. Channel-point rewards must be available on your Twitch account.</p>
             <div id="twitchUtilityList" class="twitch-utility-grid"></div>
           </article>
 
@@ -508,13 +508,24 @@ Item Three</textarea></label>
                 <h2>Reward Management</h2>
               </div>
             </div>
-            <p class="profile-help">Create, review, and eventually edit or remove the channel-point rewards CircuitOS manages for live profiles.</p>
+            <p class="profile-help">Create, review, edit, or remove rewards for Live profiles. Attached rewards created outside CircuitOS are managed in Twitch.</p>
             <div id="twitchRewardList" class="twitch-reward-list"></div>
           </article>
         </div>
       </section>
 
       <section id="overviewView" class="view active">
+        <article class="panel stream-setup-panel" aria-labelledby="streamSetupTitle">
+          <div class="panel-kicker">STREAM SETUP</div>
+          <h2 id="streamSetupTitle">Get ready to stream</h2>
+          <p class="panel-note">Work through these steps for each game. This guide does not automatically verify your OBS scene or Twitch redemptions.</p>
+          <ol class="stream-setup-list">
+            <li><div><strong>Connect Twitch</strong><p>Sign in with your broadcaster account. Refresh your login if Twitch Settings asks you to.</p></div><button type="button" class="button secondary small" data-jump-view="twitch">Connect Twitch</button></li>
+            <li><div><strong>Configure your channel-point reward</strong><p>Save your game and mark its profile Live in Profiles. In Twitch, sync or attach a reward for that profile. Check the reward name and point cost.</p></div><div class="stream-setup-actions"><button type="button" class="button secondary small" data-jump-view="profiles">Open Profiles</button><button type="button" class="button secondary small" data-jump-view="twitch">Set up reward</button></div></li>
+            <li><div><strong>Add the overlay to OBS</strong><p>Open the Overlay Editor and follow Browser Source instructions using this profile's file path. Try the preview states to check the design; these samples do not test Twitch or OBS.</p></div><button type="button" class="button secondary small" data-jump-view="overlay">Open Overlay Editor</button></li>
+            <li><div><strong>Verify a real reveal</strong><p>With CircuitOS running, ask a viewer to redeem the reward. Confirm the chat announcement, the reveal in your OBS scene, and the item in Viewer Inventory. A real redemption spends channel points and adds an item.</p></div><button type="button" class="button secondary small" data-jump-view="viewers">Check inventory</button></li>
+          </ol>
+        </article>
         <div id="stats" class="stats-grid overview-stats"></div>
 
         <article class="panel overview-action-panel">
@@ -1086,4 +1097,3 @@ Item Three</textarea></label>
   <script src="app.js"></script>
 </body>
 </html>
-

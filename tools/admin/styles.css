@@ -788,4 +788,9 @@ input.invalid { border-color: var(--danger); }
 }
 
 
-
+/* A persistent guide: completion is checked by the streamer, not inferred from previews. */
+.stream-setup-panel { margin-bottom: 20px; }
+.stream-setup-list { display: grid; gap: 16px; padding-left: 24px; }
+.stream-setup-list li { padding-left: 6px; }
+.stream-setup-list p { color: var(--muted); margin: 6px 0 10px; line-height: 1.5; }
+.stream-setup-actions { display: flex; flex-wrap: wrap; gap: 8px; }

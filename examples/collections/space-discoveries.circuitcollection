@@ -1,0 +1,145 @@
+{
+  "manifest": {
+    "format": "circuitcollection",
+    "version": "1",
+    "name": "Quiet Orbit Discoveries",
+    "collectionCount": 1,
+    "collectionKey": "quiet_orbit",
+    "collectionName": "Quiet Orbit Discoveries",
+    "circuitosVersion": "1.0.2"
+  },
+  "collections": {
+    "quiet_orbit": {
+      "displayName": "Quiet Orbit Discoveries",
+      "type": "permanent",
+      "weight": 100,
+      "salvageValue": 1,
+      "enabled": true,
+      "tiers": [
+        {
+          "id": "common",
+          "label": "Common",
+          "weight": 60
+        },
+        {
+          "id": "uncommon",
+          "label": "Uncommon",
+          "weight": 25
+        },
+        {
+          "id": "rare",
+          "label": "Rare",
+          "weight": 12
+        },
+        {
+          "id": "legendary",
+          "label": "Legendary",
+          "weight": 3
+        }
+      ],
+      "variants": [
+        {
+          "id": "radiant",
+          "label": "RADIANT",
+          "chance": 0.05
+        }
+      ],
+      "parts": [
+        {
+          "id": "orbit_iron_moon_pebble",
+          "name": "Iron Moon Pebble",
+          "tier": "common"
+        },
+        {
+          "id": "orbit_frost_ring_shard",
+          "name": "Frost Ring Shard",
+          "tier": "common"
+        },
+        {
+          "id": "orbit_dust_comet_sample",
+          "name": "Dust Comet Sample",
+          "tier": "common"
+        },
+        {
+          "id": "orbit_silent_beacon",
+          "name": "Silent Beacon",
+          "tier": "common"
+        },
+        {
+          "id": "orbit_copper_meteor_fragment",
+          "name": "Copper Meteor Fragment",
+          "tier": "common"
+        },
+        {
+          "id": "orbit_solar_sail_remnant",
+          "name": "Solar Sail Remnant",
+          "tier": "common"
+        },
+        {
+          "id": "orbit_aurora_ice_crystal",
+          "name": "Aurora Ice Crystal",
+          "tier": "uncommon"
+        },
+        {
+          "id": "orbit_whisper_nebula_map",
+          "name": "Whisper Nebula Map",
+          "tier": "uncommon"
+        },
+        {
+          "id": "orbit_tidal_glass_lens",
+          "name": "Tidal Glass Lens",
+          "tier": "uncommon"
+        },
+        {
+          "id": "orbit_echo_star_recorder",
+          "name": "Echo Star Recorder",
+          "tier": "uncommon"
+        },
+        {
+          "id": "orbit_prism_asteroid_core",
+          "name": "Prism Asteroid Core",
+          "tier": "rare"
+        },
+        {
+          "id": "orbit_gravity_bloom",
+          "name": "Gravity Bloom",
+          "tier": "rare"
+        },
+        {
+          "id": "orbit_first_light_archive",
+          "name": "First Light Archive",
+          "tier": "rare"
+        },
+        {
+          "id": "orbit_horizon_seed",
+          "name": "Horizon Seed",
+          "tier": "legendary"
+        },
+        {
+          "id": "orbit_wandering_star_compass",
+          "name": "Wandering Star Compass",
+          "tier": "legendary"
+        }
+      ]
+    }
+  },
+  "profile": {
+    "schemaVersion": 1,
+    "gameName": "Quiet Orbit Discoveries",
+    "itemSingular": "discovery",
+    "itemPlural": "discoveries",
+    "collectionSingular": "collection",
+    "collectionPlural": "collections",
+    "currencyName": "Stardust",
+    "redemptionName": "Launch a Survey Probe",
+    "commands": {
+      "inventory": "orbit",
+      "missing": "orbitmissing",
+      "duplicates": "orbitdupes",
+      "leaderboard": "orbitleaders",
+      "balance": "orbitbalance",
+      "collection": "orbitcollection",
+      "salvage": "orbitsalvage"
+    }
+  }
+}

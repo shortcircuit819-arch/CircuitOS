@@ -1,6 +1,6 @@
 # CircuitOS versioning
 
-Current stable release: **1.0.2**. Version 1.0.0 shipped August 19, 2026. Application versions and saved-data schema versions are tracked separately.
+Current stable release: **1.0.3**. Version 1.0.0 shipped August 19, 2026. Application versions and saved-data schema versions are tracked separately.
 
 ## Version format
 

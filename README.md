@@ -8,7 +8,7 @@ Viewers redeem a reward, discover an item in chat and on your stream, and build 
 
 **[Download for Windows](https://github.com/shortcircuit819-arch/CircuitOS/releases/latest)** · **[itch.io](https://shortcircuit819.itch.io/circuitos)** · **[Setup guide](docs/installation-and-updates.md)**
 
-Current application version: **1.0.2** · Windows x64 · Free under the [MIT License](LICENSE)
+Current application version: **1.0.3** · Windows x64 · Free under the [MIT License](LICENSE)
 
 ## How it works
 
@@ -21,6 +21,12 @@ flowchart LR
 ```
 
 Circuit Components, an electronics-themed collection, is included to get you started. Replace it with a theme that fits your channel.
+
+## See it in action
+
+![Sample CircuitOS reveal](docs/media/overlay-preview.png)
+
+[Watch the short demo and browse screenshots](docs/demo-kit.md) · [Try three free collection packs](examples/collections/README.md)
 
 ## Make it your game
 
@@ -53,7 +59,7 @@ Local storage is the default. Optional cloud storage requires your own Appwrite 
 - [Report a bug](https://github.com/shortcircuit819-arch/CircuitOS/issues/new?template=bug_report.yml) or [suggest a feature](https://github.com/shortcircuit819-arch/CircuitOS/issues/new?template=feature_request.yml).
 - [Installation and updates](docs/installation-and-updates.md) · [OBS setup](docs/obs-lower-quarter.md) · [Configuration editor](docs/configuration-editor.md)
 - [Collection imports](docs/collection-importer.md) · [Collection packs](docs/collection-packs.md) · [Salvage](docs/salvage.md)
-- [Latest patch notes](docs/patch-notes/1.0.2.md) · [Release history](docs/release-history.md)
+- [Latest patch notes](docs/patch-notes/v1.0.3.md) · [Release history](docs/release-history.md)
 
 Include your app version, install type, reproduction steps, and a redacted diagnostics report if useful. Do not post tokens, cloud credentials, or private viewer data.
 

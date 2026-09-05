@@ -1,0 +1,145 @@
+{
+  "manifest": {
+    "format": "circuitcollection",
+    "version": "1",
+    "name": "Cloudberry Cafe",
+    "collectionCount": 1,
+    "collectionKey": "cloudberry_cafe",
+    "collectionName": "Cloudberry Cafe",
+    "circuitosVersion": "1.0.2"
+  },
+  "collections": {
+    "cloudberry_cafe": {
+      "displayName": "Cloudberry Cafe",
+      "type": "permanent",
+      "weight": 100,
+      "salvageValue": 1,
+      "enabled": true,
+      "tiers": [
+        {
+          "id": "common",
+          "label": "Common",
+          "weight": 60
+        },
+        {
+          "id": "uncommon",
+          "label": "Uncommon",
+          "weight": 25
+        },
+        {
+          "id": "rare",
+          "label": "Rare",
+          "weight": 12
+        },
+        {
+          "id": "legendary",
+          "label": "Legendary",
+          "weight": 3
+        }
+      ],
+      "variants": [
+        {
+          "id": "golden",
+          "label": "GOLDEN",
+          "chance": 0.05
+        }
+      ],
+      "parts": [
+        {
+          "id": "cafe_honey_oat_cookie",
+          "name": "Honey Oat Cookie",
+          "tier": "common"
+        },
+        {
+          "id": "cafe_cinnamon_toast",
+          "name": "Cinnamon Toast",
+          "tier": "common"
+        },
+        {
+          "id": "cafe_vanilla_cloud_latte",
+          "name": "Vanilla Cloud Latte",
+          "tier": "common"
+        },
+        {
+          "id": "cafe_berry_pocket_pie",
+          "name": "Berry Pocket Pie",
+          "tier": "common"
+        },
+        {
+          "id": "cafe_garden_mint_tea",
+          "name": "Garden Mint Tea",
+          "tier": "common"
+        },
+        {
+          "id": "cafe_maple_breakfast_bun",
+          "name": "Maple Breakfast Bun",
+          "tier": "common"
+        },
+        {
+          "id": "cafe_lavender_shortbread",
+          "name": "Lavender Shortbread",
+          "tier": "uncommon"
+        },
+        {
+          "id": "cafe_brown_butter_scone",
+          "name": "Brown Butter Scone",
+          "tier": "uncommon"
+        },
+        {
+          "id": "cafe_peach_blossom_soda",
+          "name": "Peach Blossom Soda",
+          "tier": "uncommon"
+        },
+        {
+          "id": "cafe_moonlight_cocoa",
+          "name": "Moonlight Cocoa",
+          "tier": "uncommon"
+        },
+        {
+          "id": "cafe_rosewater_layer_cake",
+          "name": "Rosewater Layer Cake",
+          "tier": "rare"
+        },
+        {
+          "id": "cafe_caramel_cloud_sundae",
+          "name": "Caramel Cloud Sundae",
+          "tier": "rare"
+        },
+        {
+          "id": "cafe_starlit_celebration_tart",
+          "name": "Starlit Celebration Tart",
+          "tier": "rare"
+        },
+        {
+          "id": "cafe_sunrise_souffle",
+          "name": "Sunrise Souffle",
+          "tier": "legendary"
+        },
+        {
+          "id": "cafe_cloudberry_signature_cake",
+          "name": "Cloudberry Signature Cake",
+          "tier": "legendary"
+        }
+      ]
+    }
+  },
+  "profile": {
+    "schemaVersion": 1,
+    "gameName": "Cloudberry Cafe",
+    "itemSingular": "treat",
+    "itemPlural": "treats",
+    "collectionSingular": "collection",
+    "collectionPlural": "collections",
+    "currencyName": "Crumbs",
+    "redemptionName": "Visit Cloudberry Cafe",
+    "commands": {
+      "inventory": "cafe",
+      "missing": "cafemissing",
+      "duplicates": "cafedupes",
+      "leaderboard": "cafeleaders",
+      "balance": "cafebalance",
+      "collection": "cafecollection",
+      "salvage": "cafesalvage"
+    }
+  }
+}

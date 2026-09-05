@@ -65,12 +65,16 @@ first-run setup.
 
 ## Go live on Twitch
 
+After the wizard creates your game, Overview shows **Get ready to stream**. Follow its links to connect Twitch, mark the intended profile Live, configure its reward, and open the Overlay Editor. Preview states show sample visuals; they do not confirm Twitch or OBS connectivity.
+
 Open **Twitch** and connect your account. The one-time login needs no developer account or config files.
 CircuitOS creates and manages the channel-point reward, then handles redemptions, chat commands, and
 pull announcements directly through EventSub.
 
 Optionally connect a **bot chat account** on the same page so replies post from your bot instead of your
 channel account.
+
+Use the [OBS guide](obs-lower-quarter.md) to configure a Browser Source.
 
 ## Verification
 

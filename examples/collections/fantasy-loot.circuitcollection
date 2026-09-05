@@ -1,0 +1,145 @@
+{
+  "manifest": {
+    "format": "circuitcollection",
+    "version": "1",
+    "name": "Wayfarer's Cache",
+    "collectionCount": 1,
+    "collectionKey": "wayfarers_cache",
+    "collectionName": "Wayfarer's Cache",
+    "circuitosVersion": "1.0.2"
+  },
+  "collections": {
+    "wayfarers_cache": {
+      "displayName": "Wayfarer's Cache",
+      "type": "permanent",
+      "weight": 100,
+      "salvageValue": 1,
+      "enabled": true,
+      "tiers": [
+        {
+          "id": "common",
+          "label": "Common",
+          "weight": 60
+        },
+        {
+          "id": "uncommon",
+          "label": "Uncommon",
+          "weight": 25
+        },
+        {
+          "id": "rare",
+          "label": "Rare",
+          "weight": 12
+        },
+        {
+          "id": "legendary",
+          "label": "Legendary",
+          "weight": 3
+        }
+      ],
+      "variants": [
+        {
+          "id": "enchanted",
+          "label": "ENCHANTED",
+          "chance": 0.05
+        }
+      ],
+      "parts": [
+        {
+          "id": "loot_trail_lantern",
+          "name": "Trail Lantern",
+          "tier": "common"
+        },
+        {
+          "id": "loot_copper_compass",
+          "name": "Copper Compass",
+          "tier": "common"
+        },
+        {
+          "id": "loot_mossweave_pouch",
+          "name": "Mossweave Pouch",
+          "tier": "common"
+        },
+        {
+          "id": "loot_riverstone_charm",
+          "name": "Riverstone Charm",
+          "tier": "common"
+        },
+        {
+          "id": "loot_hearthsteel_dagger",
+          "name": "Hearthsteel Dagger",
+          "tier": "common"
+        },
+        {
+          "id": "loot_amber_flask",
+          "name": "Amber Flask",
+          "tier": "common"
+        },
+        {
+          "id": "loot_map_of_wandering_paths",
+          "name": "Map of Wandering Paths",
+          "tier": "uncommon"
+        },
+        {
+          "id": "loot_stormglass_vial",
+          "name": "Stormglass Vial",
+          "tier": "uncommon"
+        },
+        {
+          "id": "loot_moonthread_cloak",
+          "name": "Moonthread Cloak",
+          "tier": "uncommon"
+        },
+        {
+          "id": "loot_whispering_grimoire",
+          "name": "Whispering Grimoire",
+          "tier": "uncommon"
+        },
+        {
+          "id": "loot_sunforge_gauntlet",
+          "name": "Sunforge Gauntlet",
+          "tier": "rare"
+        },
+        {
+          "id": "loot_oathkeeper_pendant",
+          "name": "Oathkeeper Pendant",
+          "tier": "rare"
+        },
+        {
+          "id": "loot_crown_of_returning_dawn",
+          "name": "Crown of Returning Dawn",
+          "tier": "rare"
+        },
+        {
+          "id": "loot_key_to_the_quiet_sky",
+          "name": "Key to the Quiet Sky",
+          "tier": "legendary"
+        },
+        {
+          "id": "loot_everbright_seed",
+          "name": "Everbright Seed",
+          "tier": "legendary"
+        }
+      ]
+    }
+  },
+  "profile": {
+    "schemaVersion": 1,
+    "gameName": "Wayfarer's Cache",
+    "itemSingular": "treasure",
+    "itemPlural": "treasures",
+    "collectionSingular": "collection",
+    "collectionPlural": "collections",
+    "currencyName": "Embers",
+    "redemptionName": "Open a Wayfarer Cache",
+    "commands": {
+      "inventory": "loot",
+      "missing": "lootmissing",
+      "duplicates": "lootdupes",
+      "leaderboard": "lootleaders",
+      "balance": "lootbalance",
+      "collection": "lootcollection",
+      "salvage": "lootsalvage"
+    }
+  }
+}

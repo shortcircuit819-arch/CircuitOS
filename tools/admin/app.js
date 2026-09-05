@@ -376,7 +376,7 @@ async function loginTwitchBlocking() {
 }
 
 async function logoutTwitch() {
-  if (!window.confirm("Log out of Twitch? This clears your cached tokens on this PC. You'll need to log in again for cloud mode keyed to your account.")) return;
+  if (!window.confirm("Log out of Twitch? This clears your cached tokens on this PC. Log in again to resume Twitch rewards and chat.")) return;
   try {
     const response = await fetch("/api/twitch/logout", { method: "POST" });
     if (!response.ok) throw new Error("Logout failed.");
@@ -1042,8 +1042,7 @@ function renderTwitchSettings() {
   const rewards = document.getElementById("twitchRewardList");
   if (!status || !account || !utilities || !rewards) return;
 
-  const { mode, twitch } = lastSession;
-  const cloud = mode === "cloud";
+  const { twitch } = lastSession;
   const liveProfiles = (profilesData.profiles || []).filter(profile => profile.isLive || profile.active);
   const configuredReward = String(systemProfile.redemptionName || "").trim();
   const tokenExpired = twitch?.expiresAt ? new Date(twitch.expiresAt).getTime() <= Date.now() : false;
@@ -1078,7 +1077,7 @@ function renderTwitchSettings() {
   utilities.replaceChildren();
   const utilityCards = [
     { title: "Channel Rewards", detail: liveProfiles.length ? "Manage rewards below." : "Mark a profile Live first." },
-    { title: "Native Mode", detail: cloud ? "Cloud bridge is active." : "You're in local mode — redemptions and chat go live right here, no extra setup." }
+    { title: "Native Twitch", detail: "Keep CircuitOS running while streaming. Connect Twitch and sync a reward for each Live profile." }
   ];
   for (const card of utilityCards) {
     const item = element("div", "twitch-utility-card");
@@ -1531,8 +1530,8 @@ async function completeFirstRun() {
     if (!response.ok) throw new Error((result.errors || ["First-run setup failed."]).join(" "));
     closeFirstRunWizard();
     await loadConfiguration(true);
-    switchView("twitch");
-    showNotice("Setup complete! Next: connect your Twitch account to go live.", "success");
+    switchView("overview");
+    showNotice("Game created! Follow Get ready to stream to connect Twitch and check your first reveal.", "success");
   } catch (error) {
     wizardSetError(error.message);
   } finally {
@@ -5116,8 +5115,6 @@ document.addEventListener("visibilitychange", () => {
 });
 
 loadConfiguration(true).catch(error => showNotice(error.message, "error"));
-
-
 
 
 

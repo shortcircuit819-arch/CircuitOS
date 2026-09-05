@@ -5,6 +5,20 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '../admin/app.js'), 'utf8');
+test('creating a game opens the stream setup guide without claiming the channel is live', async () => {
+  let destination, notice;
+  const context = vm.createContext({
+    document: { getElementById: () => ({}) },
+    wizardSetError() {}, buildWizardProfile: () => ({}), buildWizardConfiguration: () => ({}),
+    fetch: async () => ({ ok: true, json: async () => ({}) }),
+    closeFirstRunWizard() {}, loadConfiguration: async () => {},
+    switchView: view => { destination = view; }, showNotice: text => { notice = text; }
+  });
+  run(context, 'async function completeFirstRun(', 'function normalizeModel(');
+  await vm.runInContext('completeFirstRun()', context);
+  assert.equal(destination, 'overview');
+  assert.match(notice, /Get ready to stream/);
+});
 function section(start, end) {
   const first = source.indexOf(start);
   const last = source.indexOf(end, first + start.length);
