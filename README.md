@@ -65,7 +65,9 @@ Include your app version, install type, reproduction steps, and a redacted diagn
 
 ## What's next
 
-The 1.x direction includes hosted cloud, deeper streamer analytics, achievements, online viewer profiles, a Twitch extension, module discovery, and trading. These are planned areas, not available features or promised release dates. The proposed 2.0 direction is a Shop and Currency Workshop.
+Achievements and badges are the next feature priority, followed by deeper streamer analytics. Trading and gifting, economy transaction history, and purchase safeguards build toward the proposed 2.0 Shop and Currency Workshop. See the [roadmap](docs/roadmap.md) for the planned sequence; these are not available features or promised release dates.
+
+CircuitOS remains local-first, with optional bring-your-own Appwrite storage. Hosted cloud, online viewer profiles, and an online module marketplace are parked. A Twitch extension remains a stretch goal.
 
 ## Privacy
 
