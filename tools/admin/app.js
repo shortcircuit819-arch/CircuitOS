@@ -6,6 +6,7 @@ const viewTitles = {
   economy: "Scrap Economy",
   viewers: "Viewer Inventory",
   roles: "Discord Role Awards",
+  achievements: "Achievements",
   ratelab: "Rate Lab",
   patchnotes: "Patch Notes",
   backups: "Backup & Recovery",
@@ -44,7 +45,8 @@ const defaultSystemProfile = {
     leaderboard: "leaderboard",
     balance: "scrap",
     collection: "collection",
-    salvage: "salvage"
+    salvage: "salvage",
+    badges: "badges"
   },
   messages: {
     redeemSuccess: "⚡ Scan complete: @{viewer} found {item} [{collection}]. Progress: {owned}/{total}.{duplicateText}",
@@ -118,6 +120,11 @@ let boost = { enabled: false, displayName: "Featured Boost", collectionMultiplie
 let analytics = { summary: {}, collections: [], viewers: [] };
 let roleAwards = { roleNames: {}, awards: [], summary: { pending: 0, assigned: 0, total: 0 } };
 let roleNamesDirty = false;
+let achievementsData = { settings: { enabled: true, collectionBadges: true, announce: true, overlay: true, defaultReward: 0, definitions: [] }, collections: [] };
+let achievementsDirty = false;
+let achievementsSaving = false;
+let achievementSavedIds = new Set();
+let viewerAchievementsOpen = false;
 let selectedViewerId = "";
 let lastSimulation = null;
 let baselineModel = null;
@@ -188,7 +195,7 @@ function markClean() {
 // endpoints (/api/profile, /api/overlay-config) behind their own Save buttons, so the topbar Save does
 // NOT cover their edits: disable it on those pages so a click there isn't mistaken for saving them.
 // Exception: if the catalog itself is dirty, keep it live so those edits can still be flushed anywhere.
-const OWN_SAVE_VIEWS = new Set(["branding", "appearance", "messages", "overlay"]);
+const OWN_SAVE_VIEWS = new Set(["branding", "appearance", "messages", "overlay", "achievements"]);
 function updateTopbarSave() {
   const view = document.querySelector(".view.active")?.id?.replace(/View$/, "") || "overview";
   saveButton.disabled = OWN_SAVE_VIEWS.has(view) && !dirty;
@@ -761,7 +768,8 @@ function renderProfile() {
     leaderboard: "Leaderboard",
     balance: "Balance",
     collection: "Collection detail",
-    salvage: "Salvage"
+    salvage: "Salvage",
+    badges: "Achievements / badges"
   };
   const commandGrid = document.getElementById("profileCommands");
   commandGrid.replaceChildren();
@@ -1350,7 +1358,8 @@ function blankWizardProfile() {
     leaderboard: "leaderboard",
     balance: "balance",
     collection: "collection",
-    salvage: "salvage"
+    salvage: "salvage",
+    badges: "badges"
   };
   return profile;
 }
@@ -1598,16 +1607,17 @@ function serializeModel() {
 }
 
 async function loadConfiguration(force = false) {
-  if ((dirty || profileDirty || overlayDirty || roleNamesDirty) && !force && !window.confirm("Discard unsaved editor changes and refresh all live data?")) return false;
+  if ((dirty || profileDirty || overlayDirty || roleNamesDirty || achievementsDirty) && !force && !window.confirm("Discard unsaved editor changes and refresh all live data?")) return false;
   clearNotice();
-  const [configResponse, analyticsResponse, rolesResponse, backupsResponse, profileResponse, healthResponse, overlayConfigResponse] = await Promise.all([
+  const [configResponse, analyticsResponse, rolesResponse, backupsResponse, profileResponse, healthResponse, overlayConfigResponse, achievementsResponse] = await Promise.all([
     fetch("/api/config", { cache: "no-store" }),
     fetch("/api/analytics", { cache: "no-store" }),
     fetch("/api/roles", { cache: "no-store" }),
     fetch("/api/backups", { cache: "no-store" }),
     fetch("/api/profile", { cache: "no-store" }),
     fetch("/api/health", { cache: "no-store" }),
-    fetch("/api/overlay-config", { cache: "no-store" })
+    fetch("/api/overlay-config", { cache: "no-store" }),
+    fetch("/api/achievements", { cache: "no-store" })
   ]);
   if (!configResponse.ok) throw new Error("Could not load live configuration.");
   if (!analyticsResponse.ok) throw new Error("Could not load inventory analytics.");
@@ -1615,6 +1625,10 @@ async function loadConfiguration(force = false) {
   if (!backupsResponse.ok) throw new Error("Could not load backup history.");
   if (!profileResponse.ok) throw new Error("Could not load the system profile.");
   if (!healthResponse.ok) throw new Error("Could not load the CircuitOS runtime version.");
+  if (!achievementsResponse.ok) throw new Error("Could not load achievements.");
+  achievementsData = await achievementsResponse.json();
+  achievementsDirty = false;
+  achievementSavedIds = new Set((achievementsData.settings.definitions || []).map(definition => definition.id));
   const payload = await configResponse.json();
   analytics = await analyticsResponse.json();
   roleAwards = await rolesResponse.json();
@@ -2006,6 +2020,7 @@ async function testAppwriteConnection() {
 }
 
 function renderViewOnDemand(view) {
+  if (view === "achievements") renderAchievements();
   if (view === "viewers") renderViewerInspector();
   if (view === "collections") renderCollectionList("permanent");
   if (view === "events") renderCollectionList("event");
@@ -2154,6 +2169,7 @@ function closeProfileSwitchConfirm() {
 async function confirmProfileSwitch() {
   const id = pendingSwitchId;
   if (!id) return;
+  if (achievementsSaving) { showNotice("Wait for the achievement save or retry to finish before switching profiles.", "error"); return; }
   closeProfileSwitchConfirm();
   try {
     const response = await fetch("/api/profiles", {
@@ -2584,6 +2600,205 @@ function renderEconomy() {
   if (!ranked.length) leaders.append(element("div", "empty-state", "No viewer balances yet."));
 }
 
+function validateAchievementSettings(settings) {
+  const errors = [];
+  const integerIn = (value, min, max) => Number.isInteger(value) && value >= min && value <= max;
+  if (!integerIn(settings.defaultReward, 0, 1000000)) errors.push("Default reward must be an integer from 0 to 1,000,000.");
+  const definitions = settings.definitions || [];
+  if (definitions.length > 100) errors.push("Use at most 100 custom achievements.");
+  const ids = new Set();
+  for (const definition of definitions) {
+    const label = definition.name || definition.id || "Achievement";
+    if (!/^[a-z0-9_-]{1,64}$/.test(definition.id || "") || definition.id.startsWith("builtin")) errors.push(`${label}: ID must contain 1–64 lowercase letters, numbers, underscores or hyphens, and cannot start with builtin.`);
+    if (ids.has(definition.id)) errors.push(`${label}: IDs must be unique.`);
+    ids.add(definition.id);
+    if (!String(definition.name || "").trim() || definition.name.length > 80) errors.push(`${label}: name is required (up to 80 characters).`);
+    if (String(definition.description || "").length > 300) errors.push(`${label}: description must be at most 300 characters.`);
+    if (!["collectionPercent", "uniqueItems", "completedCollections", "lifetimePulls"].includes(definition.metric)) errors.push(`${label}: choose a valid goal.`);
+    if (definition.metric === "collectionPercent" && !definition.collectionKey) errors.push(`${label}: select a collection.`);
+    const maximum = definition.metric === "collectionPercent" ? 100 : 1000000000;
+    if (!integerIn(definition.threshold, 1, maximum)) errors.push(`${label}: target must be an integer from 1 to ${maximum.toLocaleString()}.`);
+    if (!integerIn(definition.reward, 0, 1000000)) errors.push(`${label}: reward must be an integer from 0 to 1,000,000.`);
+  }
+  return errors;
+}
+
+function updateAchievementStatus() {
+  const errors = validateAchievementSettings(achievementsData.settings);
+  const status = document.getElementById("achievementStatus");
+  status.textContent = errors.length ? errors.join(" ") : achievementsSaving ? "Saving achievements…" : achievementsDirty ? "Unsaved achievement changes." : "Achievements saved.";
+  status.className = `notice ${errors.length ? "error" : ""}`;
+  document.getElementById("saveAchievementsButton").disabled = achievementsSaving || errors.length > 0 || !achievementsDirty;
+  document.getElementById("addAchievementButton").disabled = achievementsData.settings.definitions.length >= 100 || achievementsSaving;
+  const backfillErrors = achievementsData.backfill?.errors || [];
+  const backfillStatus = document.getElementById("achievementBackfillErrors");
+  backfillStatus.hidden = !backfillErrors.length;
+  backfillStatus.textContent = backfillErrors.map(item => `${item.profileId || "Profile"}: ${item.error || "Historical awards could not be checked."}`).join(" ");
+  const retry = document.getElementById("retryAchievementBackfillButton");
+  retry.hidden = !backfillErrors.length;
+  retry.disabled = achievementsSaving || achievementsDirty;
+}
+
+function renderAchievements() {
+  const settings = achievementsData.settings;
+  const changed = () => { achievementsDirty = true; updateAchievementStatus(); };
+  const field = (labelText, type, value, onInput, options = {}) => {
+    const label = element("label", type === "checkbox" ? "achievement-toggle" : "field");
+    label.append(element("span", "", labelText));
+    const input = document.createElement("input");
+    input.type = type;
+    if (type === "checkbox") input.checked = value;
+    else input.value = value;
+    Object.assign(input, options);
+    input.addEventListener("input", () => {
+      onInput(type === "checkbox" ? input.checked : type === "number" ? (input.value === "" ? NaN : Number(input.value)) : input.value);
+      changed();
+    });
+    label.append(input);
+    return label;
+  };
+  const settingsPanel = document.getElementById("achievementSettings");
+  settingsPanel.replaceChildren();
+  for (const [key, label] of [["enabled", "Enable achievements"], ["collectionBadges", "Automatic collection badges"], ["announce", "Announce new awards in chat"], ["overlay", "Celebrate new awards on the overlay"]]) {
+    settingsPanel.append(field(label, "checkbox", settings[key], value => { settings[key] = value; }));
+  }
+  settingsPanel.append(field(`Automatic badge reward (${systemProfile.currencyName})`, "number", settings.defaultReward, value => { settings.defaultReward = value; }, { min: 0, max: 1000000, step: 1 }));
+  const list = document.getElementById("achievementDefinitions");
+  list.replaceChildren();
+  for (const definition of settings.definitions) {
+    const card = element("fieldset", "achievement-definition");
+    card.append(element("legend", "", definition.name || "New achievement"));
+    const grid = element("div", "achievement-field-grid");
+    grid.append(field("Stable ID", "text", definition.id, value => { definition.id = value; }, { maxLength: 64, readOnly: achievementSavedIds.has(definition.id), disabled: achievementsSaving }));
+    grid.append(field("Name", "text", definition.name, value => { definition.name = value; }, { maxLength: 80 }));
+    grid.append(field("Description", "text", definition.description || "", value => { definition.description = value; }, { maxLength: 300 }));
+    const metricLabel = element("label", "field");
+    metricLabel.append(element("span", "", "Goal"));
+    const metric = document.createElement("select");
+    metric.setAttribute("aria-label", "Goal");
+    for (const [key, name] of [["collectionPercent", "Collection completion (%)"], ["uniqueItems", "Unique items owned"], ["completedCollections", "Completed collections"], ["lifetimePulls", "Lifetime pulls (since tracking began)"]]) {
+      const option = element("option", "", name);
+      option.value = key;
+      metric.append(option);
+    }
+    metric.value = definition.metric;
+    metric.addEventListener("change", () => {
+      definition.metric = metric.value;
+      if (!["collectionPercent", "uniqueItems"].includes(metric.value)) definition.collectionKey = "";
+      changed(); renderAchievements();
+    });
+    metricLabel.append(metric);
+    grid.append(metricLabel);
+    if (["collectionPercent", "uniqueItems"].includes(definition.metric)) {
+      const label = element("label", "field");
+      label.append(element("span", "", "Collection"));
+      const select = document.createElement("select");
+      select.setAttribute("aria-label", "Collection");
+      const empty = element("option", "", definition.metric === "uniqueItems" ? "All collections" : "Choose a collection");
+      empty.value = "";
+      select.append(empty);
+      const available = achievementsData.collections || [];
+      if (definition.collectionKey && !available.some(item => item.key === definition.collectionKey)) {
+        const missing = element("option", "", `${definition.collectionKey} (unavailable)`);
+        missing.value = definition.collectionKey;
+        select.append(missing);
+      }
+      for (const collection of available) {
+        const option = element("option", "", collection.displayName);
+        option.value = collection.key;
+        select.append(option);
+      }
+      select.value = definition.collectionKey || "";
+      select.addEventListener("change", () => { definition.collectionKey = select.value; changed(); });
+      label.append(select); grid.append(label);
+    }
+    grid.append(field("Target", "number", definition.threshold, value => { definition.threshold = value; }, { min: 1, max: definition.metric === "collectionPercent" ? 100 : 1000000000, step: 1 }));
+    grid.append(field(`Reward (${systemProfile.currencyName})`, "number", definition.reward, value => { definition.reward = value; }, { min: 0, max: 1000000, step: 1 }));
+    grid.append(field("Enabled", "checkbox", definition.enabled, value => { definition.enabled = value; }));
+    card.append(grid);
+    const remove = element("button", "button danger small", "Remove goal");
+    remove.type = "button";
+    remove.disabled = achievementsSaving;
+    remove.addEventListener("click", () => {
+      settings.definitions = settings.definitions.filter(item => item !== definition);
+      changed(); renderAchievements();
+    });
+    card.append(remove);
+    list.append(card);
+  }
+  if (!settings.definitions.length) list.append(element("p", "profile-help", "No custom goals yet. Automatic collection badges can run on their own."));
+  updateAchievementStatus();
+}
+
+async function refreshAchievementAnalytics(profileId, settings) {
+  const response = await fetch("/api/analytics", { cache: "no-store" });
+  if (!response.ok) throw new Error("Awards were checked, but viewer totals could not refresh. Refresh live data to see the latest awards.");
+  const latest = await response.json();
+  if (profilesData.activeProfileId !== profileId || achievementsData.settings !== settings) return;
+  analytics = latest;
+  if (!selectedViewerId || !analytics.viewers.some(viewer => viewer.id === selectedViewerId)) selectedViewerId = analytics.viewers[0]?.id || "";
+  renderOverview();
+  renderEconomy();
+  renderViewerInspector();
+}
+
+async function saveAchievements() {
+  if (achievementsSaving) return;
+  const errors = validateAchievementSettings(achievementsData.settings);
+  if (errors.length) { updateAchievementStatus(); return; }
+  const submitted = JSON.stringify(achievementsData.settings);
+  const submittedSettings = achievementsData.settings;
+  const submittedProfile = profilesData.activeProfileId;
+  achievementsSaving = true;
+  renderAchievements();
+  try {
+    const response = await fetch("/api/achievements", { method: "POST", headers: { "Content-Type": "application/json" }, body: submitted });
+    const result = await response.json();
+    if (!response.ok || result.ok === false) throw new Error((result.errors || [result.error || "Could not save achievements."]).join(" "));
+    if (profilesData.activeProfileId !== submittedProfile || achievementsData.settings !== submittedSettings) return;
+    if (result.backfill) achievementsData.backfill = result.backfill;
+    achievementSavedIds = new Set([...achievementSavedIds, ...JSON.parse(submitted).definitions.map(definition => definition.id)]);
+    achievementsDirty = JSON.stringify(achievementsData.settings) !== submitted;
+    await refreshAchievementAnalytics(submittedProfile, submittedSettings);
+    if (profilesData.activeProfileId !== submittedProfile || achievementsData.settings !== submittedSettings) return;
+    const backfillFailed = result.backfill?.errors?.length > 0;
+    showNotice(backfillFailed ? "Settings saved. Some historical awards could not be checked; use Retry in Achievements." : achievementsDirty ? "Achievements saved. Newer edits are still unsaved." : "Achievements saved.", backfillFailed ? "error" : "success");
+  } catch (error) {
+    showNotice(error.message, "error");
+  } finally {
+    achievementsSaving = false;
+    renderAchievements();
+  }
+}
+
+function renderViewerAchievements(viewer, detail) {
+  const section = element("details", "viewer-achievements");
+  const achievements = [...(viewer.achievements || [])].sort((a, b) => Number(Boolean(b.earned)) - Number(Boolean(a.earned)));
+  section.append(element("summary", "", `Achievements · ${achievements.filter(achievement => achievement.earned).length} earned`));
+  section.open = viewerAchievementsOpen;
+  section.addEventListener("toggle", () => { viewerAchievementsOpen = section.open; });
+  const dateText = value => {
+    const date = new Date(value);
+    return value && Number.isFinite(date.getTime()) ? date.toLocaleDateString() : "date unavailable";
+  };
+  section.append(element("p", "profile-help", `${Number(viewer.lifetimePulls || 0).toLocaleString()} tracked pulls${viewer.trackingStartedAtUtc ? ` since ${dateText(viewer.trackingStartedAtUtc)}` : "; tracking has not started"}. Earlier pulls cannot be reconstructed from current inventory.`));
+  const grid = element("div", "viewer-achievement-grid");
+  for (const achievement of achievements) {
+    const card = element("div", `viewer-achievement ${achievement.earned ? "earned" : ""}`);
+    card.append(element("strong", "", achievement.name));
+    if (achievement.description) card.append(element("p", "", achievement.description));
+    card.append(element("span", "", achievement.earned ? "Earned" : `${Number(achievement.current || 0).toLocaleString()} / ${Number(achievement.target || 0).toLocaleString()}`));
+    if (achievement.reward > 0) card.append(element("span", "", `${Number(achievement.reward).toLocaleString()} ${systemProfile.currencyName} reward`));
+    if (achievement.earned) card.append(element("small", "", achievement.backfilled
+      ? `Historical award — recorded ${dateText(achievement.recordedAtUtc)}; original earning date unknown.`
+      : `Earned ${dateText(achievement.earnedAtUtc || achievement.recordedAtUtc)}`));
+    grid.append(card);
+  }
+  section.append(grid);
+  if (!viewer.achievements?.length) section.append(element("p", "profile-help", "No achievement progress available yet."));
+  detail.append(section);
+}
+
 function renderViewerInspector() {
   const search = document.getElementById("viewerSearch");
   const query = search.value.trim().toLowerCase();
@@ -2637,6 +2852,7 @@ function renderViewerDetail(viewer) {
     metricGrid.append(metric);
   }
   detail.append(metricGrid);
+  renderViewerAchievements(viewer, detail);
 
   const collectionList = element("div", "viewer-collections");
   for (const collection of viewer.collections || []) {
@@ -5028,6 +5244,34 @@ document.getElementById("patchExtra").addEventListener("input", renderPatchNotes
 document.getElementById("copyPatchButton").addEventListener("click", copyPatchNotes);
 document.getElementById("markPublishedButton").addEventListener("click", markPatchPublished);
 document.getElementById("saveRoleNamesButton").addEventListener("click", saveRoleNames);
+document.getElementById("saveAchievementsButton").addEventListener("click", saveAchievements);
+document.getElementById("retryAchievementBackfillButton").addEventListener("click", async () => {
+  if (achievementsSaving || achievementsDirty) return;
+  const submittedProfile = profilesData.activeProfileId;
+  const submittedSettings = achievementsData.settings;
+  achievementsSaving = true;
+  updateAchievementStatus();
+  try {
+    const response = await fetch("/api/achievements/backfill", { method: "POST" });
+    const result = await response.json();
+    if (!response.ok) throw new Error((result.errors || [result.error || "Historical award retry failed."]).map(item => typeof item === "string" ? item : item.error).join(" "));
+    if (profilesData.activeProfileId !== submittedProfile || achievementsData.settings !== submittedSettings) return;
+    achievementsData.backfill = result.backfill || result;
+    await refreshAchievementAnalytics(submittedProfile, submittedSettings);
+    if (profilesData.activeProfileId !== submittedProfile || achievementsData.settings !== submittedSettings) return;
+    showNotice(achievementsData.backfill.errors?.length ? "Some historical awards still need attention. See the errors in Achievements." : "Historical awards checked for all profiles.", achievementsData.backfill.errors?.length ? "error" : "success");
+  } catch (error) { showNotice(error.message, "error"); }
+  finally { achievementsSaving = false; updateAchievementStatus(); }
+});
+document.getElementById("addAchievementButton").addEventListener("click", () => {
+  const definitions = achievementsData.settings.definitions;
+  if (definitions.length >= 100) return;
+  let number = 1;
+  while (definitions.some(item => item.id === `goal-${number}`) || achievementSavedIds.has(`goal-${number}`)) number++;
+  definitions.push({ id: `goal-${number}`, name: "New achievement", description: "", metric: "uniqueItems", collectionKey: "", threshold: 10, reward: 0, enabled: true });
+  achievementsDirty = true;
+  renderAchievements();
+});
 document.getElementById("backupFilter").addEventListener("change", renderBackups);
 document.getElementById("refreshBackupsButton").addEventListener("click", () => refreshBackupIndex().catch(error => showNotice(error.message, "error")));
 document.getElementById("downloadBackupButton").addEventListener("click", downloadSelectedBackup);
@@ -5118,7 +5362,7 @@ document.querySelectorAll("[data-preview-state]").forEach(btn => {
 window.addEventListener("resize", scaleOverlayPreview);
 
 window.addEventListener("beforeunload", event => {
-  if (!dirty && !profileDirty && !overlayDirty && !roleNamesDirty) return;
+  if (!dirty && !profileDirty && !overlayDirty && !roleNamesDirty && !achievementsDirty) return;
   event.preventDefault();
   event.returnValue = "";
 });
@@ -5136,5 +5380,3 @@ document.addEventListener("visibilitychange", () => {
 
 initializeStreamSetupGuide();
 loadConfiguration(true).catch(error => showNotice(error.message, "error"));
-
-

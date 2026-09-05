@@ -6,6 +6,7 @@ const statusBadge = document.getElementById("statusBadge");
 const progressText = document.getElementById("progressText");
 const progressBar = document.getElementById("progressBar");
 const tags = document.getElementById("tags");
+const achievementStack = document.getElementById("achievementStack");
 
 const previewMode = new URLSearchParams(window.location.search).get("preview") === "1";
 let lastUpdate = "";
@@ -51,6 +52,7 @@ function makeDummyState(kind) {
   if (kind === "rare") return { ...base, partName: "Rare Item", rareLabel: "RARE PULL", tierLabel: "RARE" };
   if (kind === "complete") return { ...base, partName: "Final Item", ownedCount: 100, newlyCompleted: true };
   if (kind === "duplicate") return { ...base, quantity: 3, isDuplicate: true };
+  if (kind === "achievement") return { ...base, achievements: [{ id: "first-ten", name: "Collector's Spark", description: "Collect 10 unique items", reward: 25 }, { id: "halfway", name: "Halfway There", description: "Reach 50% of a collection", reward: 10 }] };
   if (kind === "normal") return { ...base, variantLabels: ["SHINY"], tierLabel: "COMMON" };
   return base;
 }
@@ -256,6 +258,34 @@ function scheduleHide(visibleUntilUtc) {
   hideTimer = window.setTimeout(hideTracker, remaining);
 }
 
+function renderAchievementStack(awards) {
+  achievementStack.replaceChildren();
+  const valid = Array.isArray(awards) ? awards.filter(award => award && typeof award.name === "string" && award.name.trim()) : [];
+  achievementStack.hidden = valid.length === 0;
+  for (const award of valid.slice(0, 3)) {
+    const card = document.createElement("div");
+    card.className = "achievement-celebration";
+    const title = document.createElement("strong");
+    title.textContent = award.name.slice(0, 100);
+    const description = document.createElement("span");
+    description.textContent = String(award.description || "Achievement unlocked").slice(0, 300);
+    card.append(title, description);
+    const reward = Number(award.reward);
+    if (Number.isFinite(reward) && reward > 0) {
+      const bonus = document.createElement("small");
+      bonus.textContent = `+${Math.min(1000000, Math.floor(reward)).toLocaleString()} reward`;
+      card.append(bonus);
+    }
+    achievementStack.append(card);
+  }
+  if (valid.length > 3) {
+    const more = document.createElement("small");
+    more.className = "achievement-more";
+    more.textContent = `+${valid.length - 3} more achievements unlocked`;
+    achievementStack.append(more);
+  }
+}
+
 function renderState(state) {
   if (overlayConfig?.enabled === false) { hideTracker(); return; }
   const updatedAt = String(state.updatedAtUtc || "");
@@ -299,6 +329,7 @@ function renderState(state) {
   if (tierLabel && !isRare) addTag(tierLabel);
   if (state.featuredBoost) addTag(String(state.featuredBoost).toUpperCase());
   if (isDuplicate && (isRare || isComplete)) addTag(`DUPLICATE x${quantity}`);
+  renderAchievementStack(state.achievements);
 
   const activeStateName = isRare ? "rare" : isComplete ? "complete" : isDuplicate ? "duplicate" : "normal";
   applyStateOverrides(activeStateName, overlayConfig || defaultOverlayConfig);

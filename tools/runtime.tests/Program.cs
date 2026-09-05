@@ -111,6 +111,8 @@ try
     // load (the plaintext window closes on this launch), and an already-encrypted file is never rewritten.
     TestTwitchTokenReEncryptOnLoad();
     ReviewRegressionTests.Run();
+    AchievementTests.Run();
+    AchievementIntegrationTests.Run();
 
     Console.WriteLine("Smoke tests passed: first run is safe, the pull + redemption + command engines behave, collection packs round-trip, profiles survive missing metadata, and the Appwrite + Twitch config loaders behave.");
     return 0;
@@ -668,6 +670,7 @@ static void TestRuntimeDispatch(CircuitService service, IDataStore store, string
     commands["balance"] = "scrap2";
     commands["collection"] = "collection2";
     commands["salvage"] = "salvage2";
+    commands["badges"] = "badges2";
     secondProfile["gameName"] = "Second Game";
     secondProfile["redemptionName"] = "Second Game Reward";
 

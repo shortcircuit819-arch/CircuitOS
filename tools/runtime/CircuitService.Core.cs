@@ -16,7 +16,7 @@ internal sealed partial class CircuitService
     ];
 
     private static readonly string[] CommandFields =
-        ["inventory", "missing", "duplicates", "leaderboard", "balance", "collection", "salvage"];
+        ["inventory", "missing", "duplicates", "leaderboard", "balance", "collection", "salvage", "badges"];
 
     private static readonly string[] ColorFields =
         ["background", "panel", "panelAlt", "line", "accent", "text", "muted"];
@@ -110,7 +110,7 @@ internal sealed partial class CircuitService
         {
             ["inventory"] = "components", ["missing"] = "missing", ["duplicates"] = "dupes",
             ["leaderboard"] = "leaderboard", ["balance"] = "scrap",
-            ["collection"] = "collection", ["salvage"] = "salvage"
+            ["collection"] = "collection", ["salvage"] = "salvage", ["badges"] = "badges"
         },
         ["messages"] = new JsonObject
         {
@@ -128,6 +128,7 @@ internal sealed partial class CircuitService
             ["salvageSuccess"] = "@{viewer} salvaged {count} extra {itemWord} for {earned} {currency}. Balance: {balance}.",
             ["variantPull"] = ""
         },
+        ["achievements"] = AchievementEngine.DefaultSettings(),
         ["redeemCooldownSeconds"] = 120,
         ["redeemDupProtectionTurns"] = 0,
         ["redemptionCost"] = 100,
@@ -147,6 +148,7 @@ internal sealed partial class CircuitService
     {
         var normalized = DefaultProfile();
         if (incoming is null) return normalized;
+        if (incoming.ContainsKey("achievements")) normalized["achievements"] = incoming["achievements"]?.DeepClone();
         foreach (var field in ProfileTextFields)
             if (incoming[field] is not null) normalized[field] = JsonUtil.Clone(incoming[field]);
         foreach (var field in ColorFields)
@@ -208,6 +210,12 @@ internal sealed partial class CircuitService
     {
         var errors = new List<string>();
         if (profile is null) return ["System profile is required."];
+        if (profile.ContainsKey("achievements"))
+        {
+            if (profile["achievements"] is not JsonObject achievementSettings)
+                errors.Add("Achievement settings must be an object.");
+            else errors.AddRange(AchievementEngine.ValidateStoredSettings(achievementSettings, new JsonObject()));
+        }
         if (JsonUtil.Long(profile, "schemaVersion") != 1) errors.Add("System profile schemaVersion must be 1.");
         foreach (var field in ProfileTextFields)
         {
@@ -267,16 +275,23 @@ internal sealed partial class CircuitService
 
     public ServiceResult SaveSystemProfile(JsonObject requested)
     {
-        var profile = NormalizeProfile(requested);
-        var errors = ValidateProfile(profile);
-        // Guard chat-command collisions only when the edited profile is itself live; drafts save freely.
-        if (IsProfileLive(_store.ActiveProfileId)) errors.AddRange(LiveProfileCollisions(profile, _store.ActiveProfileId));
-        if (errors.Count > 0) return Error(errors);
-        var backup = _store.WriteAtomic(DataKeys.Profile, profile, "system-profile", Timestamp());
-        return Ok(new JsonObject
+        var profileId = _store.ActiveProfileId;
+        lock (InventoryLock(profileId))
         {
-            ["ok"] = true, ["savedAtUtc"] = DateTime.UtcNow.ToString("O"), ["backup"] = backup
+            var profile = NormalizeProfile(requested);
+            // Achievement settings have a dedicated validated save/backfill endpoint. A stale general
+            // profile editor must not roll them back after a separate achievements save.
+            profile["achievements"] = AchievementSettings(_store.ReadProfileDataStrict(profileId, DataKeys.Profile));
+            var errors = ValidateProfile(profile);
+            // Guard chat-command collisions only when the edited profile is itself live; drafts save freely.
+            if (IsProfileLive(profileId)) errors.AddRange(LiveProfileCollisions(profile, profileId));
+            if (errors.Count > 0) return Error(errors);
+            var backup = _store.ForProfile(profileId).WriteAtomic(DataKeys.Profile, profile, "system-profile", Timestamp());
+            return Ok(new JsonObject
+            {
+                ["ok"] = true, ["savedAtUtc"] = DateTime.UtcNow.ToString("O"), ["backup"] = backup
         });
+        }
     }
 
     // Per-viewer redeem cooldown, keyed "profileId:viewerId" -> last redeem time. In-memory (resets
@@ -373,6 +388,7 @@ internal sealed partial class CircuitService
                     "missing" => CommandEngine.Missing(catalog, inventory, ctx, viewerId, viewerName, now),
                     "duplicates" => CommandEngine.Duplicates(catalog, inventory, ctx, viewerId, viewerName, now),
                     "balance" => [CommandEngine.Balance(inventory, ctx, viewerId, viewerName)],
+                    "badges" => BadgeMessages(inventory, viewerId, viewerName, JsonUtil.String(request, "arg")),
                     "collection" => CommandEngine.CollectionDetail(catalog, inventory, ctx, viewerId, viewerName, JsonUtil.String(request, "arg"), now),
                     "leaderboard" => CommandEngine.Leaderboard(catalog, inventory, ctx, viewerId, viewerName, JsonUtil.String(request, "arg"), now),
                     _ => ["Unsupported command."]
@@ -411,10 +427,21 @@ internal sealed partial class CircuitService
             // Dup protection from the profile (redeemDupProtectionTurns), not the request.
             var dupProtectionTurns = JsonUtil.Long(profile, "redeemDupProtectionTurns");
             RedemptionResult redemption;
+            JsonArray achievementAwards;
+            JsonObject achievementSettings;
             lock (InventoryLock(profileId))
             {
                 // Re-read the inventory INSIDE the lock so a concurrent pull or admin edit can't be lost.
                 var live = _store.ReadProfileDataStrict(profileId, DataKeys.Inventory) ?? new JsonObject();
+                achievementSettings = AchievementSettings(_store.ReadProfileDataStrict(profileId, DataKeys.Profile));
+                if (live.ContainsKey(viewerId) && live[viewerId] is not JsonObject)
+                    throw new InvalidDataException("Existing viewer record must be an object.");
+                // Reconcile old evidence before this pull so only newly reached milestones celebrate.
+                if (live[viewerId] is JsonObject existingViewer)
+                {
+                    EnsureAchievementStats(existingViewer, now);
+                    AchievementEngine.Evaluate(catalog, existingViewer, achievementSettings, now, true);
+                }
                 redemption = RedemptionEngine.ApplyRedemption(
                     catalog,
                     boost is not null ? boost : null,
@@ -424,14 +451,25 @@ internal sealed partial class CircuitService
                     now,
                     rng,
                     dupProtectionTurns > 0 ? (int)dupProtectionTurns : 0);
+                var achievementViewer = (JsonObject)live[viewerId]!;
+                var stats = EnsureAchievementStats(achievementViewer, now);
+                stats["lifetimePulls"] = checked(JsonUtil.Long(stats, "lifetimePulls") + 1);
+                achievementAwards = AchievementEngine.Evaluate(catalog, achievementViewer, achievementSettings, now, false);
                 // A remote write can commit and then time out. The Twitch caller must distinguish
                 // failures before this point from an ambiguous/committed inventory write.
                 onInventoryWriteStarted?.Invoke();
                 WriteProfileData(profileId, DataKeys.Inventory, live);
             }
-            WriteOverlayState(profileId, redemption, viewerName, now);
+            WriteOverlayState(profileId, redemption, viewerName, now,
+                JsonUtil.Bool(achievementSettings, "overlay") ? achievementAwards : new JsonArray());
             if (cooldownSeconds > 0 && !string.IsNullOrWhiteSpace(viewerId)) _lastRedeem[cooldownKey] = now;
             var announcements = BuildRedeemAnnouncements(messages, redemption, viewerName);
+            if (JsonUtil.Bool(achievementSettings, "announce") && achievementAwards.Count > 0)
+            {
+                var awardedNames = achievementAwards.OfType<JsonObject>().Take(3).Select(a => JsonUtil.String(a, "name"));
+                var extra = achievementAwards.Count > 3 ? $" (+{achievementAwards.Count - 3} more)" : "";
+                announcements.Add($"🏅 @{viewerName} earned: {string.Join(" | ", awardedNames)}{extra}");
+            }
             return Ok(new JsonObject
             {
                 ["ok"] = true,
@@ -445,6 +483,7 @@ internal sealed partial class CircuitService
                 ["quantity"] = redemption.Quantity,
                 ["newlyCompleted"] = redemption.NewlyCompleted,
                 ["consecutivePullCount"] = redemption.ConsecutivePullCount,
+                ["achievements"] = achievementAwards.DeepClone(),
                 ["messages"] = new JsonArray(announcements.Select(m => JsonValue.Create(m)).ToArray())
             });
         }
@@ -678,7 +717,7 @@ internal sealed partial class CircuitService
                 {
                     var data = _store.ReadProfileData(profile.Id, DataKeys.Profile);
                     if (data is null) continue;
-                    var commands = JsonUtil.Object(data, "commands") ?? new JsonObject();
+                    var commands = JsonUtil.Object(NormalizeProfile(data), "commands") ?? new JsonObject();
                     if (ResolveCommandField(commands, commandName) is not null) return profile.Id;
                 }
             }
@@ -702,7 +741,7 @@ internal sealed partial class CircuitService
 
     // Writes the OBS overlay state for a native pull, so overlay.js can render it. Display data:
     // best-effort, never throws into the redemption path (a failed overlay write must not fail a pull).
-    private void WriteOverlayState(string profileId, RedemptionResult redemption, string viewerName, DateTimeOffset now)
+    private void WriteOverlayState(string profileId, RedemptionResult redemption, string viewerName, DateTimeOffset now, JsonArray? achievements = null)
     {
         if (_overlayStore is null) return;
         try
@@ -726,7 +765,8 @@ internal sealed partial class CircuitService
                 ["rareLabel"] = redemption.RareLabel ?? "",
                 ["featuredBoost"] = redemption.ActiveBoostName ?? "",
                 ["variantLabels"] = variantLabels,
-                ["tierLabel"] = redemption.Pull.TierLabel ?? ""
+                ["tierLabel"] = redemption.Pull.TierLabel ?? "",
+                ["achievements"] = achievements?.DeepClone() ?? new JsonArray()
             };
             _overlayStore.WriteOverlayState(profileId, state);
         }

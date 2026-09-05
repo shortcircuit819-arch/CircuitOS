@@ -63,6 +63,21 @@ body {
 .position-top-left { align-items: flex-start; justify-content: flex-start; padding-block: var(--offset-y) 0; }
 .position-top-right { align-items: flex-start; justify-content: flex-end; padding-block: var(--offset-y) 0; }
 
+.achievement-stack { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 10px; padding: 0 34px 24px; position: relative; z-index: 2; }
+.achievement-stack[hidden] { display: none; }
+.achievement-celebration { flex: 1 1 200px; min-width: 0; display: grid; gap: 4px; padding: 12px 16px; border-left: 3px solid var(--amber); border-radius: 4px; background: rgb(255 200 87 / 10%); animation: achievement-in 350ms ease-out; }
+.achievement-celebration strong { color: var(--amber); font-size: 20px; overflow-wrap: anywhere; }
+.achievement-celebration span { color: var(--ink); font-size: 16px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.achievement-celebration small, .achievement-more { color: var(--muted); font-size: 14px; }
+.achievement-more { flex-basis: 100%; }
+@keyframes achievement-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .achievement-celebration { animation: none; }
+  .tracker.visible { animation: none !important; opacity: 1; transform: none; }
+  .tracker.hiding { animation: none !important; opacity: 0; }
+  .progress-bar { transition: none !important; }
+}
+
 .tracker {
   position: relative;
   display: grid;

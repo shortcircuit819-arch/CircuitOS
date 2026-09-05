@@ -19,6 +19,8 @@
     <Compile Include="..\runtime\LocalFileDataStore.cs" Link="LocalFileDataStore.cs" />
     <Compile Include="..\runtime\PullEngine.cs" Link="PullEngine.cs" />
     <Compile Include="..\runtime\RedemptionEngine.cs" Link="RedemptionEngine.cs" />
+    <Compile Include="..\runtime\AchievementEngine.cs" Link="AchievementEngine.cs" />
+    <Compile Include="..\runtime\CircuitService.Achievements.cs" Link="CircuitService.Achievements.cs" />
     <Compile Include="..\runtime\CommandEngine.cs" Link="CommandEngine.cs" />
     <Compile Include="..\runtime\AppwriteOptions.cs" Link="AppwriteOptions.cs" />
     <Compile Include="..\runtime\TwitchOptions.cs" Link="TwitchOptions.cs" />

@@ -32,6 +32,7 @@ Close the CircuitOS window to stop its private local server.
 - Duplicate pressure and unclaimed Scrap by collection
 - Top Scrap balances
 - Searchable read-only viewer collection details
+- Achievement goals, automatic collection badges, optional Scrap rewards, and chat/OBS celebrations
 - Rate Lab with expected rates, tier-aware simulated redeem distribution,
   per-part odds, a rarity-tier breakdown panel, and exact three-identical-pulls
   odds
@@ -58,6 +59,28 @@ The Rate Lab uses the values currently shown in the editor, including unsaved
 changes. Simulations are limited to 100,000 redeems and never read or modify a
 viewer inventory. When a collection defines rarity tiers, both the breakdown
 panel and the simulation weight items by their tier.
+
+## Achievements
+
+Open **Achievements** for the selected profile to configure automatic collection
+badges, custom goals, optional currency rewards, and chat/OBS celebrations.
+Use **Save Achievements** to apply these settings independently of catalog edits.
+The save also checks existing viewers in that profile, silently recording eligible
+awards and paying each configured reward once. Startup checks all profiles,
+including profiles that are not Live.
+
+In Viewer Inventory, expand **Achievements · N earned** for earned badges,
+progress, and pulls recorded since tracking started. This section starts collapsed.
+Historical awards use current holdings and saved completion records;
+earlier pull counts and earning dates are not guessed. Existing awards remain after
+goal edits or removal. The configurable badge command defaults to `!badges`, with
+a page number such as `!badges 2`; upgraded profiles may receive a numbered alias
+to avoid existing commands.
+
+If a check fails, the screen names the affected profile and offers **Retry
+historical awards for all profiles**. Save or discard unsaved achievement edits
+before retrying. See the [achievements guide](achievements.md) for the four custom
+goal types, reward behavior, overlay controls, and recovery details.
 
 ## Patch Notes
 
@@ -130,14 +153,16 @@ remain non-editable for troubleshooting consistency.
 - The server binds only to `127.0.0.1`.
 - The editor writes live `components.json`, `featured-boost.json`, the separate
   `discord-role-awards.json` acknowledgement file, and `system-profile.json`.
-- `inventory.json` is read to calculate sanitized analytics and viewer details.
-  It is also read to validate role eligibility. There is no inventory write
-  endpoint, editor control, or save payload for it.
+- `inventory.json` provides analytics, viewer details, role eligibility, and
+  achievement progress. Achievement checks can add earned records and configured
+  rewards; they commit together through the locked inventory write path. Viewer
+  reset, item removal, and recovery are separate explicit controls.
 - Client and server validation reject invalid IDs, duplicate component IDs,
   negative weights, invalid salvage values, bad event windows, and broken boost
   references.
-- Every live save creates timestamped files in the active profile's
-  `config-backups` folder before atomic replacement.
+- Inventory changes create timestamped backups in that profile's `config-backups`
+  folder before atomic replacement. Invalid achievement settings, malformed
+  inventory, and overflowing rewards do not cause partial grants.
 - Discord role acknowledgement updates use the same atomic replacement and
   timestamped backup process.
 - Recovery creates a new backup of the outgoing live file before restoring the

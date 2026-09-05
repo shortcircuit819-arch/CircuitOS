@@ -194,10 +194,10 @@ test('role save preserves a further edit made while the request is pending', asy
   assert.equal(context.roleNamesDirty, true);
 });
 
-for (const flag of ['overlayDirty', 'roleNamesDirty']) {
+for (const flag of ['overlayDirty', 'roleNamesDirty', 'achievementsDirty']) {
   test(`refresh asks before discarding ${flag}`, async () => {
     let prompted = false;
-    const context = vm.createContext({ dirty: false, profileDirty: false, overlayDirty: false, roleNamesDirty: false,
+    const context = vm.createContext({ dirty: false, profileDirty: false, overlayDirty: false, roleNamesDirty: false, achievementsDirty: false,
       window: { confirm: () => { prompted = true; return false; } }, clearNotice() {},
       fetch: () => { throw new Error('Refresh must not load after discard is declined'); }
     });
@@ -208,7 +208,7 @@ for (const flag of ['overlayDirty', 'roleNamesDirty']) {
   });
   test(`closing warns about ${flag}`, () => {
     let listener, prevented = false;
-    const context = vm.createContext({ dirty: false, profileDirty: false, overlayDirty: false, roleNamesDirty: false,
+    const context = vm.createContext({ dirty: false, profileDirty: false, overlayDirty: false, roleNamesDirty: false, achievementsDirty: false,
       window: { addEventListener: (name, callback) => { listener = callback; } }
     });
     context[flag] = true;
@@ -230,4 +230,140 @@ test('Rate Lab excludes empty tiers and retains equal collection odds', () => {
   const model = vm.runInContext('simulationModel()', context);
   assert.equal(model.parts[0].probability, 0.5);
   assert.equal(model.parts[1].probability, 0.5);
+});
+
+test('achievement save preserves edits made while its request is pending', async () => {
+  const pending = deferred();
+  let posted;
+  const context = vm.createContext({
+    document: documentStub(), achievementsDirty: true, achievementsSaving: false,
+    achievementsData: { settings: { enabled: true, definitions: [{ id: 'first', name: 'First' }] } },
+    achievementSavedIds: new Set(), profilesData: { activeProfileId: 'one' },
+    validateAchievementSettings: () => [], updateAchievementStatus() {}, renderAchievements() {}, showNotice() {}, refreshAchievementAnalytics: async () => {},
+    fetch: async (_, options) => { posted = JSON.parse(options.body); await pending.promise; return { ok: true, json: async () => ({ ok: true }) }; }
+  });
+  run(context, 'async function saveAchievements(', 'function renderViewerAchievements(');
+  const saving = vm.runInContext('saveAchievements()', context);
+  context.achievementsData.settings.definitions[0].name = 'Newer';
+  pending.resolve();
+  await saving;
+  assert.equal(posted.definitions[0].name, 'First');
+  assert.equal(context.achievementsData.settings.definitions[0].name, 'Newer');
+  assert.equal(context.achievementsDirty, true);
+  assert.equal(context.achievementSavedIds.has('first'), true);
+});
+
+test('achievement builder rejects duplicate IDs and invalid percent targets or rewards', () => {
+  const context = vm.createContext({});
+  run(context, 'function validateAchievementSettings(', 'function updateAchievementStatus(');
+  const valid = { defaultReward: 0, definitions: [{ id: 'first', name: 'First', description: '', metric: 'collectionPercent', collectionKey: 'a', threshold: 50, reward: 10 }] };
+  context.settings = valid;
+  assert.equal(vm.runInContext('validateAchievementSettings(settings).length', context), 0);
+  valid.definitions.push({ ...valid.definitions[0], threshold: 101, reward: -1 });
+  const errors = vm.runInContext('validateAchievementSettings(settings)', context).join(' ');
+  assert.match(errors, /unique/i);
+  assert.match(errors, /100/);
+  assert.match(errors, /reward/i);
+});
+
+test('profile switching waits for a pending achievement save', async () => {
+  let requests = 0;
+  const context = vm.createContext({ pendingSwitchId: 'next', achievementsSaving: true, showNotice() {}, closeProfileSwitchConfirm() {}, fetch: async () => { requests++; throw new Error('Must not switch yet'); } });
+  run(context, 'async function confirmProfileSwitch(', 'async function toggleProfileLive(');
+  await vm.runInContext('confirmProfileSwitch()', context);
+  assert.equal(requests, 0);
+});
+
+test('achievement save cannot mark a refreshed editor clean', async () => {
+  const pending = deferred();
+  const context = vm.createContext({ achievementsDirty: true, achievementsSaving: false,
+    achievementsData: { settings: { definitions: [{ id: 'first' }] } }, achievementSavedIds: new Set(), profilesData: { activeProfileId: 'one' },
+    validateAchievementSettings: () => [], updateAchievementStatus() {}, renderAchievements() {}, showNotice() {}, refreshAchievementAnalytics: async () => {},
+    fetch: async () => { await pending.promise; return { ok: true, json: async () => ({ ok: true }) }; }
+  });
+  run(context, 'async function saveAchievements(', 'function renderViewerAchievements(');
+  const saving = vm.runInContext('saveAchievements()', context);
+  context.achievementsData.settings = { definitions: [{ id: 'first' }] };
+  pending.resolve();
+  await saving;
+  assert.equal(context.achievementsDirty, true);
+  assert.equal(context.achievementSavedIds.size, 0);
+});
+
+test('overlay achievement stack bounds visible awards and clears on the next ordinary pull', () => {
+  const overlaySource = fs.readFileSync(path.join(__dirname, '../../overlays/lower-quarter/overlay.js'), 'utf8');
+  const panel = new Element();
+  const context = vm.createContext({ achievementStack: panel, document: { createElement: () => new Element() } });
+  const first = overlaySource.indexOf('function renderAchievementStack(');
+  assert(first >= 0, 'Overlay needs an achievement stack');
+  vm.runInContext(overlaySource.slice(first, overlaySource.indexOf('function renderState(', first)), context);
+  context.awards = Array.from({ length: 20 }, (_, index) => ({ name: index === 0 ? '<img src=x onerror=alert(1)>' : `Badge ${index}`, description: 'Goal complete', reward: 5 }));
+  vm.runInContext('renderAchievementStack(awards)', context);
+  assert.equal(panel.children.length, 4, 'Three visible awards plus an overflow count');
+  assert.equal(panel.children[0].children[0].textContent, '<img src=x onerror=alert(1)>');
+  assert.match(panel.children[3].textContent, /17/);
+  vm.runInContext('renderAchievementStack([])', context);
+  assert.equal(panel.children.length, 0);
+  assert.equal(panel.hidden, true);
+});
+
+test('saving achievements refreshes viewer awards and rewards without clearing other editors', async () => {
+  let rendered;
+  const context = vm.createContext({ achievementsDirty: true, achievementsSaving: false,
+    dirty: true, profileDirty: true, overlayDirty: true, roleNamesDirty: true,
+    achievementsData: { settings: { definitions: [{ id: 'first' }] } }, achievementSavedIds: new Set(), profilesData: { activeProfileId: 'one' },
+    analytics: { viewers: [{ id: 'viewer', scrap: 0, achievements: [] }] }, selectedViewerId: 'viewer',
+    validateAchievementSettings: () => [], updateAchievementStatus() {}, renderAchievements() {}, showNotice() {}, renderOverview() {}, renderEconomy() {},
+    renderViewerInspector: () => { rendered = context.analytics.viewers[0]; },
+    fetch: async url => ({ ok: true, json: async () => url === '/api/analytics'
+      ? { viewers: [{ id: 'viewer', scrap: 25, achievements: [{ id: 'first', earned: true }] }] }
+      : { ok: true } })
+  });
+  run(context, 'async function refreshAchievementAnalytics(', 'function renderViewerAchievements(');
+  await vm.runInContext('saveAchievements()', context);
+  assert.equal(rendered.scrap, 25);
+  assert.equal(rendered.achievements[0].earned, true);
+  for (const flag of ['dirty', 'profileDirty', 'overlayDirty', 'roleNamesDirty']) assert.equal(context[flag], true);
+  assert.equal(context.achievementsDirty, false);
+});
+
+for (const change of ['profile', 'editor']) test(`late achievement analytics cannot replace a changed ${change}`, async () => {
+  const pending = deferred();
+  const original = { viewers: [{ id: 'current' }] };
+  const context = vm.createContext({ analytics: original, profilesData: { activeProfileId: 'one' }, achievementsData: { settings: {} },
+    fetch: async () => ({ ok: true, json: async () => { await pending.promise; return { viewers: [{ id: 'stale' }] }; } }),
+    renderViewerInspector() { throw new Error('Must not render stale data'); }
+  });
+  run(context, 'async function refreshAchievementAnalytics(', 'async function saveAchievements(');
+  const refreshing = vm.runInContext('refreshAchievementAnalytics(profilesData.activeProfileId, achievementsData.settings)', context);
+  if (change === 'profile') context.profilesData.activeProfileId = 'two';
+  else context.achievementsData.settings = {};
+  pending.resolve();
+  await refreshing;
+  assert.equal(context.analytics, original);
+});
+
+test('viewer achievements start collapsed with an earned count and keep all progress available', () => {
+  const detail = new Element();
+  const context = vm.createContext({ viewerAchievementsOpen: false, systemProfile: { currencyName: 'Points' },
+    element: (tag, className, text) => Object.assign(new Element(), { tagName: tag, className, textContent: text, open: false }),
+    viewer: { achievements: [{ name: 'In progress', current: 2, target: 10 }, { name: 'Earned badge', earned: true }] }, detail
+  });
+  run(context, 'function renderViewerAchievements(', 'function renderViewerInspector(');
+  vm.runInContext('renderViewerAchievements(viewer, detail)', context);
+  const section = detail.children[0];
+  assert.equal(section.tagName, 'details');
+  assert.equal(section.open, false);
+  assert.equal(section.children[0].tagName, 'summary');
+  assert.equal(section.children[0].textContent, 'Achievements · 1 earned');
+  const grid = section.children.find(node => node.className === 'viewer-achievement-grid');
+  assert.equal(grid.children.length, 2);
+  assert.equal(grid.children[0].children[0].textContent, 'Earned badge');
+  assert.equal(grid.children[1].children[0].textContent, 'In progress');
+  assert.equal(context.viewer.achievements[0].name, 'In progress', 'Sorting must not mutate analytics');
+  section.open = true;
+  section.listeners.toggle();
+  detail.replaceChildren();
+  vm.runInContext('renderViewerAchievements(viewer, detail)', context);
+  assert.equal(detail.children[0].open, true, 'A live refresh keeps the inspector open');
 });

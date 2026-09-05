@@ -307,6 +307,7 @@ Item Three</textarea></label>
             <button class="nav-button" data-view="collections">Main Collections</button>
             <button class="nav-button" data-view="events">Events</button>
             <button class="nav-button" data-view="boost">Featured Boost</button>
+            <button class="nav-button" data-view="achievements">Achievements</button>
           </div>
         </details>
         <details class="nav-group" id="viewersNav" open>
@@ -639,6 +640,20 @@ Item Three</textarea></label>
         </div>
       </section>
 
+      <section id="achievementsView" class="view">
+        <div class="panel">
+          <div class="panel-header"><div><div class="panel-kicker">VIEWER MILESTONES</div><h2>Achievements</h2></div><button id="saveAchievementsButton" class="button primary" type="button">Save Achievements</button></div>
+          <p class="profile-help">Celebrate progress with collection badges and custom goals. Each achievement and its reward can be earned once per viewer. Editing or disabling a goal does not remove existing awards or pay a reward again. Keep saved IDs stable.</p>
+          <p class="profile-help">Saving goals also checks existing viewers. Eligible historical awards credit their configured rewards once, silently, without chat or overlay announcements. Their original earning dates are unknown. Lifetime pulls count only from the start of tracking.</p>
+          <div id="achievementStatus" class="notice" role="status"></div>
+          <div id="achievementBackfillErrors" class="notice error" role="status" hidden></div>
+          <button id="retryAchievementBackfillButton" class="button secondary small" type="button" hidden>Retry historical awards for all profiles</button>
+          <div id="achievementSettings" class="achievement-settings"></div>
+          <div class="section-toolbar"><h3>Custom achievements</h3><button id="addAchievementButton" class="button secondary" type="button">Add Achievement</button></div>
+          <div id="achievementDefinitions" class="achievement-definitions"></div>
+        </div>
+      </section>
+
       <section id="viewersView" class="view">
         <div class="viewer-toolbar">
           <div>
@@ -937,6 +952,7 @@ Item Three</textarea></label>
                 <button class="button secondary small" data-preview-state="rare" type="button">Rare</button>
                 <button class="button secondary small" data-preview-state="complete" type="button">Complete</button>
                 <button class="button secondary small" data-preview-state="duplicate" type="button">Duplicate</button>
+                <button class="button secondary small" data-preview-state="achievement" type="button">Achievement</button>
               </div>
             </div>
             <div class="overlay-preview-wrap">

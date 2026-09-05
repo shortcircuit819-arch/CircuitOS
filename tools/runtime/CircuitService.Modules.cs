@@ -24,7 +24,7 @@ internal sealed partial class CircuitService
                 ["format"] = "circuitmodule",
                 ["version"] = "1",
                 ["name"] = profileName,
-                ["circuitosVersion"] = "1.0.4",
+                ["circuitosVersion"] = "1.1.0",
                 ["exportedAt"] = DateTimeOffset.UtcNow.ToString("O")
             },
             ["catalog"] = JsonNode.Parse(catalog.ToJsonString())!
@@ -52,6 +52,12 @@ internal sealed partial class CircuitService
         // Validate before creating anything: a corrupt or hand-edited module must not produce a broken
         // profile. A genuine CircuitOS export already passed this on save, so it round-trips cleanly.
         var catalogErrors = ValidateConfiguration(catalog, module["boost"] as JsonObject ?? DefaultBoost());
+        if (module["profile"] is JsonObject importedProfile && importedProfile.ContainsKey("achievements"))
+        {
+            if (importedProfile["achievements"] is not JsonObject importedAchievements)
+                catalogErrors.Add("Achievement settings must be an object.");
+            else catalogErrors.AddRange(AchievementEngine.ValidateStoredSettings(importedAchievements, catalog));
+        }
         if (catalogErrors.Count > 0)
         {
             catalogErrors.Insert(0, "This module's catalog is invalid — nothing was imported.");
@@ -144,7 +150,7 @@ internal sealed partial class CircuitService
             ["version"] = "1",
             ["name"] = gameName,
             ["collectionCount"] = shared.Count,
-            ["circuitosVersion"] = "1.0.4",
+            ["circuitosVersion"] = "1.1.0",
             ["exportedAt"] = DateTimeOffset.UtcNow.ToString("O")
         };
         if (!shareAll)
@@ -211,6 +217,9 @@ internal sealed partial class CircuitService
 
         // Validate before creating anything, so a corrupt pack can't leave a broken profile behind.
         var packErrors = ValidateConfiguration(newCatalog, DefaultBoost());
+        if (newProfile["achievements"] is not JsonObject packAchievements)
+            packErrors.Add("Achievement settings must be an object.");
+        else packErrors.AddRange(AchievementEngine.ValidateStoredSettings(packAchievements, newCatalog));
         if (packErrors.Count > 0)
         {
             packErrors.Insert(0, "This collection pack is invalid — nothing was imported.");

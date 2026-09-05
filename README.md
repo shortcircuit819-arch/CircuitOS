@@ -8,7 +8,7 @@ Viewers redeem a reward, discover an item in chat and on your stream, and build 
 
 **[Download for Windows](https://github.com/shortcircuit819-arch/CircuitOS/releases/latest)** · **[itch.io](https://shortcircuit819.itch.io/circuitos)** · **[Setup guide](docs/installation-and-updates.md)**
 
-Current application version: **1.0.4** · Windows x64 · Free under the [MIT License](LICENSE)
+Current application version: **1.1.0** (release candidate) · Windows x64 · Free under the [MIT License](LICENSE)
 
 ## How it works
 
@@ -32,6 +32,7 @@ Circuit Components, an electronics-themed collection, is included to get you sta
 
 - **Build a catalog:** collections, weighted rarity tiers, shiny or foil variants, seasonal items, and featured collection boosts.
 - **Give viewers progress:** inventories, collection completion, leaderboards, and chat commands for missing items and duplicates.
+- **Celebrate milestones:** [achievements and badges](docs/achievements.md), custom goals, optional Scrap rewards, and chat/OBS celebrations. Existing viewers are included automatically.
 - **Put duplicates to use:** a configurable salvage economy and economy analytics.
 - **Match your stream:** editable terminology, messages, colors, themes, and an OBS reveal overlay.
 - **Run multiple games:** independent profiles with their own inventories and settings; share games as `.circuitmodule` bundles or collections as `.circuitcollection` packs.
@@ -58,14 +59,14 @@ Local storage is the default. Optional cloud storage requires your own Appwrite 
 
 - [Report a bug](https://github.com/shortcircuit819-arch/CircuitOS/issues/new?template=bug_report.yml) or [suggest a feature](https://github.com/shortcircuit819-arch/CircuitOS/issues/new?template=feature_request.yml).
 - [Installation and updates](docs/installation-and-updates.md) · [OBS setup](docs/obs-lower-quarter.md) · [Configuration editor](docs/configuration-editor.md)
-- [Collection imports](docs/collection-importer.md) · [Collection packs](docs/collection-packs.md) · [Salvage](docs/salvage.md)
-- [Latest patch notes](docs/patch-notes/v1.0.4.md) · [Release history](docs/release-history.md)
+- [Collection imports](docs/collection-importer.md) · [Collection packs](docs/collection-packs.md) · [Salvage](docs/salvage.md) · [Achievements](docs/achievements.md)
+- [Latest patch notes](docs/patch-notes/v1.1.0.md) · [Release history](docs/release-history.md)
 
 Include your app version, install type, reproduction steps, and a redacted diagnostics report if useful. Do not post tokens, cloud credentials, or private viewer data.
 
 ## What's next
 
-Achievements and badges are the next feature priority, followed by deeper streamer analytics. Trading and gifting, economy transaction history, and purchase safeguards build toward the proposed 2.0 Shop and Currency Workshop. See the [roadmap](docs/roadmap.md) for the planned sequence; these are not available features or promised release dates.
+The 1.1.0 release candidate implements achievements and badges. Deeper streamer analytics is the next feature priority. Trading and gifting, economy transaction history, and purchase safeguards build toward the proposed 2.0 Shop and Currency Workshop. See the [roadmap](docs/roadmap.md) for the planned sequence; future features have no promised release dates.
 
 CircuitOS remains local-first, with optional bring-your-own Appwrite storage. Hosted cloud, online viewer profiles, and an online module marketplace are parked. A Twitch extension remains a stretch goal.
 

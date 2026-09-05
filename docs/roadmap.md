@@ -42,6 +42,11 @@ features and do not gate the store.
 Local viewer collection milestones. Standalone. A natural future economy hook (achievements could
 grant Scrap or unlock shop items).
 
+Implementation is prepared as the **1.1.0 achievements release candidate**: collection badges,
+custom goals, Scrap rewards, tracked-pull milestones, existing-viewer backfill, chat commands,
+and overlay celebrations. The next feature priority after this is streamer analytics below.
+The heading retains the original planning label; it is not the application's release number.
+
 ### 1.1 — Streamer analytics *(after achievements & badges)*
 Economy visibility: insights on pulls, viewer engagement, and **economy health** — where the
 "1500+ Scrap and climbing" inflation becomes a dashboard, and (once the store ships) where you see

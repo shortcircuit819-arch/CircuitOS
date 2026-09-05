@@ -37,6 +37,7 @@ internal sealed partial class CircuitService
         }
 
         var catalog = _store.ReadRequired(DataKeys.Catalog);
+        var achievementSettings = AchievementSettings(_store.TryRead(DataKeys.Profile));
         var catalogCollections = JsonUtil.Object(catalog, "collections") ?? new JsonObject();
         var metrics = new Dictionary<string, CollectionMetric>(StringComparer.Ordinal);
         foreach (var (key, node) in catalogCollections)
@@ -121,7 +122,10 @@ internal sealed partial class CircuitService
                 ["id"] = viewerId, ["displayName"] = displayName, ["scrap"] = scrap,
                 ["totalUnits"] = viewerUnits, ["uniqueComponents"] = viewerUnique,
                 ["duplicateUnits"] = viewerDuplicates, ["unclaimedScrap"] = viewerUnclaimed,
-                ["completedCollections"] = viewerCompletions, ["collections"] = viewerCollections
+                ["completedCollections"] = viewerCompletions, ["collections"] = viewerCollections,
+                ["achievements"] = AchievementEngine.GetProgress(catalog, viewer, achievementSettings),
+                ["lifetimePulls"] = JsonUtil.Long(viewer["achievementStats"] as JsonObject, "lifetimePulls"),
+                ["trackingStartedAtUtc"] = JsonUtil.String(viewer["achievementStats"] as JsonObject, "trackingStartedAtUtc")
             });
         }
 

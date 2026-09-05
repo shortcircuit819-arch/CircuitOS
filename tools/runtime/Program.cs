@@ -146,6 +146,9 @@ internal static class Program
         try
         {
             var port = ResolvePort(options.Port);
+            var achievementBackfill = service.InitializeAchievements();
+            foreach (var error in (achievementBackfill["errors"] as JsonArray ?? new JsonArray()))
+                Console.Error.WriteLine($"Achievement backfill needs attention: {error}");
             _port = port;
             UpdateService.ConfigureRestart(options with { Port = port }, args.Contains("--cloud"));
             if (options.Headless)
@@ -302,7 +305,7 @@ internal static class Program
                     overlayFilePath = Path.Combine(overlayDataPath, "overlay", "index.html"),
                     profilesRoot = Path.Combine(_dataRoot, "profiles"),
                     runtime = ".NET",
-                    version = "1.0.4",
+                    version = "1.1.0",
                     mode = _sessionMode,
                     cloudError = _cloudError,
                     twitch = _sessionTwitch is null ? null : new { login = _sessionTwitch.Login, displayName = _sessionTwitch.DisplayName, userId = _sessionTwitch.UserId, expiresAt = _sessionTwitch.ExpiresAt },
@@ -409,6 +412,12 @@ internal static class Program
                 await SendJsonAsync(context, 200, service.GetOverlayConfig());
             else if (request.HttpMethod == "GET" && path == "/api/analytics")
                 await SendJsonAsync(context, 200, service.GetInventoryAnalytics());
+            else if (request.HttpMethod == "GET" && path == "/api/achievements")
+                await SendJsonAsync(context, 200, service.GetAchievements());
+            else if (request.HttpMethod == "POST" && path == "/api/achievements")
+                await SendResultAsync(context, service.SaveAchievements(await ReadBodyAsync(request)));
+            else if (request.HttpMethod == "POST" && path == "/api/achievements/backfill")
+                await SendJsonAsync(context, 200, service.InitializeAchievements());
             else if (request.HttpMethod == "GET" && path == "/api/roles")
                 await SendJsonAsync(context, 200, service.GetDiscordRoleAwards());
             else if (request.HttpMethod == "GET" && path == "/api/backups")
