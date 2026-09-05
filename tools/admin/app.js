@@ -1515,6 +1515,25 @@ function closeFirstRunWizard() {
   appShell.removeAttribute("aria-hidden");
 }
 
+function saveStreamSetupGuidePreference() {
+  try {
+    localStorage.setItem("circuitos.streamSetupGuideOpen", document.getElementById("streamSetupGuide").open ? "1" : "0");
+  } catch { /* The guide still works when local storage is unavailable. */ }
+}
+
+function initializeStreamSetupGuide() {
+  const guide = document.getElementById("streamSetupGuide");
+  try {
+    guide.open = localStorage.getItem("circuitos.streamSetupGuideOpen") === "1";
+  } catch { guide.open = false; }
+  guide.addEventListener("toggle", saveStreamSetupGuidePreference);
+}
+
+function openStreamSetupGuide() {
+  document.getElementById("streamSetupGuide").open = true;
+  saveStreamSetupGuidePreference();
+}
+
 async function completeFirstRun() {
   const button = document.getElementById("wizardCompleteButton");
   button.disabled = true;
@@ -1530,6 +1549,7 @@ async function completeFirstRun() {
     if (!response.ok) throw new Error((result.errors || ["First-run setup failed."]).join(" "));
     closeFirstRunWizard();
     await loadConfiguration(true);
+    openStreamSetupGuide();
     switchView("overview");
     showNotice("Game created! Follow Get ready to stream to connect Twitch and check your first reveal.", "success");
   } catch (error) {
@@ -5114,7 +5134,7 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
+initializeStreamSetupGuide();
 loadConfiguration(true).catch(error => showNotice(error.message, "error"));
-
 
 

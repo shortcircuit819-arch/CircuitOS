@@ -515,9 +515,8 @@ Item Three</textarea></label>
       </section>
 
       <section id="overviewView" class="view active">
-        <article class="panel stream-setup-panel" aria-labelledby="streamSetupTitle">
-          <div class="panel-kicker">STREAM SETUP</div>
-          <h2 id="streamSetupTitle">Get ready to stream</h2>
+        <details id="streamSetupGuide" class="panel stream-setup-panel">
+          <summary><span class="panel-kicker">STREAM SETUP</span><span id="streamSetupTitle">Get ready to stream</span></summary>
           <p class="panel-note">Work through these steps for each game. This guide does not automatically verify your OBS scene or Twitch redemptions.</p>
           <ol class="stream-setup-list">
             <li><div><strong>Connect Twitch</strong><p>Sign in with your broadcaster account. Refresh your login if Twitch Settings asks you to.</p></div><button type="button" class="button secondary small" data-jump-view="twitch">Connect Twitch</button></li>
@@ -525,7 +524,7 @@ Item Three</textarea></label>
             <li><div><strong>Add the overlay to OBS</strong><p>Open the Overlay Editor and follow Browser Source instructions using this profile's file path. Try the preview states to check the design; these samples do not test Twitch or OBS.</p></div><button type="button" class="button secondary small" data-jump-view="overlay">Open Overlay Editor</button></li>
             <li><div><strong>Verify a real reveal</strong><p>With CircuitOS running, ask a viewer to redeem the reward. Confirm the chat announcement, the reveal in your OBS scene, and the item in Viewer Inventory. A real redemption spends channel points and adds an item.</p></div><button type="button" class="button secondary small" data-jump-view="viewers">Check inventory</button></li>
           </ol>
-        </article>
+        </details>
         <div id="stats" class="stats-grid overview-stats"></div>
 
         <article class="panel overview-action-panel">

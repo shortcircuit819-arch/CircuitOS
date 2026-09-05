@@ -790,6 +790,11 @@ input.invalid { border-color: var(--danger); }
 
 /* A persistent guide: completion is checked by the streamer, not inferred from previews. */
 .stream-setup-panel { margin-bottom: 20px; }
+.stream-setup-panel > summary { cursor: pointer; }
+.stream-setup-panel > summary .panel-kicker { display: inline; margin-right: 12px; }
+.stream-setup-panel > summary #streamSetupTitle { font-weight: 700; }
+.stream-setup-panel > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; }
+.stream-setup-panel[open] > summary { margin-bottom: 16px; }
 .stream-setup-list { display: grid; gap: 16px; padding-left: 24px; }
 .stream-setup-list li { padding-left: 6px; }
 .stream-setup-list p { color: var(--muted); margin: 6px 0 10px; line-height: 1.5; }

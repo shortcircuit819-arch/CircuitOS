@@ -6,18 +6,71 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '../admin/app.js'), 'utf8');
 test('creating a game opens the stream setup guide without claiming the channel is live', async () => {
-  let destination, notice;
+  let destination, notice, guideOpened = false;
   const context = vm.createContext({
     document: { getElementById: () => ({}) },
     wizardSetError() {}, buildWizardProfile: () => ({}), buildWizardConfiguration: () => ({}),
     fetch: async () => ({ ok: true, json: async () => ({}) }),
     closeFirstRunWizard() {}, loadConfiguration: async () => {},
+    openStreamSetupGuide() { guideOpened = true; },
     switchView: view => { destination = view; }, showNotice: text => { notice = text; }
   });
   run(context, 'async function completeFirstRun(', 'function normalizeModel(');
   await vm.runInContext('completeFirstRun()', context);
   assert.equal(destination, 'overview');
+  assert.equal(guideOpened, true);
   assert.match(notice, /Get ready to stream/);
+});
+
+function guideContext(storage) {
+  const guide = { open: false, addEventListener(type, listener) { this[type] = listener; } };
+  const context = vm.createContext({ document: { getElementById: () => guide }, localStorage: storage });
+  run(context, 'function saveStreamSetupGuidePreference(', 'async function completeFirstRun(');
+  vm.runInContext('initializeStreamSetupGuide()', context);
+  return { context, guide };
+}
+
+test('stream setup is collapsed on upgrade and remembers opening and closing across restarts', () => {
+  const values = new Map();
+  const storage = { getItem: key => values.get(key), setItem: (key, value) => values.set(key, value) };
+  let current = guideContext(storage);
+  assert.equal(current.guide.open, false);
+  current.guide.open = true;
+  current.guide.toggle();
+  current = guideContext(storage);
+  assert.equal(current.guide.open, true);
+  current.guide.open = false;
+  current.guide.toggle();
+  current = guideContext(storage);
+  assert.equal(current.guide.open, false);
+  vm.runInContext('openStreamSetupGuide()', current.context);
+  assert.equal(current.guide.open, true, 'successful first-run overrides a previous collapsed preference');
+  assert.equal(guideContext(storage).guide.open, true);
+});
+
+test('stream setup remains usable when reading or saving preferences fails', () => {
+  const storage = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('quota'); } };
+  const { context, guide } = guideContext(storage);
+  assert.equal(guide.open, false);
+  vm.runInContext('openStreamSetupGuide()', context);
+  assert.equal(guide.open, true);
+  guide.open = false;
+  assert.doesNotThrow(() => guide.toggle());
+});
+
+test('failed first-run creation leaves the setup guide preference alone', async () => {
+  let error, guideOpened = false;
+  const context = vm.createContext({
+    document: { getElementById: () => ({}) },
+    wizardSetError(message) { error = message; },
+    buildWizardProfile: () => ({}), buildWizardConfiguration: () => ({}),
+    fetch: async () => ({ ok: false, json: async () => ({ errors: ['Cannot create game'] }) }),
+    openStreamSetupGuide() { guideOpened = true; }
+  });
+  run(context, 'async function completeFirstRun(', 'function normalizeModel(');
+  await vm.runInContext('completeFirstRun()', context);
+  assert.equal(guideOpened, false);
+  assert.equal(error, 'Cannot create game');
 });
 function section(start, end) {
   const first = source.indexOf(start);
