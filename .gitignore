@@ -53,3 +53,6 @@ docs/0.7-twitch-auth-setup.md
 
 # Mobile companion project — separate app, not part of the desktop repo
 ios/
+
+# Isolated feature checkouts
+.worktrees/
