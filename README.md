@@ -8,7 +8,7 @@ Viewers redeem a reward, discover an item in chat and on your stream, and build 
 
 **[Download for Windows](https://github.com/shortcircuit819-arch/CircuitOS/releases/latest)** · **[itch.io](https://shortcircuit819.itch.io/circuitos)** · **[Setup guide](docs/installation-and-updates.md)**
 
-Current application version: **1.1.0** (release candidate) · Windows x64 · Free under the [MIT License](LICENSE)
+Current application version: **1.1.0** · Windows x64 · Free under the [MIT License](LICENSE)
 
 ## How it works
 
@@ -66,7 +66,7 @@ Include your app version, install type, reproduction steps, and a redacted diagn
 
 ## What's next
 
-The 1.1.0 release candidate implements achievements and badges. Deeper streamer analytics is the next feature priority. Trading and gifting, economy transaction history, and purchase safeguards build toward the proposed 2.0 Shop and Currency Workshop. See the [roadmap](docs/roadmap.md) for the planned sequence; future features have no promised release dates.
+Version 1.1.0 adds achievements and badges, including awards for existing viewers. Version 1.2 is a separate development line for an Economy Assistant that helps balance collection odds and Scrap payouts. Trading and gifting, economy transaction history, and purchase safeguards build toward the proposed 2.0 Shop and Currency Workshop. See the [roadmap](docs/roadmap.md) for the planned sequence; future features have no promised release dates.
 
 CircuitOS remains local-first, with optional bring-your-own Appwrite storage. Hosted cloud, online viewer profiles, and an online module marketplace are parked. A Twitch extension remains a stretch goal.
 

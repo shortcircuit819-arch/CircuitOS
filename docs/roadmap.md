@@ -30,28 +30,22 @@ The missing piece is the **spend side** — that's what this roadmap builds towa
 
 ## The path (all local)
 
-**Next priority: achievements & badges, then streamer analytics.** The owner selected this
-order after 1.0.4. The existing milestone labels below are retained for reference: work proceeds
-through **1.2 → 1.1 → 1.3 → 1.4 → 2.0**. These labels are planning references, not an instruction
-to publish application versions out of order; release versions will continue increasing.
+**Release order: 1.1 achievements, then 1.2 Economy Assistant, then 1.3 → 1.4 → 2.0.**
+The original planning labels were reversed; these headings now match application versions.
 
-**Critical path to the store: `1.3 → 1.4 → 2.0`.** Achievements and analytics are standalone
-features and do not gate the store.
+**Critical path to the store: `1.3 → 1.4 → 2.0`.**
 
-### 1.2 — Achievements & badges
-Local viewer collection milestones. Standalone. A natural future economy hook (achievements could
-grant Scrap or unlock shop items).
+### 1.1 — Achievements & badges
 
-Implementation is prepared as the **1.1.0 achievements release candidate**: collection badges,
-custom goals, Scrap rewards, tracked-pull milestones, existing-viewer backfill, chat commands,
-and overlay celebrations. The next feature priority after this is streamer analytics below.
-The heading retains the original planning label; it is not the application's release number.
+Version 1.1.0 adds collection milestones, custom goals, optional Scrap rewards, tracked-pull
+milestones, existing-viewer backfill, chat commands and overlay celebrations.
 
-### 1.1 — Streamer analytics *(after achievements & badges)*
-Economy visibility: insights on pulls, viewer engagement, and **economy health** — where the
-"1500+ Scrap and climbing" inflation becomes a dashboard, and (once the store ships) where you see
-whether the sinks work. Standalone; no prerequisites. Review existing economy analytics before
-scoping additional dashboards.
+### 1.2 — Economy Assistant
+
+Implemented on a separate, unpublished development branch. Helps streamers choose collecting
+pace and Scrap salvage payouts through explained suggestions and optional bounded automatic
+adjustments. Includes catalog autosave/undo and clearer setup guidance. Existing inventories,
+badges and balances are preserved. A detailed activity dashboard is not the goal.
 
 ### 1.3 — Trading & gifting  *(critical path)*
 Local, atomic transfers of items and currency between viewers in the channel. A strong engagement

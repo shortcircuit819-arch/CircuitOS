@@ -1,11 +1,11 @@
-## Known Bugs
+# Known issues
 
-Open:
-- None currently.
+As of September 6, 2026, the owner reports no issues from existing testers.
+This is not a guarantee that the app has no defects.
 
----
-Fixed bugs are recorded in the version patch notes (docs/patch-notes/) and HANDOFF.md.
-A batch of native-Twitch / reliability / security fixes shipped in 0.7.0.x: native redemptions now
-drive the OBS overlay, atomic inventory writes, native !salvage persistence, EventSub keepalive +
-message-id dedup, chat-command throttle, DPAPI token encryption, Host-header validation, variant-label
-dedup, and first-run command-collision handling.
+Track new reproducible issues with the affected version, steps, expected/actual
+behavior, and resolution. Use docs/patch-notes for fixed release bugs.
+
+Public release: 1.1.0 (achievements). Local development: 1.2
+Economy Assistant/UI improvements. Check docs/versioning.md and the local
+HANDOFF.md for the selected checkout's status. Version 1.2 remains unpublished.
